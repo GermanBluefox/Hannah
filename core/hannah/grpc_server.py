@@ -60,6 +60,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         handle_text: Callable[[str], tuple[str, str]],
         handle_voice: Callable[[bytes], tuple[str, str, str, bytes]],
         announce: Callable[[str, str], None],
+        notificate: Callable[[str, str], None],
         get_satellites: Callable[[], dict],
         get_car_state: Callable[[], Optional[object]],      # → CarState | None (erster Tracker)
         get_all_cars: Optional[Callable[[], list]] = None,  # → [(CarState, home_address)]
@@ -82,6 +83,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._handle_text           = handle_text
         self._handle_voice          = handle_voice
         self._announce              = announce
+        self._notificate            = notificate
         self._get_satellites        = get_satellites
         self._get_car_state         = get_car_state
         self._get_all_cars          = get_all_cars or (lambda: [])
@@ -234,6 +236,19 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             return pb.StatusResponse(ok=True, message="gesendet")
         except Exception as e:
             log.error(f"[grpc] Announce fehlgeschlagen: {e}")
+            return pb.StatusResponse(ok=False, message=str(e))
+
+    def Notify(self, request, _context):
+        if not self._notificate:
+            return pb.StatusResponse(ok=False, message="notification not configured")
+        try:
+            severity = "direct" if request.direct else (request.severity or "notify")
+            threading.Thread(
+                target=self._notificate, args=(request.text, severity), daemon=True
+            ).start()
+            return pb.StatusResponse(ok=True, message="queued")
+        except Exception as e:
+            log.error(f"[grpc] Notify fehlgeschlagen: {e}")
             return pb.StatusResponse(ok=False, message=str(e))
 
     def GetSatellites(self, _request, _context):

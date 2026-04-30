@@ -754,6 +754,7 @@ def main():
         handle_text=_handle_text,
         handle_voice=_handle_voice,
         announce=process_announcement,
+        notificate=lambda text, severity: process_notification(text, severity),
         get_satellites=lambda: {
             dev: {"room": room, "addr": ""}
             for dev, room in {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}.items()

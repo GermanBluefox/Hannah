@@ -102,6 +102,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.AnnounceRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.Notify = channel.unary_unary(
+                '/hannah.HannahService/Notify',
+                request_serializer=hannah__pb2.AgentNotification.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.GetSatellites = channel.unary_unary(
                 '/hannah.HannahService/GetSatellites',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
@@ -239,6 +244,14 @@ class HannahServiceServicer(object):
 
     def Announce(self, request, context):
         """Send a TTS announcement to one satellite or all ("all").
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Notify(self, request, context):
+        """Send a notification from ioBroker to Hannah. Returns ok=true when queued.
+        direct=true: skip LLM reformulation. severity: "alert"|"notify"|"info".
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -383,6 +396,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
             'Announce': grpc.unary_unary_rpc_method_handler(
                     servicer.Announce,
                     request_deserializer=hannah__pb2.AnnounceRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'Notify': grpc.unary_unary_rpc_method_handler(
+                    servicer.Notify,
+                    request_deserializer=hannah__pb2.AgentNotification.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
             'GetSatellites': grpc.unary_unary_rpc_method_handler(
@@ -745,6 +763,33 @@ class HannahService(object):
             target,
             '/hannah.HannahService/Announce',
             hannah__pb2.AnnounceRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Notify(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/Notify',
+            hannah__pb2.AgentNotification.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
             options,
             channel_credentials,

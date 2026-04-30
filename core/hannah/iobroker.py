@@ -605,7 +605,12 @@ class IoBrokerClient:
             log.warning(f"control_direct: State {state_key!r} für {device.name!r} nicht vorhanden")
             return False
         value = self._parse_payload(raw_value)
-        return self.set_state(state_id, value)
+        if self.set_state(state_id, value):
+            # Update cache immediately — the gRPC roundtrip is async, so GetDevices
+            # called right after ControlDevice would otherwise return the stale state.
+            device.current[state_key] = value
+            return True
+        return False
 
     def get_devices_snapshot(self) -> list[dict]:
         """

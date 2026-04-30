@@ -7,12 +7,16 @@ telegram/venv/
 satelite_cache/
 hannah_users.db
 hannah_users.db-shm
+hannah_users.db-wal
 .idea/
 .claude/
 satellite-esp/build/
 satellite-esp/managed_components/
 .vscode/
 iobroker/
+memory.db
+memory.db-shm
+memory.db-wal
 
 # For PCBs designed using KiCad: https://www.kicad.org/
 # Format documentation: https://kicad.org/help/file-formats/
@@ -56,3 +60,4 @@ fp-info-cache
 *.kicad_prl
 
 /iobroker
+/.VSCodeCounter

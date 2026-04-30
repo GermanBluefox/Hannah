@@ -10,7 +10,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROTO_SRC="$REPO_ROOT/telegram/proto"  # kanonische Quelle
+PROTO_CORE="$REPO_ROOT/core/proto"      # kanonische Quelle für Core + Adapter
+PROTO_TELEGRAM="$REPO_ROOT/telegram/proto"  # Telegram-Subset
 
 # Python mit grpcio-tools finden
 PYTHON=""
@@ -36,21 +37,21 @@ fi
 
 echo "Nutze Python: $PYTHON"
 
-# Core-Stubs generieren
+# Core-Stubs generieren (vollständige Proto — enthält alle Agent-Messages)
 echo "→ core/hannah/proto/"
 "$PYTHON" -m grpc_tools.protoc \
-    -I "$PROTO_SRC" \
+    -I "$PROTO_CORE" \
     --python_out="$REPO_ROOT/core/hannah/proto" \
     --grpc_python_out="$REPO_ROOT/core/hannah/proto" \
-    "$PROTO_SRC/hannah.proto"
+    "$PROTO_CORE/hannah.proto"
 
-# Telegram-Stubs generieren
+# Telegram-Stubs generieren (Telegram-Subset)
 echo "→ telegram/hannah_telegram/proto/"
 "$PYTHON" -m grpc_tools.protoc \
-    -I "$PROTO_SRC" \
+    -I "$PROTO_TELEGRAM" \
     --python_out="$REPO_ROOT/telegram/hannah_telegram/proto" \
     --grpc_python_out="$REPO_ROOT/telegram/hannah_telegram/proto" \
-    "$PROTO_SRC/hannah.proto"
+    "$PROTO_TELEGRAM/hannah.proto"
 
 # protoc erzeugt absolute Imports in *_grpc.py — innerhalb eines Python-Packages
 # müssen diese relativ sein, sonst gibt es ModuleNotFoundError beim Import.

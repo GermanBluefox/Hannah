@@ -54,6 +54,9 @@ class ResidentsClient:
         # Datenpunkt-Suffix unterhalb von /{name}/ — z.B. "mood/state"
         self._state_key = cfg.get("state_key", "mood/state")
 
+        # Set by main.py: fn(state_id, json_value) → sends SetState via gRPC adapter
+        self._setter: Optional[Callable[[str, str], bool]] = None
+
         # Welche state-Werte bedeuten "zuhause" / "weg"?
         # Residents-Adapter: 0=Abwesend, 1=zu Hause, 2=Nacht
         self._state_home = cfg.get("state_home", 1)
@@ -67,6 +70,9 @@ class ResidentsClient:
 
     # ------------------------------------------------------------------
     # Callbacks registrieren
+    def set_setter(self, fn: Callable[[str, str], bool]):
+        """Register the gRPC state setter: fn(state_id, json_value) → True if adapter is connected."""
+        self._setter = fn
 
     def on_arrival(self, fn: Callable[[str], None]):
         """Wird aufgerufen wenn ein user_roomie von weg → zuhause wechselt."""
@@ -158,10 +164,9 @@ class ResidentsClient:
     # ------------------------------------------------------------------
     # State setzen (Hannah → ioBroker)
 
-    def set_presence(self, roomie: str, state_value: object):
+    def set_presence(self, roomie: str, state_value: object, is_guest=False):
         """Setzt den Anwesenheits-Status eines Roomies via MQTT."""
-        topic = f"{self.topic_prefix_write}/{roomie}/{self._state_key}"
-        self._publish(topic, str(state_value))
+        _result = self._setter(roomie, state_value, is_guest)
         log.info(f"Residents: {roomie}/{self._state_key} → {state_value!r}")
 
     def set_user_home(self, roomie: str):
@@ -177,6 +182,12 @@ class ResidentsClient:
     def announce_offline(self):
         """Setzt Hannahs eigenen Status auf 'away' (beim Stop)."""
         self.set_presence(self.hannah_name, self._state_away)
+
+    def set_guest_home(self, roomie: str):
+        self.set_presence(roomie, self._state_home, 1)
+
+    def set_guest_away(self, roomie: str):
+        self.set_presence(roomie, self._state_away, 1)
 
     # ------------------------------------------------------------------
     # Cache lesen

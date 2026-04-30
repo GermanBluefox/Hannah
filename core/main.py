@@ -35,6 +35,7 @@ from hannah.memory import LongTermMemory
 from hannah.user_registry import UserRegistry
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
+from hannah.__version__ import VERSION as HANNAH_VERSION
 
 
 def setup_logging(level: str):
@@ -53,6 +54,7 @@ def main():
 
     setup_logging(args.log_level)
     log = logging.getLogger("hannah.main")
+    log.info(f"Hannah Core {HANNAH_VERSION}")
 
     try:
         cfg = config_mod.load(args.config)
@@ -527,15 +529,19 @@ def main():
 
     # Satellite-Online-Tracking: diff berechnen und per-device online/offline publishen
     _known_satellites: set[str] = set()
+    _prev_satellite_map: dict[str, str] = {}
 
     def _on_satellite_change(satellite_map: dict[str, str]):
-        nonlocal _known_satellites
+        nonlocal _known_satellites, _prev_satellite_map
         current = set(satellite_map.keys())
         for device in current - _known_satellites:
             mqtt_handler.publish_satellite_online(device, True)
+            grpc_servicer.agent_satellite_update(device, satellite_map[device], "", True)
         for device in _known_satellites - current:
             mqtt_handler.publish_satellite_online(device, False)
+            grpc_servicer.agent_satellite_update(device, _prev_satellite_map.get(device, ""), "", False)
         _known_satellites = current
+        _prev_satellite_map = dict(satellite_map)
         mqtt_handler.publish_rooms(satellite_map)
     trigger_engine = TriggerEngine(
         path=cfg.get("triggers_file", "triggers.yaml"),
@@ -651,6 +657,16 @@ def main():
             result = tts.synthesize(answer)
             if result:
                 tts_pcm, sample_rate = result
+                if sample_rate != 16000:
+                    samples = np.frombuffer(tts_pcm, dtype=np.int16).astype(np.float32)
+                    new_len = int(len(samples) * 16000 / sample_rate)
+                    resampled = np.interp(
+                        np.linspace(0, len(samples) - 1, new_len),
+                        np.arange(len(samples)),
+                        samples,
+                    ).astype(np.int16)
+                    tts_pcm = resampled.tobytes()
+                    sample_rate = 16000
 
         return transcript, answer, intent_name, tts_pcm, sample_rate
 
@@ -694,8 +710,35 @@ def main():
             topic = f"{residents.topic_prefix_read}/{roomie_id}/{residents._state_key}"
         residents.update(topic, str(presence_state))
 
-    def _on_agent_text_command(text: str):
-        process_text_command(text)
+    def _on_agent_text_command(text: str) -> tuple[str, str]:
+        answer, intent_name = _handle_text(text, source="iobroker")
+        mqtt_handler.publish_text_answer(answer)
+        return answer, intent_name
+
+    def _on_agent_set_resident(resident_id: str, presence_state: int, _is_guest: bool):
+        residents.set_presence(resident_id, presence_state)
+
+    def _on_agent_satellite_control(room: str, key: str, value: object):
+        devices = udp_server.registered_devices()
+        targets = [d for d, r in devices.items() if room == "all" or r.lower() == room.lower()]
+        if key == "mute":
+            for d in targets:
+                mqtt_handler.publish_mute_state(d, bool(value))
+        elif key == "dnd":
+            for d in targets:
+                mqtt_handler.publish_dnd_state(d, bool(value))
+        elif key == "volume":
+            for d in targets:
+                mqtt_handler.publish_volume_state(int(value), d)
+        elif key in ("announcement", "announcement_ssml"):
+            if tts.enabled:
+                result = (tts.synthesize_ssml(str(value)) if key == "announcement_ssml"
+                          else tts.synthesize(str(value)))
+                if result:
+                    pcm, rate = result
+                    for d in targets:
+                        udp_server.send_tts(d, pcm, rate)
+        log.info(f"[satellite_control] room={room!r} {key}={value!r} → {len(targets)} Satelliten")
 
     def _on_agent_connect():
         state_ids = trigger_engine.get_referenced_state_ids()
@@ -728,6 +771,8 @@ def main():
         on_agent_resident=_on_agent_resident,
         on_agent_text_command=_on_agent_text_command,
         on_agent_connect=_on_agent_connect,
+        on_agent_set_resident=_on_agent_set_resident,
+        on_agent_satellite_control=_on_agent_satellite_control,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)
@@ -738,6 +783,7 @@ def main():
     # für das Zurückschreiben von Presence-States in den Residents-Adapter genutzt.
 
     residents = ResidentsClient(cfg.get("residents", {}), mqtt_handler.publish_raw)
+    residents.set_setter(grpc_servicer.agent_set_resident)
 
     def _on_arrival(name: str):
         process_announcement("all", "Willkommen zuhause!")

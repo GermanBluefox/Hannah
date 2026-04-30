@@ -35,7 +35,7 @@ const (
 	typeTTS     = 0x03
 
 	maxPacket = 65535
-	ttsChunk  = 60_000 // max bytes per TTS UDP packet
+	ttsChunk  = 1400 // max bytes per TTS UDP packet — keeps packets below WiFi MTU (no IP fragmentation)
 )
 
 // AudioCallback is called when a complete audio session has been received.

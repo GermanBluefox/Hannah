@@ -44,7 +44,7 @@ static const char *TAG = "hannah_audio";
     (CONFIG_HANNAH_VAD_SILENCE_MS / 10)
 
 /* Speaker-Queue */
-#define SPK_QUEUE_DEPTH 32
+#define SPK_QUEUE_DEPTH 128
 
 /* ------------------------------------------------------------------ */
 /* Typen                                                                 */
@@ -117,6 +117,7 @@ static esp_err_t speaker_init(void)
         CONFIG_HANNAH_SPK_I2S_PORT, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num  = 8;
     chan_cfg.dma_frame_num = STEP_SAMPLES * 4;
+    chan_cfg.auto_clear    = true;
 
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &s_tx_chan, NULL));
 
@@ -274,9 +275,17 @@ static void mic_task(void *arg)
 static void speaker_task(void *arg)
 {
     spk_chunk_t chunk;
+    bool was_speaking = false;
     ESP_LOGI(TAG, "Speaker-Task gestartet.");
     while (1) {
-        if (xQueueReceive(s_spk_queue, &chunk, portMAX_DELAY) != pdTRUE) continue;
+        if (xQueueReceive(s_spk_queue, &chunk, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            /* Timeout — keine neuen Chunks seit 1s → TTS abgeschlossen */
+            if (was_speaking) {
+                was_speaking = false;
+                hannah_led_set_state(LED_STATE_IDLE);
+            }
+            continue;
+        }
         if (chunk.is_end) {
             /* Kurze Stille nach TTS damit letzter Chunk abklingt */
             uint8_t silence[STEP_BYTES_MONO] = {0};
@@ -287,6 +296,7 @@ static void speaker_task(void *arg)
             continue;
         }
         if (!chunk.data) continue;
+        was_speaking = true;
         size_t written;
         i2s_channel_write(s_tx_chan, chunk.data, chunk.len,
                           &written, pdMS_TO_TICKS(500));
@@ -377,7 +387,7 @@ void hannah_audio_play(const uint8_t *pcm, size_t len, int sample_rate)
     if (!copy) { ESP_LOGW(TAG, "play: kein Speicher"); return; }
     memcpy(copy, pcm, len);
     spk_chunk_t chunk = {.data = copy, .len = len, .is_end = false};
-    if (xQueueSend(s_spk_queue, &chunk, pdMS_TO_TICKS(50)) != pdTRUE) {
+    if (xQueueSend(s_spk_queue, &chunk, 0) != pdTRUE) {
         ESP_LOGW(TAG, "Speaker-Queue voll — Chunk verworfen.");
         free(copy);
     }

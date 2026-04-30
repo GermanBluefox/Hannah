@@ -38,5 +38,8 @@ CONFIG_HANNAH_LED_COUNT=12
 # Mute-Taster
 CONFIG_HANNAH_MUTE_GPIO=0
 
+# lwIP — UDP receive mailbox groß genug für TTS-Burst (default=6 reicht nicht)
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+
 # Logging
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y

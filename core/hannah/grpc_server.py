@@ -75,6 +75,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_agent_resident: Optional[Callable[[str, int, bool], None]] = None,        # (roomie_id, presence_state, is_guest)
         on_agent_text_command: Optional[Callable[[str], tuple[str, str]]] = None,    # (text) → (answer, intent)
         on_agent_connect: Optional[Callable[[], None]] = None,                       # called on each new adapter connection
+        on_agent_set_resident: Optional[Callable[[str, int, bool], None]] = None,    # (resident_id, presence_state, is_guest)
+        on_agent_satellite_control: Optional[Callable[[str, str, object], None]] = None,  # (room, key, value)
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -94,7 +96,9 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_agent_state        = on_agent_state
         self._on_agent_resident     = on_agent_resident
         self._on_agent_text_command = on_agent_text_command
-        self._on_agent_connect      = on_agent_connect
+        self._on_agent_connect           = on_agent_connect
+        self._on_agent_set_resident      = on_agent_set_resident
+        self._on_agent_satellite_control = on_agent_satellite_control
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -430,6 +434,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             threading.Thread(
                 target=self._on_satellite_change, args=(snapshot,), daemon=True
             ).start()
+        self.agent_satellite_update(device, room, "", online=True)
         return pb.StatusResponse(ok=True, message="registered")
 
     def NotifySatelliteGone(self, request, _context):
@@ -443,6 +448,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             threading.Thread(
                 target=self._on_satellite_change, args=(snapshot,), daemon=True
             ).start()
+        self.agent_satellite_update(device, "", "", online=False)
         return pb.StatusResponse(ok=True, message="gone")
 
     # ------------------------------------------------------------------
@@ -464,6 +470,31 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
     def agent_watch_more(self, state_ids: list[str]) -> bool:
         """Push WatchMore request to all connected adapters."""
         cmd = pb.AgentCommand(watch_more=pb.AgentWatchMore(state_ids=state_ids))
+        with self._agent_lock:
+            for q in self._agent_queues:
+                q.put(cmd)
+            return len(self._agent_queues) > 0
+
+    def agent_set_resident(self, resident_id: str, presence_state: int, is_guest: bool) -> bool:
+        """Push SetResident command to all connected adapters."""
+        cmd = pb.AgentCommand(set_resident=pb.AgentSetResident(
+            resident_id=resident_id,
+            presence_state=presence_state,
+            is_guest=is_guest,
+        ))
+        with self._agent_lock:
+            for q in self._agent_queues:
+                q.put(cmd)
+            return len(self._agent_queues) > 0
+
+    def agent_satellite_update(self, device_id: str, room: str, address: str, online: bool) -> bool:
+        """Push a satellite online/offline update to all connected adapters."""
+        cmd = pb.AgentCommand(satellite_update=pb.AgentSatelliteUpdate(
+            device_id=device_id,
+            room=room,
+            address=address,
+            online=online,
+        ))
         with self._agent_lock:
             for q in self._agent_queues:
                 q.put(cmd)
@@ -499,7 +530,18 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                         r = msg.resident_update
                         self._on_agent_resident(r.roomie_id, r.presence_state, r.is_guest)
                     elif which == "text_command" and self._on_agent_text_command:
-                        self._on_agent_text_command(msg.text_command.text)
+                        answer, intent = self._on_agent_text_command(msg.text_command.text)
+                        q.put(pb.AgentCommand(text_answer=pb.AgentTextAnswer(
+                            text=answer, intent=intent,
+                        )))
+                    elif which == "satellite_control" and self._on_agent_satellite_control:
+                        sc = msg.satellite_control
+                        ctrl = sc.WhichOneof("control")
+                        if ctrl:
+                            self._on_agent_satellite_control(sc.room, ctrl, getattr(sc, ctrl))
+                    elif which == "set_resident" and self._on_agent_set_resident:
+                        r = msg.set_resident
+                        self._on_agent_set_resident(r.resident_id, r.presence_state, r.is_guest)
             except Exception as e:
                 log.debug(f"[grpc] Adapter drain ended: {e}")
             finally:

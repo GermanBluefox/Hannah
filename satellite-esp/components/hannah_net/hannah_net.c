@@ -170,7 +170,7 @@ static void udp_receive_task(void *arg)
         size_t   plen    = len - 1;
 
         if (type == TYPE_TTS) {
-            /* TTS-PCM-Chunk → an Audio-Komponente weiterleiten */
+            ESP_LOGI(TAG, "TTS chunk empfangen: %d bytes", (int)plen);
             if (s_tts_cb) s_tts_cb(payload, plen);
 
         } else if (type == TYPE_CONTROL) {
@@ -192,6 +192,7 @@ static void udp_receive_task(void *arg)
                 int sample_rate = 16000;
                 const cJSON *jsr = cJSON_GetObjectItemCaseSensitive(root, "sample_rate");
                 if (cJSON_IsNumber(jsr)) sample_rate = (int)jsr->valuedouble;
+                ESP_LOGI(TAG, "tts_end empfangen (sample_rate=%d)", sample_rate);
                 if (s_tts_end_cb) s_tts_end_cb(sample_rate);
 
             } else if (strcmp(jtype->valuestring, "stop")   == 0 ||
@@ -277,10 +278,24 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
         memcpy(data, event->data, dlen);
 
         if (strcmp(topic, "hannah/server") == 0) {
-            /* Payload: "IP:Port" */
             char host[64] = {0};
             int  port     = 0;
-            if (sscanf(data, "%63[^:]:%d", host, &port) == 2 && port > 0) {
+            /* JSON format: {"host": "...", "port": ...} */
+            cJSON *root = cJSON_ParseWithLength(data, dlen);
+            if (root) {
+                const cJSON *jhost = cJSON_GetObjectItemCaseSensitive(root, "host");
+                const cJSON *jport = cJSON_GetObjectItemCaseSensitive(root, "port");
+                if (cJSON_IsString(jhost) && cJSON_IsNumber(jport)) {
+                    strncpy(host, jhost->valuestring, sizeof(host) - 1);
+                    port = (int)jport->valuedouble;
+                }
+                cJSON_Delete(root);
+            }
+            /* Fallback: plain "IP:Port" format */
+            if (port == 0) {
+                sscanf(data, "%63[^:]:%d", host, &port);
+            }
+            if (host[0] && port > 0) {
                 ESP_LOGI(TAG, "Discovery: Proxy %s:%d", host, port);
                 udp_connect(host, port);
             } else {

@@ -9,6 +9,7 @@ genau wie WeatherCache und ResidentsClient.
 """
 import logging
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, Optional
@@ -217,18 +218,18 @@ class CarTracker:
             case "position/isMoving":
                 new_moving = _bool(value)
                 if self._prev_moving is True and new_moving is False:
-                    log.info("Auto eingeparkt — on_parked-Callback wird aufgerufen")
-                    s.is_moving = new_moving  # Snapshot mit aktuellem Wert
-                    snapshot = CarState(**{
-                        k: (dict(v) if isinstance(v, dict) else v)
-                        for k, v in s.__dict__.items()
-                    })
+                    log.info("Auto eingeparkt — on_parked-Callback in 2s")
+                    s.is_moving = new_moving
                     if self._on_parked:
-                        threading.Thread(
-                            target=self._on_parked,
-                            args=(snapshot,),
-                            daemon=True,
-                        ).start()
+                        def _delayed_parked():
+                            time.sleep(2)
+                            with self._lock:
+                                fresh = CarState(**{
+                                    k: (dict(v) if isinstance(v, dict) else v)
+                                    for k, v in self._state.__dict__.items()
+                                })
+                            self._on_parked(fresh)
+                        threading.Thread(target=_delayed_parked, daemon=True).start()
                 self._prev_moving = new_moving
                 s.is_moving = new_moving
             case "position/date":

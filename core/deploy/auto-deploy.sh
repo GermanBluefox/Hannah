@@ -29,6 +29,11 @@ git restore .
 git pull --ff-only --quiet
 log "git pull abgeschlossen."
 
+# Version in __version__.py schreiben (git describe → "v0.1.0" oder "v0.1.0-3-gabcdef")
+VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
+echo "VERSION = '${VERSION}'" > "$REPO_DIR/core/hannah/__version__.py"
+log "Version: ${VERSION}"
+
 # Nur betroffene Services neu starten
 if echo "$CHANGED" | grep -q "^core/"; then
     log "Core-Dateien geändert → hannah.service neu starten"

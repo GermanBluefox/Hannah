@@ -18,7 +18,8 @@ import sqlite3
 import threading
 import time
 import uuid as _uuid
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
+from hannah.proto.hannah_pb2 import AgentResident as Resident
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,6 @@ class UserRegistry:
     def __init__(
         self,
         cfg: dict,
-        fetch_roomies: Callable[[], dict[str, str]],
         hannah_roomie: str = "hannah",
     ):
         """
@@ -38,7 +38,6 @@ class UserRegistry:
         """
         self._db_path       = cfg.get("db_path", "hannah_users.db")
         self._sync_interval = int(cfg.get("sync_interval", 60))
-        self._fetch_roomies = fetch_roomies
         self._hannah_roomie = hannah_roomie
         self._lock          = threading.Lock()
         self._init_db()
@@ -79,29 +78,29 @@ class UserRegistry:
     # ------------------------------------------------------------------
     # Sync mit ioBroker
 
-    def sync(self) -> tuple[int, int]:
+    def sync(self, residents: Iterable[Resident]) -> tuple[int, int]:
         """
         Gleicht Registry mit ioBroker ab.
         Gibt (added, deactivated) zurück.
         """
-        try:
-            roomies = self._fetch_roomies()
-        except Exception as e:
-            log.warning(f"UserRegistry sync fehlgeschlagen: {e}")
-            return 0, 0
-
         added = deactivated = 0
+
+        log.info(f"UserRegistry: Sync gestartet ({len(residents)} Residents von ioBroker)")
 
         with self._lock, self._connect() as conn:
             existing: dict[str, str] = {
                 row[0]: row[1]
                 for row in conn.execute(
-                    "SELECT roomie_id, uuid FROM users WHERE active = 1"
+                    "SELECT roomie_id, uuid FROM users"
                 )
             }
 
             # Neue Roomies anlegen / Hannah's trust_level sicherstellen
-            for roomie_id, display_name in roomies.items():
+            for resident in residents:
+                residents = list(residents)  # falls es ein Generator ist
+                resident_ids = {r.roomie_id for r in residents}
+                roomie_id = resident.roomie_id
+                display_name = resident.name or roomie_id
                 is_hannah = (roomie_id == self._hannah_roomie)
                 trust_level = 10 if is_hannah else 5
                 if roomie_id not in existing:
@@ -124,9 +123,18 @@ class UserRegistry:
                         (roomie_id,),
                     )
 
+                # Wiederkehrende Roomies reaktivieren (z.B. nach ioBroker-Neustart)
+                if(roomie_id in existing):
+                    conn.execute(
+                        "UPDATE users SET active = 1, updated_at = datetime('now')"
+                        " WHERE roomie_id = ?",
+                        (roomie_id,),
+                    )
+                    added += 1
+
             # In ioBroker gelöschte Roomies deaktivieren
             for roomie_id in existing:
-                if roomie_id not in roomies:
+                if roomie_id not in resident_ids:
                     conn.execute(
                         "UPDATE users SET active = 0, updated_at = datetime('now')"
                         " WHERE roomie_id = ?",
@@ -135,22 +143,11 @@ class UserRegistry:
                     log.info(f"UserRegistry: -{roomie_id!r} (in ioBroker gelöscht) → deaktiviert")
                     deactivated += 1
 
+            conn.commit()
+
         if added or deactivated:
-            log.info(f"UserRegistry: Sync abgeschlossen (+{added} / -{deactivated})")
+            log.info(f"UserRegistry: Sync abgeschlossen (+{added} / -{deactivated} )")
         return added, deactivated
-
-    def start_sync_loop(self):
-        """Sync einmalig jetzt, dann alle sync_interval Sekunden im Hintergrund."""
-        self.sync()
-
-        def _loop():
-            while True:
-                time.sleep(self._sync_interval)
-                self.sync()
-
-        t = threading.Thread(target=_loop, daemon=True, name="user-registry-sync")
-        t.start()
-        log.info(f"UserRegistry: Hintergrund-Sync alle {self._sync_interval}s aktiv.")
 
     # ------------------------------------------------------------------
     # Abfragen

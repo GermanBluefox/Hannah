@@ -67,20 +67,16 @@ def main():
 
     # ioBroker
     iobroker = IoBrokerClient(cfg.get("iobroker", {}))
-    iobroker.load()
 
     if not iobroker.rooms:
         log.warning("Keine Räume aus ioBroker geladen — NLU arbeitet ohne Raum-Erkennung.")
 
     # User Registry
     residents_cfg = cfg.get("residents", {})
-    roomie_prefix = residents_cfg.get("topic_prefix_read", "residents/0/roomie").replace("/", ".")
     registry = UserRegistry(
         cfg.get("user_registry", {}),
-        fetch_roomies=lambda: iobroker.list_roomies(roomie_prefix),
         hannah_roomie=residents_cfg.get("hannah_roomie", "hannah"),
     )
-    registry.start_sync_loop()
 
     # STT + NLU + TTS
     stt = STT(cfg.get("stt", {}))
@@ -774,6 +770,8 @@ def main():
         on_agent_connect=_on_agent_connect,
         on_agent_set_resident=_on_agent_set_resident,
         on_agent_satellite_control=_on_agent_satellite_control,
+        on_agent_device_snapshot=iobroker.handle_device_snapshot,
+        on_agent_send_residents=registry.sync,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)

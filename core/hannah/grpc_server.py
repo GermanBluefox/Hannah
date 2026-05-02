@@ -9,7 +9,7 @@ import queue
 import threading
 from concurrent import futures
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 import grpc
 
@@ -78,6 +78,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_agent_connect: Optional[Callable[[], None]] = None,                       # called on each new adapter connection
         on_agent_set_resident: Optional[Callable[[str, int, bool], None]] = None,    # (resident_id, presence_state, is_guest)
         on_agent_satellite_control: Optional[Callable[[str, str, object], None]] = None,  # (room, key, value)
+        on_agent_device_snapshot: Optional[Callable[[Iterable[pb.AgentDevice]], None]] = None,
+        on_agent_send_residents: Optional[Callable[[Iterable[pb.AgentResident]], None]] = None,
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -101,6 +103,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_agent_connect           = on_agent_connect
         self._on_agent_set_resident      = on_agent_set_resident
         self._on_agent_satellite_control = on_agent_satellite_control
+        self._on_agent_device_snapshot   = on_agent_device_snapshot
+        self._on_agent_send_residents    = on_agent_send_residents
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -557,8 +561,19 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                     elif which == "set_resident" and self._on_agent_set_resident:
                         r = msg.set_resident
                         self._on_agent_set_resident(r.resident_id, r.presence_state, r.is_guest)
+                    elif which == "send_snapshot" and self._on_agent_device_snapshot:
+                        snapshot = msg.send_snapshot
+                        self._on_agent_device_snapshot(snapshot.devices)
+                    elif which == "send_residents" and self._on_agent_send_residents:
+                        r = msg.send_residents
+                        self._on_agent_send_residents(r.residents)
+                    else:
+                        log.warning(f"[grpc] Unrecognized AgentMessage payload: {which}")
+                            
+
             except Exception as e:
                 log.debug(f"[grpc] Adapter drain ended: {e}")
+                log.debug(f"[grpc] Adapter drain ended: {e}", exc_info=True)
             finally:
                 q.put(None)
 

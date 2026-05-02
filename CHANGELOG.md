@@ -5,6 +5,9 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.3.1
+* Fixed: Release-Cycle
+
 ## 0.3.0
 * New: Device discovery via gRPC adapter snapshot — Hannah Core no longer queries the ioBroker REST API; device structure (room, name, functions, current value) is pushed by the adapter on connect
 * New: Resident snapshot on connect — all known residents are forwarded by the adapter via gRPC, replacing the previous API-based lookup

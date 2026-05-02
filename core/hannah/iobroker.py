@@ -4,7 +4,9 @@ import threading
 import time
 import requests
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Iterable, Optional
+from hannah.proto.hannah_pb2 import AgentDevice as AgentDevice
+from hannah.proto.hannah_pb2 import AgentStateValue as AgentStateValue
 
 if TYPE_CHECKING:
     from .nlu import Intent
@@ -78,9 +80,13 @@ class IoBrokerClient:
         self.devices: dict[str, dict[str, Device]] = {}
         # {device_id: Device}
         self._devices_by_id: dict[str, Device] = {}
+        # {state_id: value} — raw states without a room (weather, car, etc.)
+        self._state_cache: dict[str, object] = {}
 
         # Set by main.py: fn(state_id, json_value) → sends SetState via gRPC adapter
         self._setter: Optional[Callable[[str, str], bool]] = None
+
+        self._getter: Optional[Callable[[str], str]] = None
 
         # Feedback-Callback: fn(device, success, text)
         # device = MQTT-Gerätename des Satelliten, success = bool, text = Antworttext
@@ -108,6 +114,10 @@ class IoBrokerClient:
         """Register the gRPC state setter: fn(state_id, json_value) → True if adapter is connected."""
         self._setter = fn
 
+    def set_getter(self, fn: Callable[[str], str]):
+        """Register a gRPC state getter: fn(state_id) → json_value."""
+        self._getter = fn
+
     def set_feedback_handler(self, fn: Callable[[str, bool, str], None], timeout: float = 3.0):
         """
         Registriert den Feedback-Callback.
@@ -120,82 +130,80 @@ class IoBrokerClient:
     # ------------------------------------------------------------------
     # Laden
 
-    def load(self):
-        prefix_parts = self._prefix.split(".")
-        pattern = self._prefix + ".*.*.*.*.*"   # Kategorie.Etage.Raum.Gerät.State
+    def handle_device_snapshot(self, devices: Iterable[AgentDevice]):
+        """
+        Verarbeitet die gesamte Liste von gRPC AgentDevice Objekten.
+        States ohne Raum (z.B. Wetter, Auto) landen im _state_cache.
+        """
+        new_device_map = {}
+        new_state_cache = {}
+        log.info(f"gRPC Snapshot: {len(devices)} Geräte erhalten, verarbeiten...")
+        for device in devices:
+            try:
+                if not device.room:
+                    new_state_cache[device.state_id] = self._parse_payload(device.value.value)
+                    continue
 
-        try:
-            member_to_room = self._load_room_mapping()
-            objects = self._get_objects(pattern)
-        except Exception as e:
-            log.error(f"ioBroker nicht erreichbar: {e}")
-            return
+                prefix_parts = self._prefix.split(".")
+                parts = device.state_id.split(".")
+                n = len(parts) - len(prefix_parts)
+                if n not in (4, 5):
+                    continue
 
-        state_suffix_map = {v: k for k, v in self._state_names.items()}
-        device_map: dict[str, Device] = {}
+                device_id = ".".join(parts[:-1])
+                category  = parts[len(prefix_parts)]
+                floor     = parts[len(prefix_parts) + 1] if n == 5 else ""
 
-        for obj in objects:
-            oid = obj.get("_id") or obj.get("id", "")
-            if not oid:
+                if device_id not in new_device_map:
+                    new_device_map[device_id] = Device(
+                        id=device_id,
+                        name=device.device,
+                        key=_camel_to_words(device.device),
+                        room=device.room,
+                        floor=floor,
+                        category=category,
+                    )
+
+                dev = new_device_map[device_id]
+                state_suffix = parts[-1]
+                dev.states[state_suffix] = device.state_id
+                dev.current[state_suffix] = self._parse_payload(device.value.value)
+
+                log.debug(f"Neues Gerät: {device_id} → {new_device_map[device_id]}")
+            except Exception as e:
+                log.warning(f"Fehler beim Verarbeiten von Gerät {device.state_id}: {e}", exc_info=True)
                 continue
 
-            if not oid.startswith(self._prefix + "."):
-                continue
+        self._finalize_loading(new_device_map, new_state_cache)
 
-            parts = oid.split(".")
-            n = len(parts) - len(prefix_parts)
-            # Unterstützte Strukturen nach dem Prefix:
-            #   5: Kategorie.Etage.Raum.Gerät.State  (Normalfall)
-            #   4: Kategorie.Etage.Raum.State         (kein separater Gerätename)
-            if n not in (4, 5):
-                continue
-
-            state_suffix = parts[-1]
-            if state_suffix not in state_suffix_map:
-                continue
-
-            device_id = ".".join(parts[:-1])
-            category  = parts[len(prefix_parts)]
-            floor     = parts[len(prefix_parts) + 1] if n == 5 else ""
-            dev_name  = parts[len(prefix_parts) + 3] if n == 5 else parts[len(prefix_parts) + 2]
-
-            if device_id not in device_map:
-                # Kanonischen Raumnamen aus enum/rooms ermitteln, Pfad-Segment als Fallback
-                room_name = self._find_room_for_device(device_id, member_to_room) \
-                            or parts[len(prefix_parts) + 2]
-                device_map[device_id] = Device(
-                    id=device_id,
-                    name=dev_name,
-                    key=_camel_to_words(dev_name),
-                    room=room_name,
-                    floor=floor,
-                    category=category,
-                )
-
-            canon = state_suffix_map[state_suffix]
-            device_map[device_id].states[canon] = oid
-            log.debug(f"  State geladen: {oid}")
-
+    def _finalize_loading(self, device_map, state_cache: dict | None = None):
+        """ Hilfsmethode, um die internen Strukturen zu befüllen """
         self.rooms = {}
         self.devices = {}
         self._devices_by_id = {}
+        self._state_cache = state_cache or {}
+
+        total_states = 0
+        filled_states = 0
 
         for device in device_map.values():
             room_key = device.room.lower()
             self.rooms[room_key] = device.room
             self._devices_by_id[device.id] = device
+
             if room_key not in self.devices:
                 self.devices[room_key] = {}
             self.devices[room_key][device.key] = device
-            log.debug(
-                f"  Gerät: {device.name} (key='{device.key}') [{device.room}/{device.floor}] "
-                f"States: {list(device.states.keys())}"
-            )
 
-        total = sum(len(d) for d in self.devices.values())
-        log.info(f"ioBroker: {len(self.rooms)} Räume, {total} Geräte geladen.")
+            total_states += len(device.states)
+            filled_states += len(device.current)
+
+        log.info(f"Update: {len(self.rooms)} Räume, {len(self._devices_by_id)} Geräte via gRPC geladen.")
+        log.info(f"Cache: {filled_states}/{total_states} States aus gRPC-Snapshot geladen.")
+        if self._state_cache:
+            log.info(f"State-Cache: {len(self._state_cache)} rohe States ohne Raum (Wetter, Auto, …)")
+
         self._log_device_map()
-        self._warm_cache()
 
     # ------------------------------------------------------------------
     # Intent ausführen
@@ -489,9 +497,15 @@ class IoBrokerClient:
 
     def handle_state_update(self, state_id: str, raw: str):
         """
-        Callback für eingehende MQTT State-Updates aus ioBroker.
+        Callback für eingehende State-Updates aus ioBroker.
         Parst den Rohwert, schreibt ihn in den Device-Cache und prüft Pending-Confirmations.
+        States ohne Raum landen im _state_cache.
         """
+        if state_id in self._state_cache:
+            self._state_cache[state_id] = self._parse_payload(raw)
+            log.debug(f"State-Cache: {state_id} = {self._state_cache[state_id]!r}")
+            return
+
         device_id = ".".join(state_id.rsplit(".", 1)[:-1])
         state_suffix = state_id.rsplit(".", 1)[-1]
         device = self._devices_by_id.get(device_id)
@@ -560,35 +574,6 @@ class IoBrokerClient:
                             f"{pending['label']} antwortet nicht — möglicherweise offline.",
                         )
 
-    def list_roomies(self, roomie_prefix: str = "residents.0.roomie") -> dict[str, str]:
-        """
-        Gibt alle Roomie-Channels aus dem ioBroker Residents-Adapter zurück.
-        Rückgabe: {roomie_id: display_name}, z.B. {"leonie": "Leonie", "hannah": "Hannah"}
-        Wirft eine Exception wenn ioBroker nicht erreichbar ist.
-        """
-        states = self._get_states_by_filter(f"{roomie_prefix}*")
-        prefix_dot = roomie_prefix + "."
-        # Schritt 1: alle Roomie-IDs sammeln
-        roomie_ids: set[str] = set()
-        for state_id in states:
-            if not state_id.startswith(prefix_dot):
-                continue
-            remainder = state_id[len(prefix_dot):]
-            roomie_id = remainder.split(".")[0]
-            if roomie_id:
-                roomie_ids.add(roomie_id)
-
-        # Schritt 2: Display-Name aus <prefix>.<id>.info.name lesen
-        result: dict[str, str] = {}
-        for roomie_id in roomie_ids:
-            name_key = f"{prefix_dot}{roomie_id}.info.name"
-            entry = states.get(name_key, {})
-            val = entry.get("val")
-            display = str(val) if val is not None else roomie_id
-            result[roomie_id] = display
-
-        return result
-
     def control_direct(self, device_id: str, state_key: str, raw_value: str) -> bool:
         """
         Setzt einen Device-State direkt ohne NLU-Umweg (für gRPC-Menü-Steuerung).
@@ -643,9 +628,20 @@ class IoBrokerClient:
         return None
 
     def get_state_raw(self, state_id: str) -> str | None:
-        """Liest einen beliebigen ioBroker-State per REST und gibt ihn als String zurück."""
-        val = self._get_state_value(state_id)
-        return str(val) if val is not None else None
+        """Liest einen ioBroker-State aus dem lokalen Cache. Gibt None zurück wenn nicht bekannt."""
+        if state_id in self._state_cache:
+            val = self._state_cache[state_id]
+            return str(val) if val is not None else None
+
+        device_id = ".".join(state_id.rsplit(".", 1)[:-1])
+        state_suffix = state_id.rsplit(".", 1)[-1]
+        device = self._devices_by_id.get(device_id)
+        if device:
+            val = device.current.get(state_suffix)
+            return str(val) if val is not None else None
+
+        log.debug(f"get_state_raw: '{state_id}' nicht im Cache — State nicht subscribed?")
+        return None
 
     @staticmethod
     def _parse_payload(raw: str):
@@ -749,24 +745,6 @@ class IoBrokerClient:
             return [v for v in data.values() if isinstance(v, dict)]
         return []
 
-    def _get_states_by_filter(self, filter_pattern: str) -> dict[str, dict]:
-        """
-        Ruft /v1/states?filter=<pattern> ab und gibt ein flaches Dict zurück:
-        {state_id: {"val": ..., "ack": ..., ...}}
-        """
-        url = f"{self._base}/v1/states"
-        resp = requests.get(
-            url,
-            params={"filter": filter_pattern},
-            headers={"accept": "application/json"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, dict):
-            return data
-        return {}
-
     def _get_objects(self, pattern: str) -> list[dict]:
         url = f"{self._base}/v1/objects"
         resp = requests.get(
@@ -785,48 +763,6 @@ class IoBrokerClient:
             return [{"_id": k, **v} for k, v in data.items() if isinstance(v, dict)]
         return []
 
-    def _warm_cache(self):
-        """
-        Liest alle bekannten States in einer Bulk-Anfrage via REST API und füllt den Cache.
-        Nötig weil ioBroker MQTT-States nicht retained sind und erst nach Änderung eintreffen.
-        """
-        total = filled = 0
-        try:
-            all_states = self._get_states_by_filter(f"{self._prefix}*")
-        except Exception as e:
-            log.warning(f"Cache-Vorwärmung fehlgeschlagen (ioBroker nicht erreichbar?): {e}")
-            return
-
-        for device in self._devices_by_id.values():
-            for canon, state_id in device.states.items():
-                total += 1
-                entry = all_states.get(state_id)
-                if not entry:
-                    continue
-                raw = entry.get("val")
-                if raw is None:
-                    continue
-                device.current[canon] = self._parse_payload(str(raw))
-                filled += 1
-                log.debug(f"Cache warm: {device.name}.{canon} = {device.current[canon]!r}")
-
-        log.info(f"Cache-Vorwärmung: {filled}/{total} States geladen.")
-
-    def _get_state_value(self, state_id: str):
-        """Liest den aktuellen Wert eines States via REST API. Gibt None zurück wenn nicht verfügbar."""
-        url = f"{self._base}/v1/state/{state_id}"
-        resp = requests.get(url, headers={"accept": "application/json"}, timeout=5)
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        data = resp.json()
-        # ioBroker gibt {"val": ..., "ack": ..., "ts": ...} zurück
-        if isinstance(data, dict):
-            raw = data.get("val")
-            if raw is None:
-                return None
-            return self._parse_payload(str(raw))
-        return None
 
     def _log_device_map(self):
         log.info("─" * 60)

@@ -19,6 +19,7 @@ import json
 import logging
 import socket
 import threading
+import time
 from typing import Callable, Optional
 
 log = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class UDPServer:
         self._on_session_start = on_session_start
         self._on_satellite_change = on_satellite_change
 
-        # { device_name: {"addr": (ip, port), "room": str} }
+        # { device_name: {"addr": (ip, port), "room": str, "last_heartbeat": float} }
         self._satellites: dict[str, dict] = {}
         # { device_name: _AudioSession }
         self._sessions: dict[str, _AudioSession] = {}
@@ -81,6 +82,7 @@ class UDPServer:
 
         self._sock: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
+        self._watchdog_thread: Optional[threading.Thread] = None
         self._running = False
 
     # ------------------------------------------------------------------
@@ -108,6 +110,10 @@ class UDPServer:
             target=self._loop, daemon=True, name="hannah-udp"
         )
         self._thread.start()
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop, daemon=True, name="hannah-udp-watchdog"
+        )
+        self._watchdog_thread.start()
         log.info(f"UDP-Server lauscht auf {self._host}:{self._port}")
 
     def stop(self):
@@ -123,6 +129,9 @@ class UDPServer:
         if self._thread:
             self._thread.join(timeout=2)
             self._thread = None
+        if self._watchdog_thread:
+            self._watchdog_thread.join(timeout=2)
+            self._watchdog_thread = None
         log.info("UDP-Server gestoppt.")
 
     # ------------------------------------------------------------------
@@ -228,7 +237,7 @@ class UDPServer:
             listen_port = msg.get("listen_port", addr[1])
             tts_addr = (addr[0], listen_port)
             with self._lock:
-                self._satellites[device] = {"addr": addr, "tts_addr": tts_addr, "room": room}
+                self._satellites[device] = {"addr": addr, "tts_addr": tts_addr, "room": room, "last_heartbeat": time.monotonic()}
             log.info(
                 f"Satellit registriert: '{device}' "
                 f"(Raum: '{room}', Audio von {addr[0]}:{addr[1]}, TTS an :{listen_port})"
@@ -261,6 +270,7 @@ class UDPServer:
             with self._lock:
                 if device in self._satellites:
                     self._satellites[device]["addr"] = addr
+                    self._satellites[device]["last_heartbeat"] = time.monotonic()
                     self._send_control({"type": "heartbeat_ack", "device": device}, addr)
                     log.info(f"Heartbeat von '{device}' — ACK gesendet")
                 else:
@@ -316,6 +326,31 @@ class UDPServer:
             offset += chunk_size
 
     # ------------------------------------------------------------------
+
+    _HEARTBEAT_TIMEOUT = 30.0  # 3 × 10s heartbeat interval
+
+    def _watchdog_loop(self):
+        while self._running:
+            time.sleep(10.0)
+            self._check_heartbeats()
+
+    def _check_heartbeats(self):
+        now = time.monotonic()
+        timed_out = []
+        with self._lock:
+            for device in list(self._satellites):
+                sat = self._satellites[device]
+                if now - sat["last_heartbeat"] > self._HEARTBEAT_TIMEOUT:
+                    timed_out.append((device, sat["room"]))
+                    del self._satellites[device]
+        for device, room in timed_out:
+            log.warning(f"Satellit '{device}' (Raum: '{room}') — kein Heartbeat seit {self._HEARTBEAT_TIMEOUT:.0f}s, markiere als offline")
+            if self._on_satellite_change:
+                with self._lock:
+                    snapshot = {d: s["room"] for d, s in self._satellites.items()}
+                threading.Thread(
+                    target=self._on_satellite_change, args=(snapshot,), daemon=True
+                ).start()
 
     def _find_device_by_ip(self, ip: str) -> Optional[str]:
         """Gibt den Device-Namen für eine IP zurück (erste Übereinstimmung)."""

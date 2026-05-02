@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 )
 
 const (
@@ -50,10 +51,13 @@ type SessionStartCallback func(device string)
 // registered=true on connect, false on disconnect.
 type SatelliteChangeCallback func(device, room string, registered bool)
 
+const heartbeatTimeout = 30 * time.Second // 3 × 10s heartbeat interval
+
 type satellite struct {
-	audioAddr *net.UDPAddr // source address of audio packets
-	ttsAddr   *net.UDPAddr // destination for TTS + control (may differ from audioAddr port)
-	room      string
+	audioAddr     *net.UDPAddr // source address of audio packets
+	ttsAddr       *net.UDPAddr // destination for TTS + control (may differ from audioAddr port)
+	room          string
+	lastHeartbeat time.Time
 }
 
 type audioSession struct {
@@ -116,6 +120,7 @@ func (s *Server) Start() error {
 	}
 	s.conn = conn
 	go s.loop()
+	go s.watchdog()
 	slog.Info("UDP server listening", "addr", s.addr)
 	return nil
 }
@@ -250,7 +255,7 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 		}
 		ttsAddr := &net.UDPAddr{IP: addr.IP, Port: listenPort}
 		s.mu.Lock()
-		s.satellites[device] = &satellite{audioAddr: addr, ttsAddr: ttsAddr, room: room}
+		s.satellites[device] = &satellite{audioAddr: addr, ttsAddr: ttsAddr, room: room, lastHeartbeat: time.Now()}
 		s.mu.Unlock()
 		slog.Info("satellite registered", "device", device, "room", room,
 			"audio_from", addr, "tts_to_port", listenPort)
@@ -283,6 +288,7 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 		s.mu.Lock()
 		if sat, ok := s.satellites[device]; ok {
 			sat.audioAddr = addr
+			sat.lastHeartbeat = time.Now()
 		}
 		s.mu.Unlock()
 		s.sendControl(map[string]any{"type": "heartbeat_ack", "device": device}, addr)
@@ -322,6 +328,34 @@ func (s *Server) sendControl(msg map[string]any, addr *net.UDPAddr) {
 	}
 	data, _ := json.Marshal(msg)
 	conn.WriteToUDP(append([]byte{typeControl}, data...), addr) //nolint:errcheck
+}
+
+func (s *Server) watchdog() {
+	ticker := time.NewTicker(heartbeatTimeout / 3)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.mu.Lock()
+		if s.conn == nil {
+			s.mu.Unlock()
+			return
+		}
+		now := time.Now()
+		type gone struct{ device, room string }
+		var timedOut []gone
+		for device, sat := range s.satellites {
+			if now.Sub(sat.lastHeartbeat) > heartbeatTimeout {
+				timedOut = append(timedOut, gone{device, sat.room})
+				delete(s.satellites, device)
+			}
+		}
+		s.mu.Unlock()
+		for _, t := range timedOut {
+			slog.Warn("satellite heartbeat timeout — marking offline", "device", t.device, "room", t.room)
+			if s.onSatelliteChange != nil {
+				s.onSatelliteChange(t.device, t.room, false)
+			}
+		}
+	}
 }
 
 // findDeviceByIP returns the first device name matching the given IP.

@@ -102,7 +102,7 @@ User=pi
 WorkingDirectory=/home/pi/hannah-satellite-pi
 ExecStart=/home/pi/hannah-satellite-pi/venv/bin/python satellite.py \\
   --device ${DEVICE} \\
-  --room ${ROOM} \\
+  --room "${ROOM}" \\
   --broker ${BROKER} \\
   --mqtt-user ${MQTT_USER} \\
   --mqtt-pass ${MQTT_PASS} \\

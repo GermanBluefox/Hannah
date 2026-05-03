@@ -330,6 +330,26 @@ func (s *Server) sendControl(msg map[string]any, addr *net.UDPAddr) {
 	conn.WriteToUDP(append([]byte{typeControl}, data...), addr) //nolint:errcheck
 }
 
+func (s *Server) checkTimeouts() {
+	now := time.Now()
+	type gone struct{ device, room string }
+	var timedOut []gone
+	s.mu.Lock()
+	for device, sat := range s.satellites {
+		if now.Sub(sat.lastHeartbeat) > heartbeatTimeout {
+			timedOut = append(timedOut, gone{device, sat.room})
+			delete(s.satellites, device)
+		}
+	}
+	s.mu.Unlock()
+	for _, t := range timedOut {
+		slog.Warn("satellite heartbeat timeout — marking offline", "device", t.device, "room", t.room)
+		if s.onSatelliteChange != nil {
+			s.onSatelliteChange(t.device, t.room, false)
+		}
+	}
+}
+
 func (s *Server) watchdog() {
 	ticker := time.NewTicker(heartbeatTimeout / 3)
 	defer ticker.Stop()
@@ -339,22 +359,8 @@ func (s *Server) watchdog() {
 			s.mu.Unlock()
 			return
 		}
-		now := time.Now()
-		type gone struct{ device, room string }
-		var timedOut []gone
-		for device, sat := range s.satellites {
-			if now.Sub(sat.lastHeartbeat) > heartbeatTimeout {
-				timedOut = append(timedOut, gone{device, sat.room})
-				delete(s.satellites, device)
-			}
-		}
 		s.mu.Unlock()
-		for _, t := range timedOut {
-			slog.Warn("satellite heartbeat timeout — marking offline", "device", t.device, "room", t.room)
-			if s.onSatelliteChange != nil {
-				s.onSatelliteChange(t.device, t.room, false)
-			}
-		}
+		s.checkTimeouts()
 	}
 }
 

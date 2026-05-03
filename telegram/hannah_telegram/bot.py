@@ -537,6 +537,8 @@ class HannahBot:
             parts.append(f"Helligkeit: {cur['illuminance']} lx")
         if "open" in cur:
             parts.append("Fenster: " + ("offen" if cur["open"] == "True" else "geschlossen"))
+        if "power" in cur:
+            parts.append(f"Verbrauch: {cur['power']} W")
         return "\n".join(parts)
 
     # ------------------------------------------------------------------

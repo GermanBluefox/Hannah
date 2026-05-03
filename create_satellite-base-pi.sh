@@ -284,91 +284,40 @@ EOF
 # QEMU-Binary aus dem Image entfernen — gehört nicht ins fertige Image
 sudo rm -f "$MOUNT_POINT/usr/bin/qemu-aarch64-static"
 
-# 7b. ReSpeaker 2-Mic HAT — Firstboot-Vorbereitung
+# 7b. ReSpeaker 2-Mic HAT v2.0 — dtoverlay direkt ins Image einbauen
 if [[ "$HARDWARE_TYPE" == "respeaker-2mic" ]]; then
-    echo "🎤 ReSpeaker 2-Mic HAT: Vorbereitung..."
+    echo "🎤 ReSpeaker 2-Mic HAT v2.0: dtoverlay einrichten..."
 
-    # seeed-voicecard Treiber-Source direkt ins Image klonen (kein Chroot nötig)
-    echo "    Klone seeed-voicecard → $MOUNT_POINT/opt/seeed-voicecard ..."
-    sudo mkdir -p "$MOUNT_POINT/opt"
-    if [[ -d "$MOUNT_POINT/opt/seeed-voicecard" ]]; then
-        echo "    → Bereits vorhanden, überspringe Clone."
-    else
-        sudo git clone --depth=1 https://github.com/HinTak/seeed-voicecard \
-            "$MOUNT_POINT/opt/seeed-voicecard"
+    # device-tree-compiler auf dem Host installieren falls nicht vorhanden
+    if ! command -v dtc &>/dev/null; then
+        sudo apt-get install -y device-tree-compiler
     fi
 
-    # Firstboot-Script (läuft einmalig beim ersten echten Pi-Boot)
-    sudo tee "$MOUNT_POINT/usr/local/bin/hannah-firstboot.sh" > /dev/null <<'FBEOF'
-#!/bin/bash
-# Hannah Firstboot — ReSpeaker 2-Mic HAT Treiber-Installation
-# Läuft einmalig beim ersten Boot; baut DKMS-Modul und startet dann neu.
-set -e
-LOG="/var/log/hannah-firstboot.log"
-exec > >(tee -a "$LOG") 2>&1
+    # seeed-linux-dtoverlays klonen und dtbo bauen (kein Kernel nötig, nur dtc)
+    DTOVERLAYS_DIR="/tmp/seeed-linux-dtoverlays"
+    if [[ ! -d "$DTOVERLAYS_DIR" ]]; then
+        git clone --depth=1 https://github.com/Seeed-Studio/seeed-linux-dtoverlays \
+            "$DTOVERLAYS_DIR"
+    fi
+    make -C "$DTOVERLAYS_DIR" overlays/rpi/respeaker-2mic-v2_0-overlay.dtbo
 
-echo "[$(date)] Hannah Firstboot: ReSpeaker 2-Mic HAT Treiber..."
+    # dtbo ins Image kopieren
+    sudo mkdir -p "$BOOT_DIR/overlays"
+    sudo cp "$DTOVERLAYS_DIR/overlays/rpi/respeaker-2mic-v2_0-overlay.dtbo" \
+        "$BOOT_DIR/overlays/respeaker-2mic-v2_0.dtbo"
 
-# Systemzeit synchronisieren — RPi hat keine RTC-Batterie, bootet mit altem Datum
-# Ohne korrektes Datum lehnt sqv/GPG alle Paketsignaturen ab
-echo "[$(date)] Synchronisiere Systemzeit..."
-systemctl start systemd-timesyncd 2>/dev/null || true
-for i in $(seq 1 30); do
-    timedatectl status 2>/dev/null | grep -q "synchronized: yes" && break
-    sleep 2
-done
-echo "[$(date)] Systemzeit: $(date)"
-
-# Kernel-Header müssen zur laufenden Kernel-Version passen → daher hier, nicht im Image-Build
-apt-get update -q
-apt-get install -y dkms linux-headers-$(uname -r)
-
-# seeed-voicecard: Kernel-6.12-Kompatibilitätspatch
-# snd_soc_pcm_runtime->id wurde in 6.x entfernt → rtd->dai_link->id
-sed -i 's/rtd->id/rtd->dai_link->id/g' /opt/seeed-voicecard/seeed-voicecard.c
-
-# DKMS-Modul bauen + dtoverlay in config.txt + asound.conf
-cd /opt/seeed-voicecard
-./install.sh
-
-# Fertig — Service deaktivieren, dann neu starten
-touch /var/lib/hannah-firstboot-done
-systemctl disable hannah-firstboot.service
-
-echo "[$(date)] Treiber installiert. Neustart in 5 Sekunden..."
-sleep 5
-reboot
-FBEOF
-    sudo chmod +x "$MOUNT_POINT/usr/local/bin/hannah-firstboot.sh"
-
-    # Firstboot-Systemd-Service
-    sudo tee "$MOUNT_POINT/etc/systemd/system/hannah-firstboot.service" > /dev/null <<'SVCEOF'
-[Unit]
-Description=Hannah Firstboot: ReSpeaker 2-Mic HAT Treiber
-After=network-online.target
-Wants=network-online.target
-ConditionPathExists=!/var/lib/hannah-firstboot-done
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/hannah-firstboot.sh
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
-
-    # Service aktivieren (Symlink statt systemctl — kein laufendes systemd im Image)
-    sudo mkdir -p "$MOUNT_POINT/etc/systemd/system/multi-user.target.wants"
-    sudo ln -sf /etc/systemd/system/hannah-firstboot.service \
-        "$MOUNT_POINT/etc/systemd/system/multi-user.target.wants/hannah-firstboot.service"
-
-    # Onboard-Audio deaktivieren — verhindert Konflikte mit dem ReSpeaker WM8960
+    # dtoverlay, I2C und Onboard-Audio in config.txt setzen
+    if ! grep -q "dtparam=i2c_arm=on" "$BOOT_DIR/config.txt" 2>/dev/null; then
+        echo "dtparam=i2c_arm=on" | sudo tee -a "$BOOT_DIR/config.txt" > /dev/null
+    fi
+    if ! grep -q "dtoverlay=respeaker-2mic-v2_0" "$BOOT_DIR/config.txt" 2>/dev/null; then
+        echo "dtoverlay=respeaker-2mic-v2_0" | sudo tee -a "$BOOT_DIR/config.txt" > /dev/null
+    fi
     if ! grep -q "dtparam=audio=off" "$BOOT_DIR/config.txt" 2>/dev/null; then
         echo "dtparam=audio=off" | sudo tee -a "$BOOT_DIR/config.txt" > /dev/null
     fi
 
-    echo "    → Firstboot-Service aktiviert, Onboard-Audio deaktiviert."
+    echo "    → dtoverlay respeaker-2mic-v2_0 installiert, Onboard-Audio deaktiviert."
 fi
 
 # 8. Aufräumen

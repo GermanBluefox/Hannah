@@ -152,7 +152,7 @@ class IoBrokerClient:
 
                 device_id = ".".join(parts[:-1])
                 category  = parts[len(prefix_parts)]
-                floor     = parts[len(prefix_parts) + 1] if n == 5 else ""
+                floor     = device.floor
 
                 if device_id not in new_device_map:
                     new_device_map[device_id] = Device(
@@ -489,11 +489,15 @@ class IoBrokerClient:
                 return f"{name} im {room} leuchtet in {val}."
             return f"Keine Farbdaten für {name}."
 
-        # Default: on/off
+        # Default: on/off (+ optionaler Stromverbrauch)
         val = dev.current.get("on")
         if val is None:
             return f"Ich weiß nicht ob {name} im {room} an oder aus ist."
-        return f"{name} im {room} ist {'an' if val else 'aus'}."
+        status = "an" if val else "aus"
+        power = dev.current.get("power")
+        if power is not None:
+            return f"{name} im {room} ist {status} ({power} W)."
+        return f"{name} im {room} ist {status}."
 
     def handle_state_update(self, state_id: str, raw: str):
         """

@@ -63,7 +63,7 @@ elif [[ "$ARCH" == "aarch64" ]] && [[ "$PY_MINOR" -ge 13 ]]; then
     # 64-bit RPi mit Python >= 3.13: kein tflite-runtime-Wheel verfügbar → onnxruntime
     echo "    Modus: onnxruntime (aarch64 / Python >= 3.13)"
     $PIP --no-deps openwakeword
-    $PIP onnxruntime scipy requests tqdm scikit-learn
+    $PIP "onnxruntime>=1.18.0,<1.21.0" scipy requests tqdm scikit-learn
 
 else
     # aarch64 Python < 3.13 oder x86_64: normales openwakeword

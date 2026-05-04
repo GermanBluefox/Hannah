@@ -2,12 +2,15 @@
 <!--
     Placeholder for the next version (at the beginning of the line):
     ## **WORK IN PROGRESS**
+
+## 0.4.2
 -->
 ## **WORK IN PROGRESS**
 
 ## 0.4.1
 * Fixed: Proxy and UDP server now send `reregister` to satellites that send heartbeats or audio without being registered — prevents satellites from silently losing their registration without reconnecting.
 * Changed: Auto-deploy script now only triggers on new release tags instead of every commit to master.
+* Fixed: Auto-deploy `git fetch --tags` now uses `--force` to prevent failure when local tags diverge from remote.
 
 ## 0.4.0
 * New: `AgentDevice` carries a `floor` field — provided by the ioBroker adapter, resolved from `common.floor` or from the state ID path (known abbreviations: EG, OG, UG, DG, KG, ZG).

@@ -11,7 +11,7 @@ log() { logger -t "$LOG_TAG" "$*"; }
 cd "$REPO_DIR"
 
 # Tags und Commits holen
-git fetch origin --tags --quiet
+git fetch origin --tags --force --quiet
 
 LOCAL_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
 REMOTE_TAG=$(git describe --tags --abbrev=0 origin/master 2>/dev/null || echo "")

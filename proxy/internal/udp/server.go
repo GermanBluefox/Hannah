@@ -286,12 +286,18 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 
 	case "heartbeat":
 		s.mu.Lock()
-		if sat, ok := s.satellites[device]; ok {
+		sat, registered := s.satellites[device]
+		if registered {
 			sat.audioAddr = addr
 			sat.lastHeartbeat = time.Now()
 		}
 		s.mu.Unlock()
-		s.sendControl(map[string]any{"type": "heartbeat_ack", "device": device}, addr)
+		if registered {
+			s.sendControl(map[string]any{"type": "heartbeat_ack", "device": device}, addr)
+		} else {
+			slog.Info("heartbeat from unregistered satellite — requesting re-registration", "device", device, "addr", addr)
+			s.sendControl(map[string]any{"type": "reregister"}, addr)
+		}
 
 	default:
 		slog.Debug("unknown control type", "type", t, "addr", addr)
@@ -304,6 +310,7 @@ func (s *Server) handleAudio(payload []byte, addr *net.UDPAddr) {
 	if device == "" {
 		s.mu.Unlock()
 		slog.Warn("audio from unregistered IP — satellite must register first", "addr", addr)
+		s.sendControl(map[string]any{"type": "reregister"}, addr)
 		return
 	}
 	isNew := false

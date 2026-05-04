@@ -10,17 +10,17 @@ log() { logger -t "$LOG_TAG" "$*"; }
 
 cd "$REPO_DIR"
 
-# Aktuelle Commits holen (kein Merge, nur fetch)
-git fetch origin --quiet
+# Tags und Commits holen
+git fetch origin --tags --quiet
 
-LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse origin/master)
+LOCAL_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
+REMOTE_TAG=$(git describe --tags --abbrev=0 origin/master 2>/dev/null || echo "")
 
-if [ "$LOCAL" = "$REMOTE" ]; then
+if [ "$LOCAL_TAG" = "$REMOTE_TAG" ]; then
     exit 0
 fi
 
-log "Neue Version gefunden ($LOCAL → $REMOTE), starte Update..."
+log "Neues Release gefunden ($LOCAL_TAG → $REMOTE_TAG), starte Update..."
 
 # Welche Dateien haben sich geändert?
 CHANGED=$(git diff --name-only HEAD origin/master)
@@ -47,4 +47,4 @@ if echo "$CHANGED" | grep -q "^telegram/"; then
     log "hannah-telegram neu gestartet."
 fi
 
-log "Update abgeschlossen ($REMOTE)."
+log "Update abgeschlossen ($REMOTE_TAG)."

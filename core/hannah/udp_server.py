@@ -284,6 +284,7 @@ class UDPServer:
         device = self._find_device_by_ip(addr[0])
         if device is None:
             log.warning(f"UDP: Audio von unbekannter IP {addr[0]} — bitte zuerst registrieren.")
+            self._send_control({"type": "reregister"}, addr)
             return
 
         new_session = False

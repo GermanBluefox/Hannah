@@ -42,9 +42,11 @@ if echo "$CHANGED" | grep -q "^core/"; then
 fi
 
 if echo "$CHANGED" | grep -q "^telegram/"; then
-    log "Telegram-Dateien geändert → hannah-telegram neu starten"
+    log "Telegram-Dateien geändert → /opt/hannah-telegram updaten und hannah-telegram neu starten"
+    git -C /opt/hannah-telegram fetch origin --tags --force --quiet
+    git -C /opt/hannah-telegram pull --ff-only --quiet
     systemctl restart hannah-telegram
-    log "hannah-telegram neu gestartet."
+    log "hannah-telegram.service neu gestartet."
 fi
 
 log "Update abgeschlossen ($REMOTE_TAG)."

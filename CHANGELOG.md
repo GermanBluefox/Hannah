@@ -7,6 +7,9 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.4.3
+* Fixed: Auto-deploy now also pulls `/opt/hannah-telegram` before restarting the Telegram service, so the service actually runs the updated code.
+
 ## 0.4.1
 * Fixed: Proxy and UDP server now send `reregister` to satellites that send heartbeats or audio without being registered — prevents satellites from silently losing their registration without reconnecting.
 * Changed: Auto-deploy script now only triggers on new release tags instead of every commit to master.

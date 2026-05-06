@@ -151,8 +151,6 @@ class IoBrokerClient:
                     continue
 
                 device_id = ".".join(parts[:-1])
-                category  = parts[len(prefix_parts)]
-                floor     = device.floor
 
                 if device_id not in new_device_map:
                     new_device_map[device_id] = Device(
@@ -160,8 +158,8 @@ class IoBrokerClient:
                         name=device.device,
                         key=_camel_to_words(device.device),
                         room=device.room,
-                        floor=floor,
-                        category=category,
+                        floor=device.floor,
+                        category=device.device_type,
                     )
 
                 dev = new_device_map[device_id]
@@ -427,15 +425,21 @@ class IoBrokerClient:
     # Format: kategorie → [(state_key, einheit, format_fn)]
     # format_fn: None = numerisch, "bool_offen" = offen/geschlossen, "bool_bewegung" = Bewegung/keine
     _CATEGORY_STATES: dict[str, list[tuple[str, str, Optional[str]]]] = {
-        "Temperaturen": [
-            ("current",  "Grad",  None),
-            ("expected", "Grad",  None),
+        "temperature_sensor": [
+            ("current", "Grad", None),
         ],
-        "Helligkeit": [
-            ("illuminance", "Lux", None),
+        "thermostat": [
+            ("current",  "Grad", None),
+            ("expected", "Grad", None),
         ],
-        "Fenster": [
+        "window": [
             ("open", "", "bool_offen"),
+        ],
+        "door": [
+            ("open", "", "bool_offen"),
+        ],
+        "blind": [
+            ("level", "%", None),
         ],
     }
 
@@ -685,6 +689,8 @@ class IoBrokerClient:
             return "level", intent.value
         if intent.name == "SetColor":
             return "color", intent.value
+        if intent.name == "SetTemperature":
+            return "expected", intent.value
         return None, None
 
     def _load_room_mapping(self) -> dict[str, str]:

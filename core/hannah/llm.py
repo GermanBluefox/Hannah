@@ -70,8 +70,9 @@ log = logging.getLogger(__name__)
 _DEFAULT_FALLBACK = "Das kann ich leider nicht beantworten."
 _CLASSIFY_PROMPT = (
     "Antworte ausschließlich mit COMMAND oder SMALLTALK — kein anderes Wort.\n"
-    "COMMAND: der Nutzer will ein Gerät steuern (Licht, Heizung, Steckdose, Musik etc.).\n"
-    "SMALLTALK: alles andere (Konversation, Fragen, Witze, persönliche Themen, ...)."
+    "COMMAND: der Nutzer will ein Gerät steuern ODER nach dem Status von Geräten oder Sensoren fragen "
+    "(z.B. Licht, Heizung, Steckdose, Musik, Temperatur, Rolladen — auch Statusabfragen wie 'Welche Lichter sind an?').\n"
+    "SMALLTALK: alles andere (Konversation, Witze, persönliche Themen, allgemeine Wissensfragen, Wetter, ...)."
 )
 
 

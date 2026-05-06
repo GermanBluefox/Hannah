@@ -77,11 +77,17 @@ class NLU:
         self._pct_units      = cfg.get("percentage_units", ["prozent", "%"])
         self._query          = set(cfg.get("query_words", []))
         self._category_words: dict[str, str] = cfg.get("category_words", {
-            "licht":   "Licht",
-            "lampe":   "Licht",
-            "lampen":  "Licht",
-            "stecker": "Stecker",
-            "strom":   "Stecker",
+            "licht":    "light",
+            "lampe":    "light",
+            "lampen":   "light",
+            "stecker":  "socket",
+            "strom":    "socket",
+            "heizung":  "thermostat",
+            "heizungen": "thermostat",
+            "fenster":  "window",
+            "tuer":     "door",
+            "tueren":   "door",
+            "rollladen":"blind",
         })
         # Wörter die auf Smalltalk hinweisen (persönliche Anrede / keine Gerätebezug)
         self._smalltalk_words: set[str] = set(cfg.get("smalltalk_words", [
@@ -153,6 +159,7 @@ class NLU:
         _, device                            = self._find_device(joined, room_key)
         action              = self._find_action(tokens)
         level               = self._find_level(normalized)
+        temperature         = self._find_temperature(normalized)
         is_query            = self._is_query(tokens, raw)
         category_filter     = self._find_category(tokens)
         query_state         = self._find_query_state(joined) if is_query else None
@@ -250,6 +257,7 @@ class NLU:
             and not is_mute_cmd
             and (action is None or not _has_action_context)
             and level is None
+            and temperature is None
             and color is None
             and not (is_query and not no_device_context and not _has_smalltalk_words)
             and (no_device_context or _has_smalltalk_words)
@@ -279,6 +287,8 @@ class NLU:
             intent_name, value, unit = "Smalltalk", None, None
         elif is_query and not no_device_context:
             intent_name, value, unit = "Query", None, None
+        elif temperature is not None and not is_query:
+            intent_name, value, unit = "SetTemperature", temperature, "°C"
         elif level is not None:
             intent_name, value, unit = "SetLevel", level, "%"
         elif color is not None:
@@ -291,7 +301,7 @@ class NLU:
             intent_name, value, unit = "Unknown", None, None
             log.debug(f"NLU: Kein Intent erkannt für '{raw}'")
 
-        _actionable = intent_name in ("TurnOn", "TurnOff", "SetLevel", "SetColor", "Query")
+        _actionable = intent_name in ("TurnOn", "TurnOff", "SetLevel", "SetColor", "SetTemperature", "Query")
         intent = Intent(
             name=intent_name,
             room=room_name,
@@ -386,6 +396,14 @@ class NLU:
                 return "on"
             if t in self._turn_off:
                 return "off"
+        return None
+
+    def _find_temperature(self, text: str) -> Optional[float]:
+        """Erkennt Temperaturangaben: '21 Grad', '21,5°C', '20 Grad Celsius'."""
+        pattern = r"(\d+(?:[.,]\d+)?)\s*(?:grad(?:\s+celsius)?|°c)"
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return float(match.group(1).replace(",", "."))
         return None
 
     def _find_level(self, text: str) -> Optional[float]:

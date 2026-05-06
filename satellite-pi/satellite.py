@@ -105,7 +105,7 @@ class Config:
     registration_timeout: float = 5.0      # max. Wartezeit auf "registered" ACK
     heartbeat_interval: int = 10           # Heartbeat alle 10 Sekunden senden
     heartbeat_timeout: int = 3             # max. fehlgeschlagene Heartbeats vor Restart
-    max_heartbeat_wait: float = 15.0       # max. Zeit auf heartbeat_ack zu warten
+    max_heartbeat_wait: float = 5.0        # max. Zeit auf heartbeat_ack zu warten
 
     # Restart-Backoff
     backoff_base: int = 30                 # Basis-Intervall Sekunden
@@ -478,9 +478,9 @@ class Satellite:
         time.sleep(0.5)  # Clean-up Time
         time.sleep(backoff_seconds)
 
-        log.warning(f"[RESTART] Führe 'systemctl restart hannah-satelite.service' aus...")
+        log.warning(f"[RESTART] Führe 'systemctl restart hannah-satelite-pi.service' aus...")
         try:
-            os.system("sudo systemctl restart hannah-satelite.service")
+            os.system("sudo systemctl restart hannah-satelite-pi.service")
         except Exception as e:
             log.error(f"Restart fehlgeschlagen: {e}")
 

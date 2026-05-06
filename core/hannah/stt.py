@@ -1,3 +1,31 @@
+"""
+STT-Modul für Hannah — unterstützt mehrere Backends mit Fallback.
+
+Backends (Priorität):
+  azure  — Azure Cognitive Services STT  (schnell, Cloud, 5h/Monat kostenlos)
+  remote — faster-whisper-server         (lokal, OpenAI-kompatibel)
+  local  — faster-whisper direkt         (immer verfügbar, langsamer)
+
+config.yaml Beispiel:
+  stt:
+    language: "de"
+    no_speech_threshold: 0.6
+
+    # Azure STT (primär)
+    azure_key: "..."
+    azure_region: westeurope
+
+    # Remote STT (sekundär)
+    remote_url: "http://psrvai01.gessinger.local:8000"
+    remote_model: "Systran/faster-whisper-large-v3"
+    remote_timeout: 30.0
+
+    # Lokal (Fallback)
+    model: "base"
+    device: "cpu"
+    compute_type: "int8"
+"""
+
 import io
 import logging
 import wave
@@ -51,6 +79,40 @@ class _LocalSTT:
         return text, max_no_speech
 
 
+class _AzureSTT:
+    """Azure Cognitive Services STT (REST-API, kein SDK nötig)."""
+
+    def __init__(self, cfg: dict):
+        self._key      = cfg["azure_key"]
+        self._region   = cfg["azure_region"]
+        self._language = cfg.get("language", "de-DE")
+        if "-" not in self._language:
+            self._language = self._language + "-" + self._language.upper()
+        self._url = (
+            f"https://{self._region}.stt.speech.microsoft.com"
+            "/speech/recognition/conversation/cognitiveservices/v1"
+        )
+        log.info(f"Azure STT konfiguriert: {self._region} ({self._language})")
+
+    def transcribe(self, audio: np.ndarray) -> tuple[str, float]:
+        wav = _to_wav(audio)
+        headers = {
+            "Ocp-Apim-Subscription-Key": self._key,
+            "Content-Type": "audio/wav; codecs=audio/pcm; samplerate=16000",
+        }
+        params = {"language": self._language, "format": "simple"}
+        resp = requests.post(self._url, headers=headers, params=params,
+                             data=wav, timeout=10)
+        resp.raise_for_status()
+        data   = resp.json()
+        status = data.get("RecognitionStatus", "")
+        if status != "Success":
+            raise ValueError(f"Azure STT: RecognitionStatus={status}")
+        text = data.get("DisplayText", "").strip()
+        log.debug(f"STT (azure): '{text}'")
+        return text, 0.0
+
+
 class _RemoteSTT:
     def __init__(self, cfg: dict):
         self._url      = cfg["remote_url"].rstrip("/")
@@ -75,18 +137,33 @@ class _RemoteSTT:
 
 class STT:
     """
-    Wählt automatisch zwischen lokalem Whisper und Remote-STT-Server.
-    Wenn remote_url gesetzt ist, wird Remote bevorzugt — bei Fehler
-    fällt STT automatisch auf das lokale Modell zurück.
+    STT mit konfigurierbarer Fallback-Kette: Azure → Remote → Lokal.
+    Jede Stufe wird nur versucht wenn sie konfiguriert ist.
     """
 
     def __init__(self, cfg: dict):
+        self._azure:  _AzureSTT  | None = None
         self._remote: _RemoteSTT | None = None
+
+        if cfg.get("azure_key") and cfg.get("azure_region"):
+            self._azure = _AzureSTT(cfg)
         if cfg.get("remote_url"):
             self._remote = _RemoteSTT(cfg)
+
         self._local = _LocalSTT(cfg)
 
+        chain = []
+        if self._azure:  chain.append("azure")
+        if self._remote: chain.append("remote")
+        chain.append("local")
+        log.info(f"STT-Kette: {' → '.join(chain)}")
+
     def transcribe(self, audio: np.ndarray) -> tuple[str, float]:
+        if self._azure:
+            try:
+                return self._azure.transcribe(audio)
+            except Exception as e:
+                log.warning(f"Azure-STT fehlgeschlagen, Fallback auf Remote/Lokal: {e}")
         if self._remote:
             try:
                 return self._remote.transcribe(audio)

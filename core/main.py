@@ -736,6 +736,11 @@ def main():
                         udp_server.send_tts(d, pcm, rate)
         log.info(f"[satellite_control] room={room!r} {key}={value!r} → {len(targets)} Satelliten")
 
+    def _on_agent_device_snapshot(devices):
+        iobroker.handle_device_snapshot(devices)
+        nlu._rooms = {**iobroker.rooms, **_group_pseudo_rooms}
+        nlu._devices = iobroker.devices
+
     def _on_agent_connect():
         state_ids = trigger_engine.get_referenced_state_ids()
         if state_ids:
@@ -770,7 +775,7 @@ def main():
         on_agent_connect=_on_agent_connect,
         on_agent_set_resident=_on_agent_set_resident,
         on_agent_satellite_control=_on_agent_satellite_control,
-        on_agent_device_snapshot=iobroker.handle_device_snapshot,
+        on_agent_device_snapshot=_on_agent_device_snapshot,
         on_agent_send_residents=registry.sync,
     )
 

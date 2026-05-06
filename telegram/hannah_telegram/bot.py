@@ -520,7 +520,8 @@ class HannahBot:
         return InlineKeyboardMarkup(buttons)
 
     def _device_status_text(self, dev: object) -> str:
-        parts = [f"*{dev.name}* ({dev.category})"]
+        category_label = dev.category.replace("_", " ")
+        parts = [f"*{dev.name}* ({category_label})"]
         cur = dev.current
         if "on" in cur:
             parts.append("Status: " + ("🟢 an" if cur["on"] == "True" else "🔴 aus"))
@@ -532,7 +533,15 @@ class HannahBot:
         if "color" in cur:
             parts.append(f"Farbe: {cur['color']}")
         if "current" in cur:
-            parts.append(f"Temperatur: {cur['current']}°")
+            try:
+                parts.append(f"Ist: {float(cur['current']):.1f}°")
+            except (ValueError, TypeError):
+                parts.append(f"Ist: {cur['current']}°")
+        if "expected" in cur:
+            try:
+                parts.append(f"Soll: {float(cur['expected']):.1f}°")
+            except (ValueError, TypeError):
+                parts.append(f"Soll: {cur['expected']}°")
         if "illuminance" in cur:
             parts.append(f"Helligkeit: {cur['illuminance']} lx")
         if "open" in cur:

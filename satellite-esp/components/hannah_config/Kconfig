@@ -1,0 +1,17 @@
+menu "Hannah OTA"
+
+    config HANNAH_OTA_URL
+        string "Update Server URL"
+        default "https://hannah-update.sgessinger.de"
+        help
+            URL des Hannah Satellite Update Servers.
+            Kann im Webinterface überschrieben werden.
+
+    config HANNAH_OTA_TOKEN
+        string "Download Token"
+        default ""
+        help
+            Bearer-Token für den Download vom Update Server.
+            Wird von der CI automatisch eingetragen — nie manuell setzen.
+
+endmenu

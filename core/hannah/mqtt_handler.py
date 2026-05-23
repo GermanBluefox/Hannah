@@ -71,6 +71,9 @@ class MQTTHandler:
         # Optionaler Callback für Text-Commands: fn(text)
         self._on_text_command: Optional[Callable[[str], None]] = None
 
+        # OTA-Pending: fn(device, version)
+        self._on_ota_pending: Optional[Callable[[str, str], None]] = None
+
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
@@ -204,6 +207,15 @@ class MQTTHandler:
     def set_text_command_handler(self, callback: Callable[[str], None]):
         """Registriert einen Callback für Text-Commands auf hannah/commands/textcommand."""
         self._on_text_command = callback
+
+    def set_ota_pending_handler(self, callback: Callable[[str, str], None]):
+        """fn(device, version) — wird aufgerufen wenn ein Satellit ein OTA-Update meldet."""
+        self._on_ota_pending = callback
+
+    def publish_ota_ok(self, device: str):
+        """Sendet OTA-Freigabe an einen Satelliten."""
+        self._client.publish(f"hannah/{device}/ota/ok", "", qos=1)
+        log.info(f"OTA-OK gesendet → hannah/{device}/ota/ok")
 
     def publish_text_answer(self, text: str):
         """Publiziert eine Antwort auf hannah/answer (für Text-Command-Tests)."""
@@ -383,8 +395,25 @@ class MQTTHandler:
             client.subscribe(sub, qos=0)
             log.info(f"Abonniere Auto-Status: '{sub}'")
 
+        client.subscribe("hannah/+/ota/pending", qos=1)
+        log.info("OTA-Pending abonniert: 'hannah/+/ota/pending'")
+
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
+
+        # OTA-Pending vom Satelliten?
+        if topic.endswith("/ota/pending") and topic.startswith("hannah/"):
+            parts = topic.split("/")
+            if len(parts) == 3 and self._on_ota_pending:
+                try:
+                    data = json.loads(msg.payload.decode())
+                    device = parts[1]
+                    version = data.get("version", "")
+                    if data.get("pending") and version:
+                        self._on_ota_pending(device, version)
+                except Exception:
+                    pass
+            return
 
         # Wetter-Update aus ioBroker?
         if self._weather_topic_prefix and topic.startswith(self._weather_topic_prefix + "/"):

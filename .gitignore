@@ -52,6 +52,7 @@ fp-info-cache
 # Exported BOM files
 *.xml
 *.csv
+!satellite-esp/partitions.csv
 
 # Archived Backups (KiCad 6.0)
 **/*-backups/*.zip
@@ -61,3 +62,9 @@ fp-info-cache
 
 /iobroker
 /.VSCodeCounter
+/satellite-esp/hardware/Phase2/Fabric
+satellite-esp/sdkconfig.old
+/.mcp.json
+*.FCBak
+*.step
+/satellite-esp/hardware/Phase2/*.step

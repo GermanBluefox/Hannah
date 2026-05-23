@@ -1,0 +1,39 @@
+menu "Hannah Sensors"
+
+    config HANNAH_SENSOR_SDA_GPIO
+        int "I2C SDA GPIO"
+        default 8
+
+    config HANNAH_SENSOR_SCL_GPIO
+        int "I2C SCL GPIO"
+        default 9
+
+    choice HANNAH_SENSOR_TYPE
+        prompt "Sensor-Kombination"
+        default HANNAH_SENSOR_TYPE_BME680
+        help
+            BME680 für PCB Rev.3 (Temp/Feuchte/Druck/VOC).
+            BMP280+AHT20 für DevKit/Breadboard (Temp/Druck + Feuchte separat).
+
+        config HANNAH_SENSOR_TYPE_BME680
+            bool "BME680 (PCB Rev.3)"
+
+        config HANNAH_SENSOR_TYPE_BMP280_AHT20
+            bool "BMP280 + AHT20 (DevKit)"
+    endchoice
+
+    config HANNAH_SENSOR_BME680_ADDR
+        int "BME680 I2C-Adresse (dezimal)"
+        default 119
+        depends on HANNAH_SENSOR_TYPE_BME680
+        help
+            0x76 (118) wenn SDO=GND, 0x77 (119) wenn SDO=VDD.
+
+    config HANNAH_SENSOR_BMP280_ADDR
+        int "BMP280 I2C-Adresse (dezimal)"
+        default 118
+        depends on HANNAH_SENSOR_TYPE_BMP280_AHT20
+        help
+            0x76 (118) wenn SDO=GND, 0x77 (119) wenn SDO=VDD.
+
+endmenu

@@ -149,8 +149,41 @@ class NLU:
             "stumm", "mikrofon",
         ]))
 
+    def _split_compounds(self, text: str) -> str:
+        """Trennt deutsche Komposita aus Raumteil + Kategorie.
+
+        "Schlafzimmerlicht" → "Schlafzimmer Licht"
+
+        Verwendet alle Einzelwörter aus bekannten Raumnamen als Prefixe und
+        alle category_words-Keys als Suffixe, damit der Rest der NLU wie
+        gewohnt matchen kann.
+        """
+        room_keywords = {
+            word
+            for name in self._rooms.values()
+            for word in name.lower().split()
+        }
+        category_keywords = set(self._category_words.keys())
+
+        result = []
+        for word in text.split():
+            w = word.lower()
+            split_done = False
+            for rk in room_keywords:
+                if w.startswith(rk) and len(w) > len(rk):
+                    suffix = w[len(rk):]
+                    if suffix in category_keywords:
+                        result.append(word[:len(rk)])
+                        result.append(word[len(rk):])
+                        split_done = True
+                        break
+            if not split_done:
+                result.append(word)
+        return " ".join(result)
+
     def parse(self, text: str) -> Intent:
         raw = text
+        text = self._split_compounds(text)
         normalized = _STRIP_CHARS.sub(" ", text.lower())
         tokens = [t for t in normalized.split() if t not in _FILLER]
         joined = " ".join(tokens)

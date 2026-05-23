@@ -1,11 +1,12 @@
 menu "Hannah LED"
 
     config HANNAH_LED_GPIO
-        int "WS2812B Data GPIO"
-        default 48
+        int "SK6812 / WS2812B Data GPIO"
+        default 5
         help
-            GPIO für den WS2812B-LED-Ring (RMT-Peripheral).
-            GPIO 48 ist auf dem ESP32-S3-DevKitC-1 frei verfügbar.
+            GPIO für den SK6812MINI-E-Ring (RMT-Peripheral).
+            PCB Rev.3: GPIO5 → SN74AHCT125 Level-Shifter → LED-Ring.
+            DevKitC-1 Breadboard: GPIO48.
 
     config HANNAH_LED_COUNT
         int "Anzahl LEDs im Ring"

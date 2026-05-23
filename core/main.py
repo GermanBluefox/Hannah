@@ -795,11 +795,29 @@ def main():
         display = user["display_name"] if user else name
         grpc_servicer.publish_event(make_resident_event(name, display, "arrived"))
 
+    _ota_pending: set[str] = set()
+
+    def _release_ota_updates():
+        for device in list(_ota_pending):
+            mqtt_handler.publish_ota_ok(device)
+            _ota_pending.discard(device)
+
+    def _on_ota_pending(device: str, version: str):
+        log.info(f"OTA-Pending: {device} meldet Version {version}.")
+        if not residents.is_home():
+            mqtt_handler.publish_ota_ok(device)
+        else:
+            log.info(f"OTA-Pending: jemand zuhause — {device} wartet auf Freigabe.")
+            _ota_pending.add(device)
+
     def _on_departure(name: str):
         log.info(f"Residents: {name} hat das Haus verlassen.")
         user = registry.get_by_roomie(name)
         display = user["display_name"] if user else name
         grpc_servicer.publish_event(make_resident_event(name, display, "departed"))
+        if not residents.is_home() and _ota_pending:
+            log.info("Alle weg — OTA-Updates freigeben.")
+            _release_ota_updates()
 
     def _on_guest_arrival(name: str):
         process_announcement("all", "Es ist Besuch angekommen!")
@@ -809,6 +827,7 @@ def main():
         log.info(f"Residents: Gast '{name}' ist gegangen.")
         grpc_servicer.publish_event(make_resident_event(f"guest:{name}", name, "departed"))
 
+    mqtt_handler.set_ota_pending_handler(_on_ota_pending)
     residents.on_arrival(_on_arrival)
     residents.on_departure(_on_departure)
     residents.on_guest_arrival(_on_guest_arrival)

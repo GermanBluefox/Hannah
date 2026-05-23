@@ -1,6 +1,7 @@
 build/
 sdkconfig
 sdkconfig.local
+sdkconfig.ci
 managed_components/
 dependencies.lock
 .history

@@ -13,6 +13,20 @@ menu "Hannah Audio"
             Länge eines UDP-Pakets in Millisekunden.
             30 ms @ 16 kHz = 480 Samples = 960 Bytes (16-bit mono).
 
+    choice HANNAH_MIC_TYPE
+        prompt "Mikrofon Typ"
+        default HANNAH_MIC_TYPE_I2S
+        help
+            I2S Standard für Breadboard (INMP441).
+            PDM für PCB-Bestückung (zwei Mics teilen CLK+DATA, SEL bestimmt L/R).
+
+        config HANNAH_MIC_TYPE_I2S
+            bool "I2S Standard (INMP441, Breadboard)"
+
+        config HANNAH_MIC_TYPE_PDM
+            bool "PDM (PCB)"
+    endchoice
+
     config HANNAH_MIC_I2S_PORT
         int "Mikrofon I2S Port"
         default 0
@@ -21,14 +35,21 @@ menu "Hannah Audio"
     config HANNAH_MIC_BCK_GPIO
         int "Mikrofon BCK GPIO"
         default 4
+        depends on HANNAH_MIC_TYPE_I2S
 
     config HANNAH_MIC_WS_GPIO
         int "Mikrofon WS GPIO"
         default 5
+        depends on HANNAH_MIC_TYPE_I2S
+
+    config HANNAH_MIC_CLK_GPIO
+        int "Mikrofon CLK GPIO"
+        default 39
+        depends on HANNAH_MIC_TYPE_PDM
 
     config HANNAH_MIC_DATA_GPIO
         int "Mikrofon DATA GPIO"
-        default 6
+        default 40
 
     config HANNAH_SPK_I2S_PORT
         int "Speaker I2S Port"
@@ -37,21 +58,59 @@ menu "Hannah Audio"
 
     config HANNAH_SPK_BCK_GPIO
         int "Speaker BCK GPIO"
-        default 15
+        default 47
 
     config HANNAH_SPK_WS_GPIO
         int "Speaker WS GPIO"
-        default 16
+        default 38
 
     config HANNAH_SPK_DATA_GPIO
         int "Speaker DATA GPIO"
-        default 7
+        default 21
 
     config HANNAH_MUTE_GPIO
         int "Mute-Taster GPIO"
-        default 0
+        default 11
         help
             GPIO des Hardware-Mute-Tasters. Gegen GND geschaltet,
             interner Pull-up wird aktiviert.
+
+    config HANNAH_MUTE_HW_GPIO
+        int "Hardware-Mute Ausgang GPIO"
+        default 10
+        help
+            GPIO der den NPN-Transistor der Mic-Mute-Schaltung steuert.
+            HIGH = Mics aktiv, LOW = Mics hardware-stumm.
+
+    config HANNAH_PTT_GPIO
+        int "PTT-Taster GPIO"
+        default 12
+        help
+            GPIO des Push-to-Talk-Tasters. Gedrückt halten → Aufnahme starten,
+            Loslassen → audio_end. Funktioniert in beiden Modi (PTT und Wakeword).
+
+    config HANNAH_VOL_UP_GPIO
+        int "Lauter-Taster GPIO"
+        default 13
+        help
+            GPIO des Lauter-Tasters. Jeder Druck erhöht die Lautstärke um HANNAH_VOLUME_STEP.
+
+    config HANNAH_VOL_DOWN_GPIO
+        int "Leiser-Taster GPIO"
+        default 14
+        help
+            GPIO des Leiser-Tasters. Jeder Druck senkt die Lautstärke um HANNAH_VOLUME_STEP.
+
+    config HANNAH_VOLUME_DEFAULT
+        int "Standard-Lautstärke (%)"
+        default 80
+        range 1 100
+
+    config HANNAH_VOLUME_STEP
+        int "Lautstärke-Schritt (%)"
+        default 10
+        range 1 50
+        help
+            Schrittweite pro Tastendruck für Vol+/Vol-.
 
 endmenu

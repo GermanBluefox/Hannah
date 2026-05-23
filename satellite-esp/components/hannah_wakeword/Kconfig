@@ -2,7 +2,7 @@ menu "Hannah Wake Word"
 
     config HANNAH_WAKEWORD_ENABLED
         bool "Wake-Word-Erkennung aktivieren"
-        default n
+        default y
         help
             Aktiviert die lokale Wake-Word-Erkennung (microWakeWord, TFLite Micro).
             Wenn deaktiviert: PTT-Modus (Taster halten zum Sprechen).
@@ -25,14 +25,14 @@ menu "Hannah Wake Word"
 
     config HANNAH_VAD_ENERGY_THRESHOLD
         int "VAD Energie-Schwelle (RMS, 0–32767)"
-        default 200
+        default 500
         range 10 10000
         help
             RMS-Pegel unterhalb dessen ein Frame als Stille gilt.
 
     config HANNAH_TFLITE_ARENA_KB
         int "TFLite-Micro Arena-Größe (KB)"
-        default 128
+        default 256
         range 64 512
         help
             Arbeitsspeicher für den TFLite-Micro-Interpreter.

@@ -3,26 +3,26 @@
 #include <stddef.h>
 
 /**
- * hannah_audio — I2S Mic-Array, Speaker, PTT-Button
+ * hannah_audio — PDM Mic-Array, Speaker, Tasten
  *
- * Hardware:
- *   Mic:    2× INMP441 (I2S0, stereo L/R, gleiche BCK/WS/DATA-Leitung)
- *   Speaker: MAX98357A  (I2S1, mono)
- *   PTT:    GPIO-Taster (active-low, interner Pull-up)
- *             Phase 1: Halten = Aufnahme streamen, Loslassen = audio_end
+ * Hardware (PCB Rev.3):
+ *   Mic:     2× SPH0641LU4H-1 (PDM, CLK=GPIO39, DATA=GPIO40, SEL trennt L/R)
+ *   Speaker: MAX98357A (I2S, BCLK=GPIO47, LRC=GPIO38, DATA=GPIO21)
+ *   Tasten:  PTT (GPIO12), Mute (GPIO11), Vol+ (GPIO13), Vol- (GPIO14)
+ *            alle active-low, interner Pull-up aktiviert
+ *   HW-Mute: NPN-Transistor via GPIO10 (HIGH = Mics aktiv)
  *
  * Pipeline Phase 1:
- *   I2S-Read (stereo) → Links-Kanal extrahieren →
- *   bei PTT gedrückt: hannah_net_send_audio()
- *   bei PTT losgelassen: hannah_net_send_audio_end()
+ *   PDM-Read → bei PTT gedrückt: hannah_net_send_audio()
+ *              bei PTT losgelassen: hannah_net_send_audio_end()
  *
  * Pipeline Phase 2:
- *   I2S-Read → ESP-SR AFE (Beamforming + AEC + VAD) →
+ *   PDM-Read → ESP-SR AFE (Beamforming + AEC + VAD) →
  *   Wake-Word → Stream-Start → audio_end bei Stille
  *
  * TTS-Wiedergabe:
  *   hannah_audio_play() nimmt PCM-Chunks entgegen und schreibt sie
- *   asynchron über den Speaker-Task auf I2S1.
+ *   asynchron über den Speaker-Task auf I2S.
  */
 
 void hannah_audio_init(void);

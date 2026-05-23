@@ -63,7 +63,7 @@ menu "Hannah Network"
 
     config HANNAH_HEARTBEAT_INTERVAL_S
         int "Heartbeat-Intervall (s)"
-        default 30
+        default 10
         range 5 300
         help
             Intervall in Sekunden zwischen Heartbeat-Paketen an den Proxy.

@@ -1,0 +1,10 @@
+menu "Hannah OTA-Check"
+
+    config HANNAH_OTA_POLL_INTERVAL_S
+        int "Prüfintervall in Sekunden"
+        default 21600
+        help
+            Wie oft auf neue Firmware geprüft wird (Standard: 21600 = 6 Stunden).
+
+
+endmenu

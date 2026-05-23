@@ -1,0 +1,120 @@
+#include "hannah_config.h"
+
+#include <string.h>
+#include "esp_log.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+
+static const char *TAG = "config";
+
+#define NVS_NAMESPACE "hannah"
+
+static hannah_config_t s_cfg;
+
+/* ── NVS-Hilfsmakros ─────────────────────────────────────────────────────── */
+
+#define NVS_STR(h, key, field, fallback)                                       \
+    do {                                                                       \
+        size_t _l = sizeof(s_cfg.field);                                      \
+        if (nvs_get_str((h), (key), s_cfg.field, &_l) != ESP_OK)             \
+            snprintf(s_cfg.field, sizeof(s_cfg.field), "%s", (fallback));     \
+    } while (0)
+
+/* ── Öffentliche API ─────────────────────────────────────────────────────── */
+
+void hannah_config_init(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open fehlgeschlagen — nutze sdkconfig-Defaults");
+        snprintf(s_cfg.wifi_ssid,   sizeof(s_cfg.wifi_ssid),   "%s", CONFIG_HANNAH_WIFI_SSID);
+        snprintf(s_cfg.wifi_pass,   sizeof(s_cfg.wifi_pass),   "%s", CONFIG_HANNAH_WIFI_PASS);
+        snprintf(s_cfg.device_id,   sizeof(s_cfg.device_id),   "%s", CONFIG_HANNAH_DEVICE_ID);
+        snprintf(s_cfg.room,        sizeof(s_cfg.room),        "%s", CONFIG_HANNAH_ROOM_NAME);
+        snprintf(s_cfg.mqtt_broker, sizeof(s_cfg.mqtt_broker), "%s", CONFIG_HANNAH_MQTT_BROKER);
+        s_cfg.mqtt_port = CONFIG_HANNAH_MQTT_PORT;
+        snprintf(s_cfg.mqtt_user,   sizeof(s_cfg.mqtt_user),   "%s", CONFIG_HANNAH_MQTT_USER);
+        snprintf(s_cfg.mqtt_pass,   sizeof(s_cfg.mqtt_pass),   "%s", CONFIG_HANNAH_MQTT_PASS);
+        s_cfg.wakeword_enabled   = false;
+#ifdef CONFIG_HANNAH_WAKEWORD_THRESHOLD
+        s_cfg.wakeword_threshold = CONFIG_HANNAH_WAKEWORD_THRESHOLD;
+#else
+        s_cfg.wakeword_threshold = 75;
+#endif
+        return;
+    }
+
+    NVS_STR(h, "wifi_ssid",   wifi_ssid,   CONFIG_HANNAH_WIFI_SSID);
+    NVS_STR(h, "wifi_pass",   wifi_pass,   CONFIG_HANNAH_WIFI_PASS);
+    NVS_STR(h, "device_id",   device_id,   CONFIG_HANNAH_DEVICE_ID);
+    NVS_STR(h, "room",        room,        CONFIG_HANNAH_ROOM_NAME);
+    NVS_STR(h, "mqtt_broker", mqtt_broker, CONFIG_HANNAH_MQTT_BROKER);
+    NVS_STR(h, "mqtt_user",   mqtt_user,   CONFIG_HANNAH_MQTT_USER);
+    NVS_STR(h, "mqtt_pass",   mqtt_pass,   CONFIG_HANNAH_MQTT_PASS);
+
+    uint16_t port = CONFIG_HANNAH_MQTT_PORT;
+    nvs_get_u16(h, "mqtt_port", &port);
+    s_cfg.mqtt_port = port;
+
+    uint8_t ww = 0;
+    nvs_get_u8(h, "wakeword", &ww);
+    s_cfg.wakeword_enabled = (ww != 0);
+
+#ifdef CONFIG_HANNAH_WAKEWORD_THRESHOLD
+    uint8_t thr = CONFIG_HANNAH_WAKEWORD_THRESHOLD;
+#else
+    uint8_t thr = 75;
+#endif
+    nvs_get_u8(h, "ww_threshold", &thr);
+    s_cfg.wakeword_threshold = thr;
+
+    NVS_STR(h, "ota_url", ota_url, CONFIG_HANNAH_OTA_URL);
+
+    nvs_close(h);
+
+    /* Token kommt ausschließlich aus dem kompilierten Kconfig — nie per NVS */
+    snprintf(s_cfg.ota_token, sizeof(s_cfg.ota_token), "%s", CONFIG_HANNAH_OTA_TOKEN);
+
+    ESP_LOGI(TAG, "Config: device=%s room=%s wifi=%s mqtt=%s:%u",
+             s_cfg.device_id, s_cfg.room,
+             s_cfg.wifi_ssid[0] ? s_cfg.wifi_ssid : "(leer)",
+             s_cfg.mqtt_broker, s_cfg.mqtt_port);
+}
+
+bool hannah_config_has_wifi(void)
+{
+    return s_cfg.wifi_ssid[0] != '\0';
+}
+
+const hannah_config_t *hannah_config_get(void)
+{
+    return &s_cfg;
+}
+
+void hannah_config_save(const hannah_config_t *cfg)
+{
+    s_cfg = *cfg;
+
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open fehlgeschlagen — Einstellungen nicht gespeichert");
+        return;
+    }
+
+    nvs_set_str(h, "wifi_ssid",   cfg->wifi_ssid);
+    nvs_set_str(h, "wifi_pass",   cfg->wifi_pass);
+    nvs_set_str(h, "device_id",   cfg->device_id);
+    nvs_set_str(h, "room",        cfg->room);
+    nvs_set_str(h, "mqtt_broker", cfg->mqtt_broker);
+    nvs_set_u16(h, "mqtt_port",   cfg->mqtt_port);
+    nvs_set_str(h, "mqtt_user",   cfg->mqtt_user);
+    nvs_set_str(h, "mqtt_pass",   cfg->mqtt_pass);
+    nvs_set_u8 (h, "wakeword",    cfg->wakeword_enabled ? 1 : 0);
+    nvs_set_u8 (h, "ww_threshold", cfg->wakeword_threshold);
+    nvs_set_str(h, "ota_url",      cfg->ota_url);
+
+    nvs_commit(h);
+    nvs_close(h);
+
+    ESP_LOGI(TAG, "Config gespeichert.");
+}

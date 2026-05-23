@@ -1,0 +1,31 @@
+#pragma once
+
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef struct {
+    char     wifi_ssid[64];
+    char     wifi_pass[64];
+    char     device_id[32];
+    char     room[32];
+    char     mqtt_broker[64];
+    uint16_t mqtt_port;
+    char     mqtt_user[32];
+    char     mqtt_pass[32];
+    bool     wakeword_enabled;
+    uint8_t  wakeword_threshold;  /* Erkennungsschwelle 0–100 (entspricht 0.00–1.00) */
+    char     ota_url[128];
+    char     ota_token[128];      /* nur aus Kconfig, nie per NVS überschrieben */
+} hannah_config_t;
+
+/* Lädt Einstellungen aus NVS — sdkconfig-Werte als Fallback beim Erststart. */
+void hannah_config_init(void);
+
+/* True wenn wifi_ssid nicht leer ist. */
+bool hannah_config_has_wifi(void);
+
+/* Zeiger auf aktuell geladene Konfiguration (read-only). */
+const hannah_config_t *hannah_config_get(void);
+
+/* Speichert neue Konfiguration in NVS und aktualisiert den In-Memory-Cache. */
+void hannah_config_save(const hannah_config_t *cfg);

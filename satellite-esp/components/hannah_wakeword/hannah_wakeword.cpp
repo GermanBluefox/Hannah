@@ -21,8 +21,11 @@
 
 #include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
 #include "tensorflow/lite/experimental/microfrontend/lib/frontend_util.h"
+#include "esp_heap_caps.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "tensorflow/lite/micro/micro_resource_variable.h"
+#include "tensorflow/lite/micro/micro_allocator.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
 static const char *TAG = "wakeword";
@@ -32,19 +35,28 @@ static constexpr float  FEATURE_SCALE    = 128.0f * 0.10196078568696976f;  /* â‰
 static constexpr int    INPUT_ZERO_POINT = -128;
 static constexpr float  OUTPUT_SCALE     = 1.0f / 256.0f;
 
-static constexpr size_t ARENA_SIZE = CONFIG_HANNAH_TFLITE_ARENA_KB * 1024;
-static uint8_t s_arena[ARENA_SIZE];
+static constexpr size_t ARENA_SIZE    = CONFIG_HANNAH_TFLITE_ARENA_KB * 1024;
+static constexpr size_t RV_ARENA_SIZE = 4096;
+static uint8_t *s_arena               = nullptr;
+static uint8_t  s_rv_arena[RV_ARENA_SIZE];
 
-static struct FrontendState              s_frontend;
+static struct FrontendState               s_frontend;
 static tflite::MicroMutableOpResolver<20> s_resolver;
-static tflite::MicroInterpreter          *s_interpreter = nullptr;
-static TfLiteTensor                      *s_input       = nullptr;
-static TfLiteTensor                      *s_output      = nullptr;
+static tflite::MicroInterpreter          *s_interpreter      = nullptr;
+static tflite::MicroResourceVariables    *s_resource_vars    = nullptr;
+static TfLiteTensor                      *s_input            = nullptr;
+static TfLiteTensor                      *s_output           = nullptr;
 
 /* ------------------------------------------------------------------ */
 
 static void tflite_init(void)
 {
+    s_arena = (uint8_t *)heap_caps_malloc(ARENA_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_arena) {
+        ESP_LOGE(TAG, "PSRAM-Allokation fehlgeschlagen (%u KB)", (unsigned)(ARENA_SIZE / 1024));
+        return;
+    }
+
     s_resolver.AddConv2D();
     s_resolver.AddDepthwiseConv2D();
     s_resolver.AddFullyConnected();
@@ -69,7 +81,10 @@ static void tflite_init(void)
         return;
     }
 
-    static tflite::MicroInterpreter interp(model, s_resolver, s_arena, ARENA_SIZE);
+    auto *rv_allocator = tflite::MicroAllocator::Create(s_rv_arena, RV_ARENA_SIZE);
+    s_resource_vars    = tflite::MicroResourceVariables::Create(rv_allocator, 20);
+
+    static tflite::MicroInterpreter interp(model, s_resolver, s_arena, ARENA_SIZE, s_resource_vars);
     if (interp.AllocateTensors() != kTfLiteOk) {
         ESP_LOGE(TAG, "AllocateTensors fehlgeschlagen â€” Arena zu klein? (%u KB)",
                  (unsigned)(ARENA_SIZE / 1024));

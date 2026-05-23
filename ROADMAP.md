@@ -70,156 +70,57 @@ publiziert auf `hannah/notification`. Hannah Core reformuliert per LLM (Ton abh�
 von Severity: alert / notify / info), spielt DND-gefiltert per TTS ab und pusht per
 gRPC-Event an Telegram-Nutzer mit `system_messages=True`.
 
+### ESP32-Satellit Firmware (`satellite-esp/`)
+Vollständige Firmware-Plattform auf ESP32-S3 (IDF 6.0, FreeRTOS):
+- WiFi-Provisioning: AP-Fallback mit HTTP-Setup-UI (WiFi-Picker, Device-ID, OTA-Config)
+- Factory Reset: Mute-Button beim Boot → WiFi löschen, AP-Modus erzwingen
+- MQTT-Discovery, UDP-Audio-Streaming, PTT + Vol+/Vol- Buttons
+- LED-Ring (WS2812B/SK6812): 7 Zustände (BOOT/IDLE/WAKE/STREAM/SPEAK/MUTE/ERROR)
+- Sensoren: BMP280 (Temperatur, Druck), AHT20 (Luftfeuchte) via I2C
+- Wake-Word (microWakeWord, TFLite Micro): hey_hannah inception model, PSRAM-Arena
+- OTA: periodischer Update-Check gegen Hannah-Update-Server, automatische Freigabe wenn niemand zuhause
+
+### OTA-Firmware-Updates für ESP32-Satelliten
+`hannah_ota`-Komponente: `GET /latest` mit Bearer-Token, Version-Vergleich, `ota/pending` per MQTT.
+Hannah Core abonniert `hannah/+/ota/pending` und sendet `ota/ok` wenn kein Bewohner zuhause ist
+(Warteschlange bei Anwesenheit, Freigabe bei Abreise). ESP lädt via `esp_https_ota` und restartet.
+
+### Langzeitgedächtnis (Phase 1 — SQLite)
+`memory.py` — nach Ablauf der Konversations-TTL fasst das LLM das Gespräch zusammen;
+gespeichert in SQLite (`memories(roomie_id, summary, tags, created_at)`);
+letzte N Erinnerungen werden pro Person in den System-Prompt injiziert.
+
+### Trigger-Engine: Proaktive Ansagen aus ioBroker
+Zeit-Trigger (`days`-Filter), Sensor-Trigger (`value`/`above`/`below`), Kombinations-Trigger
+(`also:`), `unless`-Bedingung, Cooldown, Hot-Reload (`triggers.yaml`) und `extra_state_prefixes`
+für beliebige ioBroker-Topics — alles implementiert und produktiv.
+
+### Hannah-Agent: Nativer ioBroker-Adapter (`iobroker.hannah`)
+Ersetzt den externen MQTT-Kanal zwischen ioBroker und Hannah vollständig durch gRPC.
+Adapter und Hannah sind beide gRPC-Server; Adapter liefert State-Updates (inkl. `ack`-Flag),
+Hannah schaltet Geräte via `SetState`. Enum-Discovery, Residents, Trigger-Engine-States und
+Extra-Prefixes alles über denselben Stream. Internes MQTT (Hannah ↔ Satelliten) bleibt unverändert.
+
 ---
 
 ## Roadmap
 
 ## Im Test
 
-### ESP32-Satellit Phase 1
-Hardware bestellt (April 2026), unterwegs. Ein ESP32 + AHT20+BMP280-Kombisensor (I2C).
-Firmware in `satellite-esp/` kompilierbar (IDF 6.0). Erste Tests sobald Hardware ankommt.
-Ziel: stabiles Wake-Word + Audio-Streaming + Sensor-Reporting (Temp, Luftfeuchte, Druck).
+### libhannah_audio — Gemeinsame C-Bibliothek für Audio-Operationen
+`audiolib/` — plattformübergreifende C-Bibliothek (`resample`, `rms`, `vad`, `vad_stream`, `stereo_to_mono`).
+Als IDF-Submodul in die ESP32-Firmware eingebunden. Python-Binding (`ctypes`) und Go-Proxy-Integration noch offen.
+
+### ESP32-Satellit Rev 3 PCB
+Eigene Platine (88mm rund, JLCPCB, erwartet ~Juni 2026). ESP32-S3-WROOM-1U, 2× SPH0641 PDM-Mics,
+MAX98357A, SK6812MINI-E LED-Ring, BMP680, LD2410 Radar, USB-C, 4× Taster.
+Firmware läuft bereits auf DevKit — erster Hardwaretest steht aus.
 
 ---
 
 ## Offen
 
 ### Bald umsetzbar
-
-#### Hannah-Agent: Nativer ioBroker-Adapter als MQTT-Ersatz
-
-Ersetzt den fragilen externen MQTT-Kanal zwischen ioBroker und Hannah vollständig
-durch gRPC. Internes MQTT (Hannah ↔ Satelliten) bleibt unverändert.
-
-**Problem mit aktuellem MQTT-Ansatz:**
-- `ack=true`-States (von Geräten bestätigt, z.B. VW Connect) werden vom MQTT-Adapter
-  standardmäßig nicht publiziert
-- `ack=true` aktivieren → Endlosschleife (Adapter empfängt eigene Nachrichten)
-- Workaround "nur bei Änderung + ack=true" ist stabil aber fragil
-
-**Scope — was ersetzt wird:**
-
-| Richtung | Inhalt | Ersatz |
-|----------|--------|--------|
-| ioBroker → Hannah | Smart-Home-Geräte (enum-basiert) | gRPC `StateUpdate`-Stream |
-| ioBroker → Hannah | Residents-Präsenz | gRPC `SetResidentPresence` |
-| ioBroker → Hannah | Text-Command-State | gRPC `SubmitText` |
-| ioBroker → Hannah | Extra-Prefixes (0_userdata.0 etc.) | gRPC `StateUpdate`-Stream |
-| Hannah → ioBroker | Geräte schalten (Routinen, NLU) | gRPC `SetState` auf Adapter-Server |
-| Hannah → ioBroker | Extra States abonnieren (Trigger-Engine) | gRPC `WatchStates` auf Adapter-Server |
-| ioBroker → Hannah | Notifications | notificationmanager Adapter ✓ bereits erledigt |
-
-**Bleibt MQTT** (intern, stabil, unter Hannahs Kontrolle):
-- Hannah ↔ Satelliten: Discovery, Status, DND/Volume/Mute
-
-**Architektur — beide sind gRPC-Server, Hannah ist Master:**
-```
-┌─────────────────────────────────────────────┐
-│  HannahAgent-Adapter (gRPC Server)          │
-│  ┌──────────────────────────────────────┐   │
-│  │ WatchStates([state_ids])             │◄──┼── Hannah connected rein
-│  │ SetState(state_id, value)            │   │   (wenn Hannah bereit)
-│  └──────────────────────────────────────┘   │
-└─────────────────────────────────────────────┘
-         │ Adapter connected zu Hannah
-         ▼
-┌─────────────────────────────────────────────┐
-│  Hannah Core (gRPC Server, Port 50051)      │
-│  ┌──────────────────────────────────────┐   │
-│  │ StateUpdate(state_id, value) stream  │   │
-│  │ SetResidentPresence(roomie_id, state) │   │
-│  │ SubmitText(text)                     │   │
-│  └──────────────────────────────────────┘   │
-└─────────────────────────────────────────────┘
-```
-
-**State-Discovery — Hybrid-Modell:**
-
-ioBroker ist Source of Truth. Der Adapter weiß selbst welche States relevant sind:
-
-1. **Enum-basiert** (Hauptmenge): Adapter liest `enum.functions` + `enum.rooms`,
-   bildet Union aller referenzierten State-IDs → alle Smart-Home-Geräte unabhängig
-   von ihrem Pfad (`javascript.0.virtualDevice`, `0_userdata.0`, etc.)
-
-2. **Typed Special Cases** (explizite Config-Sektionen):
-   - `residents.state_prefix` → mapped auf `SetResidentPresence`-RPC
-   - `text_command.state_id` → mapped auf `SubmitText`-RPC
-   (Residents haben weder Raum noch Function — passen nicht in Enums)
-
-3. **Extra-Prefixes** (Catch-all für alles andere):
-   - Konfigurierbare Liste von Prefixes (z.B. `0_userdata.0`, `javascript.0.cars`)
-   - Alle States darunter → generischer `StateUpdate`-Stream
-
-4. **On-Demand via `WatchStates`** (Trigger-Engine):
-   - Hannah lädt `triggers.yaml`, sammelt alle referenzierten State-IDs
-     (z.B. `unless.state: "0_userdata.0.feeded"`)
-   - Ruft `WatchStates([ids])` auf dem Adapter-gRPC-Server auf
-   - Adapter subscribed zusätzlich, streamt in denselben `StateUpdate`-Kanal
-
-**Adapter-Konfiguration:**
-```yaml
-hannah_grpc: "192.168.1.x:50051"
-
-enums:
-  functions: enum.functions
-  rooms: enum.rooms
-
-residents:
-  state_prefix: "residents.0.roomie"
-
-text_command:
-  state_id: "0_userdata.0.hannah.set.textCommand"
-
-extra_state_prefixes:
-  - "0_userdata.0"
-```
-
-**Startup-Sequenz:**
-1. Adapter startet → eigener gRPC-Server ist oben
-2. Hannah startet → connected zu Adapter: `WatchStates([trigger-referenzierte IDs])`
-3. Adapter connected zu Hannah: `StateUpdate`-Stream beginnt (Enum + Prefixes + Extra)
-4. Beide Streams laufen dauerhaft; bei Hannah-Neustart werden sie neu aufgebaut
-
-**Neue gRPC-Endpunkte:**
-
-*In Hannah Core (Adapter ruft Hannah an):*
-- `StateUpdate(state_id, value, ack)` — generischer State-Stream (ack-Flag für Verifikation!)
-- `SetResidentPresence(roomie_id, presence_state)` — Residents
-
-*Im HannahAgent-Adapter (Hannah ruft Adapter an):*
-- `SetState(state_id, value)` — Gerät in ioBroker schalten
-- `WatchStates(state_ids)` — On-Demand-Subscription für Trigger-States
-
-**Steuer-Verifikation (ersetzt `hannah/set/#` + `javascript.0/#`-Loop):**
-
-Aktuell publiziert Hannah auf `hannah/set/{device}` und überwacht die Antwort auf
-`javascript.0/#` (ack=true) um zu prüfen ob der Schaltvorgang erfolgreich war.
-
-Mit gRPC wird dieser Loop sauber abgebildet — und das `ack`-Problem entfällt:
-
-```
-Hannah:  SetState("javascript.0.virtualDevice.EG.Wohnzimmer.Licht", true)
-Adapter: setForeignState() → ioBroker → Gerät schaltet
-Gerät:   bestätigt → ioBroker State: value=true, ack=true
-Adapter: streamt StateUpdate(state_id, value=true, ack=true) zurück
-Hannah:  empfängt ack=true → Verifikation erfolgreich, antwortet Nutzer
-         (kein Update innerhalb Timeout → Fehler melden)
-```
-
-Das `ack`-Flag im `StateUpdate`-Proto-Message ist damit kritisch — ohne es kann Hannah
-nicht zwischen "Befehl gesendet" (ack=false) und "Gerät bestätigt" (ack=true)
-unterscheiden. Der native Adapter subscribed auf alle State-Änderungen unabhängig vom
-ack-Flag (anders als der MQTT-Adapter) — das ist einer der Hauptvorteile.
-
-**Vorteile:**
-- Kein externer MQTT-Kanal mehr, kein ack-Problem, kein Loop
-- Verifikations-Loop funktioniert zuverlässig (ack=true nativ verfügbar)
-- ioBroker ist und bleibt Source of Truth (Enum-Discovery, kein Drift zur config.yaml)
-- Trigger-Engine kann beliebige State-IDs referenzieren ohne Adapter-Neustart
-- Klare Trennung: Enums für Smart Home, explizite Config für Sonderfälle
-
----
 
 #### Zeitgefühl: Dynamische Trigger aus dem Gespräch
 
@@ -246,42 +147,6 @@ stattfindet und erzeugt intern einen Einmal-Trigger für den Rückzeitpunkt.
 - Trigger-Engine (bereits implementiert, statische Trigger)
 - Erweiterung um dynamische Laufzeit-Trigger (neue API)
 - LLM-Erkennung von Zeitintentionen im Gesprächskontext
-
----
-
-#### Trigger-Engine: Proaktive Ansagen aus ioBroker
-
-ioBroker publiziert bei jeder State-Änderung per MQTT (inkl. minütlicher Uhrzeit) →
-kostenloser Cron-Ersatz, kein eigener Scheduler nötig.
-
-**Trigger-Typen:**
-- **Zeit-Trigger:** ioBroker-Uhrzeit-Topic als Auslöser, z.B. täglich um 23:00
-- **Sensor-Trigger:** bei State-Änderung über/unter Schwellwert, z.B. Fenster offen
-- **Kombinations-Trigger:** mehrere Bedingungen gleichzeitig (Fenster offen UND Temp < 12°)
-
-```yaml
-triggers:
-  - id: aussentuer_abend
-    when:
-      time: "23:00"
-    say: "Leonie, denk an die Außentüren."
-
-  - id: fenster_kalt
-    when:
-      state: "javascript.0.virtualDevice.Fenster.Wohnzimmer.open"
-      value: true
-      also:
-        state: "javascript.0.virtualDevice.Temperaturen.Wohnzimmer.Raumtemperatur.current"
-        below: 12
-    say: "Das Fenster ist noch offen und es wird kalt draußen."
-```
-
-**Technische Umsetzung:**
-- `mqtt_handler` abonniert Trigger-Topics (State-Änderungen kommen bereits an)
-- Neues `TriggerEngine`-Modul evaluiert Bedingungen und ruft `process_announcement()` auf
-- Hot-Reload wie `routines.yaml`
-
-**Abhängigkeit:** Nach ESP Phase 1 (Hardware-Test abgeschlossen).
 
 ---
 
@@ -361,14 +226,6 @@ Hannah mit eigenem Antrieb — ausgelöst durch Ereignisse oder Zeitpläne:
 
 ---
 
-### ~~Proaktives Verhalten: MQTT-Trigger-Engine~~ ✅ Erledigt
-
-Zeit-Trigger (`days`-Filter), Sensor-Trigger (`value`/`above`/`below`), Kombinations-Trigger
-(`also:`), `unless`-Bedingung, Cooldown, Hot-Reload und `extra_state_prefixes` für beliebige
-ioBroker-Topics — alles implementiert und produktiv.
-
----
-
 #### Telegram Mini App — Haussteuerung (Web UI)
 **Motivation:** Das InlineKeyboard-Menü ist funktional, bei Dimmen und
 Farbsteuerung aber ergonomisch eingeschränkt. Eine Mini App ermöglicht Slider,
@@ -406,48 +263,8 @@ zu puffern. Für den Pi-Satelliten ein Quality-of-Life-Fix.
 
 ---
 
-#### NeoPixel / WS2812B LED-Ring am Satelliten
-Ersatz für einfache GPIO-LED: idle=aus, listening=blau rotierend,
-processing=weiß pulsierend, speaking=cyan. Geplanter Aufbau: Pi Zero 2 W +
-ReSpeaker 4-Mic HAT im Amazon Echo Gehäuse, originaler Echo-LED-Ring durch
-WS2812B-Ring (60mm, 12 LEDs) ersetzt.
-
----
-
 ### Langfristig / Phase 2
 
-#### libhannah_audio — Gemeinsame C-Bibliothek für Audio-Operationen
-
-Plattformübergreifende C-Bibliothek für Audio-Verarbeitung, einmal schreiben —
-überall verwenden:
-
-```c
-// hannah_audio.h
-int hannah_resample(const int16_t *in,  int in_samples,  int src_rate,
-                          int16_t *out, int out_samples, int dst_rate);
-int hannah_rms(const int16_t *pcm, int samples);
-int hannah_vad(const int16_t *pcm, int samples, int threshold);
-```
-
-**Zielplattformen:**
-- **ESP32:** direkt als IDF-Komponente (`satellite-lib/` → CMakeLists.txt)
-- **Pi-Satellit:** Python-Binding via `ctypes` oder `cffi`
-- **Go-Proxy:** optional via `cgo`
-
-**Motivation:** Resampling, VAD und RMS werden aktuell in Python und C separat
-implementiert und verhalten sich leicht unterschiedlich. Eine gemeinsame Basis
-eliminiert Divergenz und macht Streaming-Playback wartbar.
-
-**Voraussetzung:** TTS Streaming-Playback (oben) — der Resampler ist der
-Haupttreiber für diese Bibliothek.
-
----
-
-#### Langzeitgedächtnis (Phase 1 — SQLite)
-Nach Ablauf der Konversations-TTL fasst das LLM das Gespräch in 1-2 Sätze zusammen.
-Gespeichert in SQLite: `memories(roomie_id, summary, tags, created_at)`.
-Beim nächsten Gespräch werden die letzten N Erinnerungen der Person in den System-Prompt
-injiziert. Neues `memory.py`-Modul analog zu `conversation.py`.
 
 #### Langzeitgedächtnis (Phase 2 — VectorDB)
 Ab ~500+ Einträgen: Chroma (reines Python-Package, kein separater Service) für
@@ -483,28 +300,6 @@ statt still zu bleiben.
   kein zusätzliches Hardware nötig, aber limitiert auf ~4MB Flash gesamt
 - **SD-Karte (Phase 2+):** Micro-SD-Slot per SPI (`esp_vfs_fat_sdmmc`), ~0,50€ Bauteil,
   beliebig viele Audiodateien, austauschbar ohne Firmware-Update
-
----
-
-#### OTA-Firmware-Updates für ESP32-Satelliten (HannahDeviceManager)
-
-ESP32 IDF hat OTA eingebaut (`esp_ota_ops.h`). Hannah Core hostet die aktuelle
-Firmware, ESP meldet seine Version per Heartbeat, Core triggert Update per UDP.
-
-**Ablauf:**
-1. Hannah Core (oder separater Service) hostet aktuelle `.bin` via HTTP
-2. ESP meldet beim Heartbeat seine Firmware-Version mit
-3. Core vergleicht — bei neuer Version: `{"type": "ota_update", "url": "...", "version": "x.y.z"}`
-4. ESP lädt Firmware in zweite OTA-Partition, restartet, bestätigt neue Version
-
-**Voraussetzungen:**
-- Stabile ESP-Firmware (sinnlos OTA zu verteilen wenn Firmware noch in aktiver Entwicklung)
-- Partition Table mit zwei OTA-Partitionen (`factory` + `ota_0`/`ota_1`)
-- Build-Pipeline: `idf.py build` → `.bin` automatisch versioniert
-- Hannah Core: HTTP-Server + Device-Registry mit Firmware-Versionen pro Gerät
-
-**Sinnvoll ab:** Mehrere ESP32-Satelliten im Betrieb, Firmware-Änderungen werden
-sonst zum manuellen Aufwand.
 
 ---
 

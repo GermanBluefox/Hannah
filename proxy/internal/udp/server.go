@@ -256,6 +256,7 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 		ttsAddr := &net.UDPAddr{IP: addr.IP, Port: listenPort}
 		s.mu.Lock()
 		s.satellites[device] = &satellite{audioAddr: addr, ttsAddr: ttsAddr, room: room, lastHeartbeat: time.Now()}
+		delete(s.sessions, device) // verwaiste Session verwerfen (z.B. nach ESP-Neustart ohne audio_end)
 		s.mu.Unlock()
 		slog.Info("satellite registered", "device", device, "room", room,
 			"audio_from", addr, "tts_to_port", listenPort)

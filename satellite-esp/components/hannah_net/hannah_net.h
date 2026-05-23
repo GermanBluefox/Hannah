@@ -53,3 +53,22 @@ void hannah_net_send_audio_end(void);
 /* Mute-Status */
 bool hannah_net_is_muted(void);
 void hannah_net_set_mute(bool muted);
+
+/* Hardware-Mute-Callback: wird von hannah_audio registriert und bei
+ * jedem hannah_net_set_mute()-Aufruf ausgeführt. */
+typedef void (*hannah_net_hw_mute_cb_t)(bool muted);
+void hannah_net_set_hw_mute_callback(hannah_net_hw_mute_cb_t cb);
+
+/* True wenn WiFi im AP-Setup-Modus läuft (keine STA-Verbindung). */
+bool hannah_net_is_ap_mode(void);
+
+/* Schreibt die aktuelle IP-Adresse als String in buf (z.B. "192.168.8.42"
+ * im STA-Modus oder "192.168.4.1" im AP-Modus). */
+void hannah_net_get_ip_str(char *buf, size_t len);
+
+/* MQTT-Nachricht veröffentlichen — für andere Komponenten (z.B. hannah_ota). */
+void hannah_net_mqtt_publish(const char *topic, const char *payload, int qos, int retain);
+
+/* OTA-ok-Callback: wird aufgerufen wenn hannah/<device>/ota/ok empfangen. */
+typedef void (*hannah_net_ota_ok_cb_t)(void);
+void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb);

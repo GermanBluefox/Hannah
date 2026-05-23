@@ -2,6 +2,7 @@ idf_component_register(
     SRCS "hannah_net.c"
     INCLUDE_DIRS "."
     REQUIRES
+        hannah_config
         esp_wifi
         esp_event
         esp_netif

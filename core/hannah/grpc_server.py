@@ -548,6 +548,23 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 q.put(cmd)
             return len(self._agent_queues) > 0
 
+    def agent_sensor_update(self, device: str, temperature: float, pressure: float,
+                            humidity: float, gas_resistance: float) -> bool:
+        """Push a satellite sensor reading to all connected adapters."""
+        cmd = pb.AgentCommand(sensor_update=pb.AgentSensorUpdate(
+            device=device,
+            temperature=temperature,
+            pressure=pressure,
+            humidity=humidity,
+            gas_resistance=gas_resistance,
+        ))
+        with self._agent_lock:
+            n = len(self._agent_queues)
+            for q in self._agent_queues:
+                q.put(cmd)
+            log.debug(f"agent_sensor_update({device}): pushed to {n} adapter(s)")
+            return n > 0
+
     def AgentConnect(self, request_iterator, context):
         """
         Bidirektionaler Stream: Adapter → State-Updates, Hannah → Geräte-Befehle.

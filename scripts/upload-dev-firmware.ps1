@@ -101,10 +101,10 @@ if (-not $NoBuild) {
     }
 }
 
-# Warn if working tree is dirty (binary version will contain -dirty suffix)
+# Abort if working tree is dirty — dirty builds break OTA version matching
 $DirtyFiles = git -C $RepoRoot status --porcelain 2>$null
 if ($DirtyFiles) {
-    Write-Warning "Working tree has uncommitted changes — binary version will be tagged -dirty."
+    Write-Error "Working tree has uncommitted changes - binary version will be tagged -dirty. Commit or stash first."; exit 1
 }
 
 # Determine version

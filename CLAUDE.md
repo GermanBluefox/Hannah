@@ -136,7 +136,9 @@ Typ 0x03: TTS-Audio-Chunk von Hannah zum Satelliten
 
 **gRPC (Hannah Core ↔ externe Services):**
 - Proto: `core/proto/hannah.proto` (einzige Source of Truth — nicht `proxy/proto/`)
-- Bei Änderungen: Datei manuell in andere Orte kopieren, dann Stubs neu generieren via `core/proto/gen_proto.sh`
+- Bei Änderungen: Datei manuell in **alle** Konsumenten kopieren, dann Stubs neu generieren via `core/proto/gen_proto.sh`
+  - Konsumenten: `proxy/proto/hannah.proto`, `iobroker.hannah/src/proto/hannah.proto`
+  - TODO: echte Single Source of Truth evaluieren (prebuild-Hook scheidet aus, da CI keinen Zugriff auf core/ hat)
 - Port: 50051 (lokal, kein Internet-Exposure)
 
 **Wichtige gRPC-Methoden:**
@@ -292,6 +294,11 @@ Hannah liest Geräte aus `0_userdata.0.virtualDevice.<Kategorie>.<Etage>.<Raum>.
 - PCB Rev. 2: Wenn geliefert, elektrischen Test durchfuhren
 - PCB Rev. 3: Neues KiCad-Projekt (88mm, RP2350 + ES7210 + 4 PDM-Mics)
 - Branch `DanielDuesentrieb` → PR → Merge wenn Hardware-Stand stabil
+
+**Geparkte Ideen (Firmware):**
+- **Satellite-Light**: Abgespeckte ESP-Firmware nur mit `hannah_net` + `hannah_sensors` + optional `hannah_ble`, ohne Audio/Wakeword/LED. Eigenes `sdkconfig.defaults.light`. Protokollseitig bereits vollständig kompatibel (gleiche MQTT-Topics). Ziel: günstige Miniplatine die nur Sensor-/BLE-Daten liefert.
+- **Hannah Android-App**: Soft-Satellite als App — primär Sprachsteuerung/Announcements, optional Sensordaten (Barometer, Temperatur) per MQTT wenn aktiviert. Gleiche MQTT-Topics wie Hardware-Satelliten, keine neue Infrastruktur nötig. Setzt Satellit-Ownership voraus (siehe unten).
+- **Satellit-Ownership + personalisiertes Routing** (Roadmap): Satelliten werden Roomies zugeordnet. Announcements an eine Person spielen auf deren Satelliten + raumlosen Satelliten, nicht auf fremde. Trigger- und Routinen-Engine werden per-Person konfigurierbar (eigene YAML/Config pro Person). Routinen/Trigger können Satellit oder Raum als Ziel-Constraint haben (z.B. "nur auf Test-ESP"). Handy-App gehört per Definition einer Person. Grundlage für alle weiteren Personalisierungs-Features.
 
 **Was bereits läuft:**
 - Hannah Core vollständig funktionsfähig (STT/NLU/TTS/ioBroker-Steuerung)

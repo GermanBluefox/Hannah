@@ -4,4 +4,6 @@ idf_component_register(
     REQUIRES
         driver
         esp_driver_i2c
+        hannah_net
+        hannah_config
 )

@@ -80,6 +80,9 @@ class MQTTHandler:
         # BLE-RSSI-Report vom Satelliten: fn(device, mac, rssi)
         self._on_ble_report: Optional[Callable[[str, str, int], None]] = None
 
+        # Sensor-Daten vom Satelliten: fn(device, temperature, pressure, humidity, gas_resistance)
+        self._on_sensor: Optional[Callable[[str, float, float, float, float], None]] = None
+
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
@@ -221,6 +224,9 @@ class MQTTHandler:
     def set_firmware_handler(self, callback: Callable[[str, str], None]):
         """fn(device, version) — wird aufgerufen wenn ein Satellit seine Firmware-Version meldet."""
         self._on_firmware = callback
+
+    def set_sensor_handler(self, callback: Callable[[str, float, float, float, float], None]):
+        self._on_sensor = callback
 
     def set_ble_report_handler(self, callback: Callable[[str, str, int], None]):
         """fn(device, mac, rssi) — wird aufgerufen wenn ein Satellit einen BLE-RSSI-Report sendet."""
@@ -422,9 +428,29 @@ class MQTTHandler:
         log.info("Firmware-Version abonniert: 'hannah/satellite/+/firmware'")
         client.subscribe("hannah/satellite/+/ble/report", qos=0)
         log.info("BLE-Reports abonniert: 'hannah/satellite/+/ble/report'")
+        client.subscribe("hannah/satellite/+/sensors", qos=0)
+        log.info("Sensor-Daten abonniert: 'hannah/satellite/+/sensors'")
 
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
+
+        # Sensor-Daten vom Satelliten?
+        if topic.startswith("hannah/satellite/") and topic.endswith("/sensors"):
+            parts = topic.split("/")
+            if len(parts) == 4 and self._on_sensor:
+                try:
+                    data = json.loads(msg.payload.decode())
+                    log.debug(f"Sensordaten von {parts[2]}: {data}")
+                    self._on_sensor(
+                        parts[2],
+                        float(data.get("temperature", 0.0)),
+                        float(data.get("pressure", 0.0)),
+                        float(data.get("humidity", 0.0)),
+                        float(data.get("gas_resistance", 0.0)),
+                    )
+                except Exception:
+                    pass
+            return
 
         # BLE-RSSI-Report vom Satelliten?
         if topic.startswith("hannah/satellite/") and topic.endswith("/ble/report"):

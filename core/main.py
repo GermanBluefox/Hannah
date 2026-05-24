@@ -862,8 +862,13 @@ def main():
         log.info(f"Residents: Gast '{name}' ist gegangen.")
         grpc_servicer.publish_event(make_resident_event(f"guest:{name}", name, "departed"))
 
+    def _on_sensor(device: str, temperature: float, pressure: float,
+                   humidity: float, gas_resistance: float):
+        grpc_servicer.agent_sensor_update(device, temperature, pressure, humidity, gas_resistance)
+
     mqtt_handler.set_ota_pending_handler(_on_ota_pending)
     mqtt_handler.set_firmware_handler(_on_firmware_version)
+    mqtt_handler.set_sensor_handler(_on_sensor)
     residents.on_arrival(_on_arrival)
     residents.on_departure(_on_departure)
     residents.on_guest_arrival(_on_guest_arrival)

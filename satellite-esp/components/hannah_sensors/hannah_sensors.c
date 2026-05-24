@@ -1,7 +1,10 @@
 #include "hannah_sensors.h"
+#include "hannah_net.h"
+#include "hannah_config.h"
 
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -315,12 +318,29 @@ static void sensor_task(void *arg)
         if (sensor_measure(&data)) {
             s_last     = data;
             s_has_data = true;
+
             if (!isnan(data.gas_resistance))
                 ESP_LOGI(TAG, "T=%.1f°C  P=%.1f hPa  H=%.1f%%  Gas=%.0f Ω",
                          data.temperature, data.pressure, data.humidity, data.gas_resistance);
             else
                 ESP_LOGI(TAG, "T=%.1f°C  P=%.1f hPa  H=%.1f%%",
                          data.temperature, data.pressure, data.humidity);
+
+            const hannah_config_t *cfg = hannah_config_get();
+            char topic[96];
+            snprintf(topic, sizeof(topic), "hannah/satellite/%s/sensors", cfg->device_id);
+
+            char payload[128];
+            if (!isnan(data.gas_resistance))
+                snprintf(payload, sizeof(payload),
+                         "{\"temperature\":%.2f,\"pressure\":%.2f,\"humidity\":%.2f,\"gas_resistance\":%.0f}",
+                         data.temperature, data.pressure, data.humidity, data.gas_resistance);
+            else
+                snprintf(payload, sizeof(payload),
+                         "{\"temperature\":%.2f,\"pressure\":%.2f,\"humidity\":%.2f}",
+                         data.temperature, data.pressure, data.humidity);
+
+            hannah_net_mqtt_publish(topic, payload, 1, 1);
         }
         vTaskDelay(pdMS_TO_TICKS(30000));
     }

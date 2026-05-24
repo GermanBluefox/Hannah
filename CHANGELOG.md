@@ -5,6 +5,17 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.9.0
+### ESP Firmware
+* New: `hannah_sensors` now publishes readings every 30s to `hannah/satellite/{device}/sensors` (retained, QoS 1); JSON payload includes `temperature`, `pressure`, `humidity`, and optionally `gas_resistance` (BME680 only)
+
+### Hannah Core
+* New: Subscribes to `hannah/satellite/+/sensors`; forwards readings to the ioBroker adapter via `AgentSensorUpdate` gRPC command
+
+### Proto
+* New: `AgentSensorUpdate` message — carries `device`, `temperature`, `pressure`, `humidity`, `gas_resistance`
+* New: `sensor_update = 8` added to `AgentCommand.command` oneof
+
 ## 0.8.3
 ### ESP Firmware
 * New: OTA rollback — `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` enabled; firmware marks itself valid after first successful MQTT connection, otherwise the bootloader automatically reverts to the previous partition on the next reboot

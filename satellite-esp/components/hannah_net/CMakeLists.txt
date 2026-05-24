@@ -11,4 +11,5 @@ idf_component_register(
         nvs_flash
         espressif__cjson
         esp_system
+        app_update
 )

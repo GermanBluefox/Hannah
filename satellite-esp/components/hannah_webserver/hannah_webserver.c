@@ -227,6 +227,7 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
           "oninput=\"document.getElementById('tv').textContent=this.value+'%%'\"></label>"
         "<h3>Firmware</h3>"
         "<label>Update-Server URL<input name=ota_url value='%s'></label>"
+        "<label>Update-Channel<input name=ota_channel value='%s' placeholder='(leer = stable)'></label>"
         "<br><button type=submit class=btn>Speichern &amp; Neustart</button>"
         "</form>"
         "<script>"
@@ -262,6 +263,7 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         cfg->wakeword_enabled ? " checked" : "",
         cfg->wakeword_threshold, cfg->wakeword_threshold,
         cfg->ota_url,
+        cfg->ota_channel,
         S_FOOT);
 
     httpd_resp_set_type(req, "text/html");
@@ -307,7 +309,8 @@ static esp_err_t settings_post_handler(httpd_req_t *req)
         if (p > 0 && p < 65536) new_cfg.mqtt_port = (uint16_t)p;
     }
 
-    form_get(body, "ota_url", new_cfg.ota_url, sizeof(new_cfg.ota_url));
+    form_get(body, "ota_url",     new_cfg.ota_url,     sizeof(new_cfg.ota_url));
+    form_get(body, "ota_channel", new_cfg.ota_channel, sizeof(new_cfg.ota_channel));
 
     char ww[4] = {0};
     new_cfg.wakeword_enabled = form_get(body, "wakeword", ww, sizeof(ww));

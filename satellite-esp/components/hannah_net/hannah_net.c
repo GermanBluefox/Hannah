@@ -26,6 +26,7 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_system.h"
+#include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -227,6 +228,7 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
     switch (event_id) {
     case MQTT_EVENT_CONNECTED: {
         ESP_LOGI(TAG, "MQTT verbunden.");
+        esp_ota_mark_app_valid_cancel_rollback();
         esp_mqtt_client_subscribe(s_mqtt_client, "hannah/server", 0);
         char topic[128];
         snprintf(topic, sizeof(topic), "hannah/satellite/%s/mute",

@@ -14,4 +14,11 @@ menu "Hannah OTA"
             Bearer-Token für den Download vom Update Server.
             Wird von der CI automatisch eingetragen — nie manuell setzen.
 
+    config HANNAH_OTA_CHANNEL
+        string "Update Channel"
+        default ""
+        help
+            OTA-Channel: leer = stable, "dev" = Entwicklungs-Channel.
+            Devkit-Builds setzen diesen Wert auf "dev".
+
 endmenu

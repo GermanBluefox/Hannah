@@ -5,6 +5,20 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.8.3
+### ESP Firmware
+* New: OTA rollback — `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` enabled; firmware marks itself valid after first successful MQTT connection, otherwise the bootloader automatically reverts to the previous partition on the next reboot
+* New: OTA rollback loop prevention — after a rollback, the previously invalid partition version is compared against the server's latest; if they match, `ota/failed` (with `reason: rollback`) is published instead of `ota/pending` to prevent an update loop
+* New: OTA channel config (`HANNAH_OTA_CHANNEL`) — Kconfig string, NVS-backed, configurable via WebUI; appended as `?channel=<value>` to the update server request; devkit default: `dev`
+* New: Dev-channel semver comparison — when channel is not `stable`, the git-describe commit offset is compared when the semver base is equal (e.g. `0.8.2-12` > `0.8.2-11`)
+* Fixed: git-describe offset parsing in semver comparison was broken for versions without a patch-level dot suffix — replaced manual loop with `strchr` (regression introduced in 0.8.1)
+
+### Scripts
+* New: `scripts/upload-dev-firmware.ps1` — builds (devkit config) and uploads firmware to the OTA server; supports `-NoBuild`, `-Channel`, `-List`, `-Delete`, `-Version`; reads credentials from `.env`
+
+### CI
+* Changed: firmware is now uploaded to the `stable` channel (`?channel=stable`) instead of the implicit default
+
 ## 0.8.2
 ### ESP Firmware
 * Fixed: `.history_trim` VS Code Local History directory was accidentally tracked as a git submodule — removed from index and added to `.gitignore`; fixes CI submodule init failure

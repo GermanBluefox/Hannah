@@ -1,3 +1,4 @@
+.env
 core/config.yaml
 forum_post.md
 __pycache__/

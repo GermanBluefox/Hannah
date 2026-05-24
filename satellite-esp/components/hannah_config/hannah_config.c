@@ -68,7 +68,8 @@ void hannah_config_init(void)
     nvs_get_u8(h, "ww_threshold", &thr);
     s_cfg.wakeword_threshold = thr;
 
-    NVS_STR(h, "ota_url", ota_url, CONFIG_HANNAH_OTA_URL);
+    NVS_STR(h, "ota_url",     ota_url,     CONFIG_HANNAH_OTA_URL);
+    NVS_STR(h, "ota_channel", ota_channel, CONFIG_HANNAH_OTA_CHANNEL);
 
     nvs_close(h);
 
@@ -112,6 +113,7 @@ void hannah_config_save(const hannah_config_t *cfg)
     nvs_set_u8 (h, "wakeword",    cfg->wakeword_enabled ? 1 : 0);
     nvs_set_u8 (h, "ww_threshold", cfg->wakeword_threshold);
     nvs_set_str(h, "ota_url",      cfg->ota_url);
+    nvs_set_str(h, "ota_channel",  cfg->ota_channel);
 
     nvs_commit(h);
     nvs_close(h);

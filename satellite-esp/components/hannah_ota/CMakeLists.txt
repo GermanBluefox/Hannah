@@ -7,5 +7,6 @@ idf_component_register(
         esp_http_client
         esp_https_ota
         esp_app_format
+        app_update
         espressif__cjson
 )

@@ -16,6 +16,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include "esp_ota_ops.h"
 #include "esp_log.h"
 #include "esp_app_desc.h"
 #include "esp_http_client.h"
@@ -33,28 +34,36 @@ static const char *TAG = "ota";
 
 /* ── Semver-Vergleich ─────────────────────────────────────────────────────── */
 
-/* Parst "MAJOR.MINOR.PATCH" aus einem Versions-String; git-describe-Suffix
- * (z.B. "-1-gabcdef") wird ignoriert. Gibt 0 zurück wenn das Parsen fehlschlägt. */
-static int parse_semver(const char *ver, int *major, int *minor, int *patch)
+/* Parst "MAJOR.MINOR.PATCH" und optionalen git-describe-Commit-Offset
+ * (z.B. "0.8.2-7-gabcdef" → patch=2, commits=7).
+ * Gibt 0 zurück wenn das Parsen fehlschlägt. */
+static int parse_semver(const char *ver, int *major, int *minor, int *patch, int *commits)
 {
-    return sscanf(ver, "%d.%d.%d", major, minor, patch) == 3;
+    *commits = 0;
+    if (sscanf(ver, "%d.%d.%d", major, minor, patch) != 3) return 0;
+    /* Suche nach "-N-g" Suffix */
+    const char *p = strchr(ver, '-');
+    if (p) sscanf(p + 1, "%d", commits);
+    return 1;
 }
 
-/* Gibt 1 zurück wenn `server` strikt größer als `local` ist. */
-static int semver_gt(const char *server, const char *local)
+/* Gibt 1 zurück wenn `server` neuer als `local` ist.
+ * Im Dev-Channel wird bei gleichem Semver der git-describe-Commit-Offset verglichen. */
+static int semver_gt(const char *server, const char *local, int dev_channel)
 {
-    int smaj = 0, smin = 0, spat = 0;
-    int lmaj = 0, lmin = 0, lpat = 0;
+    int smaj = 0, smin = 0, spat = 0, scom = 0;
+    int lmaj = 0, lmin = 0, lpat = 0, lcom = 0;
 
-    if (!parse_semver(server, &smaj, &smin, &spat) ||
-        !parse_semver(local,  &lmaj, &lmin, &lpat)) {
-        /* Fallback: einfacher String-Vergleich bei Parse-Fehler */
+    if (!parse_semver(server, &smaj, &smin, &spat, &scom) ||
+        !parse_semver(local,  &lmaj, &lmin, &lpat, &lcom)) {
         return strcmp(server, local) != 0;
     }
 
     if (smaj != lmaj) return smaj > lmaj;
     if (smin != lmin) return smin > lmin;
-    return spat > lpat;
+    if (spat != lpat) return spat > lpat;
+    if (dev_channel)  return scom > lcom;
+    return 0;
 }
 
 /* Thawte TLS RSA CA G1 — Intermediate-CA für hannah-update.sgessinger.de */
@@ -120,7 +129,10 @@ static void check_for_update(void)
     }
 
     char url[192];
-    snprintf(url, sizeof(url), "%s/latest", cfg->ota_url);
+    if (cfg->ota_channel[0] != '\0')
+        snprintf(url, sizeof(url), "%s/latest?channel=%s", cfg->ota_url, cfg->ota_channel);
+    else
+        snprintf(url, sizeof(url), "%s/latest", cfg->ota_url);
 
     char auth_header[192];
     snprintf(auth_header, sizeof(auth_header), "Bearer %s", cfg->ota_token);
@@ -178,7 +190,28 @@ static void check_for_update(void)
 
     ESP_LOGI(TAG, "Firmware: aktuell=%s  verfügbar=%s", current, latest);
 
-    if (semver_gt(latest, current)) {
+    /* Nach einem Rollback: die zuletzt ungültige Partition enthält dieselbe Version
+     * wie der Server → statt ota/pending wird ota/failed publiziert damit Hannah
+     * keinen erneuten Update-Befehl schickt. */
+    const esp_partition_t *invalid = esp_ota_get_last_invalid_partition();
+    if (invalid) {
+        esp_app_desc_t invalid_desc;
+        if (esp_ota_get_partition_description(invalid, &invalid_desc) == ESP_OK &&
+            strcmp(invalid_desc.version, latest) == 0) {
+            char topic[96];
+            snprintf(topic, sizeof(topic), "hannah/satellite/%s/ota/failed", cfg->device_id);
+            char payload[128];
+            snprintf(payload, sizeof(payload),
+                     "{\"version\":\"%s\",\"reason\":\"rollback\"}", latest);
+            hannah_net_mqtt_publish(topic, payload, 1, 0);
+            ESP_LOGW(TAG, "OTA-Rollback erkannt — %s wurde als ungültig markiert. ota/failed publiziert.", latest);
+            cJSON_Delete(root);
+            return;
+        }
+    }
+
+    int dev_channel = (cfg->ota_channel[0] != '\0' && strcmp(cfg->ota_channel, "stable") != 0);
+    if (semver_gt(latest, current, dev_channel)) {
         strncpy(s_pending_url, jurl->valuestring, sizeof(s_pending_url) - 1);
         s_pending_url[sizeof(s_pending_url) - 1] = '\0';
 

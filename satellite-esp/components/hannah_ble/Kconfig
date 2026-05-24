@@ -1,0 +1,15 @@
+menu "Hannah BLE-Scanner"
+
+    config HANNAH_BLE_REPORT_INTERVAL_MS
+        int "Minimales Intervall zwischen RSSI-Reports pro MAC (ms)"
+        default 5000
+        help
+            Verhindert MQTT-Flooding. Ein Gerät wird höchstens alle N ms
+            gemeldet, auch wenn es häufiger gesehen wird.
+
+    config HANNAH_BLE_WATCHLIST_MAX
+        int "Maximale Anzahl überwachter MAC-Adressen"
+        default 16
+        range 1 32
+
+endmenu

@@ -5,8 +5,8 @@
  *   1. 60 Sekunden warten (WiFi + MQTT-Verbindung abwarten)
  *   2. GET {ota_url}/latest mit Bearer-Token
  *   3. Aktuelle Version mit Firmware-Version vergleichen
- *   4. Bei Unterschied: hannah/<device>/ota/pending publizieren
- *   5. Auf hannah/<device>/ota/ok warten → esp_https_ota + Neustart
+ *   4. Bei Unterschied: hannah/satellite/<device>/ota/pending publizieren
+ *   5. Auf hannah/satellite/<device>/ota/ok warten → esp_https_ota + Neustart
  *   6. Alle HANNAH_OTA_POLL_INTERVAL_S Sekunden wiederholen
  */
 
@@ -30,6 +30,32 @@ static const char *TAG = "ota";
 
 #define OTA_HTTP_BUF_SIZE   512
 #define OTA_STARTUP_DELAY_S 60
+
+/* ── Semver-Vergleich ─────────────────────────────────────────────────────── */
+
+/* Parst "MAJOR.MINOR.PATCH" aus einem Versions-String; git-describe-Suffix
+ * (z.B. "-1-gabcdef") wird ignoriert. Gibt 0 zurück wenn das Parsen fehlschlägt. */
+static int parse_semver(const char *ver, int *major, int *minor, int *patch)
+{
+    return sscanf(ver, "%d.%d.%d", major, minor, patch) == 3;
+}
+
+/* Gibt 1 zurück wenn `server` strikt größer als `local` ist. */
+static int semver_gt(const char *server, const char *local)
+{
+    int smaj = 0, smin = 0, spat = 0;
+    int lmaj = 0, lmin = 0, lpat = 0;
+
+    if (!parse_semver(server, &smaj, &smin, &spat) ||
+        !parse_semver(local,  &lmaj, &lmin, &lpat)) {
+        /* Fallback: einfacher String-Vergleich bei Parse-Fehler */
+        return strcmp(server, local) != 0;
+    }
+
+    if (smaj != lmaj) return smaj > lmaj;
+    if (smin != lmin) return smin > lmin;
+    return spat > lpat;
+}
 
 /* Thawte TLS RSA CA G1 — Intermediate-CA für hannah-update.sgessinger.de */
 static const char s_ca_cert_pem[] =
@@ -152,7 +178,7 @@ static void check_for_update(void)
 
     ESP_LOGI(TAG, "Firmware: aktuell=%s  verfügbar=%s", current, latest);
 
-    if (strcmp(latest, current) != 0) {
+    if (semver_gt(latest, current)) {
         strncpy(s_pending_url, jurl->valuestring, sizeof(s_pending_url) - 1);
         s_pending_url[sizeof(s_pending_url) - 1] = '\0';
 
@@ -160,7 +186,7 @@ static void check_for_update(void)
         snprintf(payload, sizeof(payload),
                  "{\"version\":\"%s\",\"pending\":true}", latest);
         char topic[96];
-        snprintf(topic, sizeof(topic), "hannah/%s/ota/pending", cfg->device_id);
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/ota/pending", cfg->device_id);
         hannah_net_mqtt_publish(topic, payload, 1, 0);
         ESP_LOGI(TAG, "OTA-pending publiziert → %s: %s", topic, payload);
     } else {
@@ -193,14 +219,16 @@ static void ota_update_task(void *arg)
         ESP_LOGI(TAG, "Starte OTA von %s", s_pending_url);
 
         esp_http_client_config_t http_cfg = {
-            .url            = s_pending_url,
-            .cert_pem       = s_ca_cert_pem,
-            .timeout_ms     = 60000,
+            .url               = s_pending_url,
+            .cert_pem          = s_ca_cert_pem,
+            .timeout_ms        = 60000,
             .keep_alive_enable = true,
+            .buffer_size       = 4096,
         };
         esp_https_ota_config_t ota_cfg = {
             .http_config          = &http_cfg,
             .http_client_init_cb  = ota_http_init_cb,
+            .bulk_flash_erase     = true,
         };
 
         esp_err_t err = esp_https_ota(&ota_cfg);
@@ -227,6 +255,17 @@ static void ota_poll_task(void *arg)
 {
     ESP_LOGI(TAG, "Warte %ds auf WiFi/MQTT...", OTA_STARTUP_DELAY_S);
     vTaskDelay(pdMS_TO_TICKS(OTA_STARTUP_DELAY_S * 1000));
+
+    {
+        const hannah_config_t *cfg = hannah_config_get();
+        const char *current = esp_app_get_description()->version;
+        char fw_topic[96];
+        char fw_payload[64];
+        snprintf(fw_topic,   sizeof(fw_topic),   "hannah/satellite/%s/firmware", cfg->device_id);
+        snprintf(fw_payload, sizeof(fw_payload), "{\"version\":\"%s\"}", current);
+        hannah_net_mqtt_publish(fw_topic, fw_payload, 1, 1);
+        ESP_LOGI(TAG, "Firmware-Version publiziert: %s = %s", fw_topic, fw_payload);
+    }
 
     while (1) {
         check_for_update();

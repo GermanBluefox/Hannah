@@ -9,6 +9,7 @@ idf_component_register(
         hannah_led
         hannah_sensors
         hannah_ota
+        hannah_ble
         nvs_flash
         esp_driver_gpio
         esp_wifi

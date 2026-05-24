@@ -30,14 +30,25 @@ mqtt:
   topic_error_out: "hannah/{device}/error"      # Fehler
   topic_text_command_in: "0_userdata/0/hannah/set/textCommand"
   # Satellit-Status (retained, von Hannah publiziert)
-  # hannah/satelite/{device}/status  → idle | listening | processing | speaking
-  # hannah/satelite/{device}/online  → true | false (LWT vom Satellit)
+  # hannah/satellite/{device}/status  → idle | listening | processing | speaking
+  # hannah/satellite/{device}/online  → true | false (LWT vom Satellit)
 
 # Fahrzeug-Integration (optional, beliebig viele Einträge)
 # cars:
 #   - topic_prefix: "javascript/0/virtualDevice/Auto/Person/Auto1"
 #     home_address: "Musterstraße 1, 12345 Musterstadt, Deutschland"
 #     owner_roomies: ["person"]   # Roomie-IDs mit Zugriff auf dieses Auto
+
+# BLE Indoor-Lokalisierung (optional)
+# Satelliten scannen passiv BLE-Advertisements und melden RSSI per MQTT.
+# Hannah bestimmt per „stärkster RSSI gewinnt" den Aufenthaltsort jedes Tags.
+# Ergebnis: hannah/ble/{label}/location (MQTT, retained) + hannah.0.ble.{label}.* (ioBroker Adapter)
+# ble:
+#   stale_timeout: 30    # Sekunden ohne Report → Tag gilt als "nicht sichtbar"
+#   tags:
+#     - mac: "aa:bb:cc:dd:ee:ff"
+#       label: "leonie"          # wird als State-Pfad verwendet (keine Leerzeichen)
+#       roomie: "leonie"         # optional: Roomie-ID für Announcement-Routing
 
 grpc:
   host: "0.0.0.0"   # Bind-Adresse des gRPC-Servers

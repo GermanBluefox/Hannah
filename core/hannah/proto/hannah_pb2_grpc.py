@@ -127,6 +127,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.EventFilter.SerializeToString,
                 response_deserializer=hannah__pb2.HannahEvent.FromString,
                 _registered_method=True)
+        self.TriggerFirmwareUpdate = channel.unary_unary(
+                '/hannah.HannahService/TriggerFirmwareUpdate',
+                request_serializer=hannah__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.RegisterProxy = channel.stream_stream(
                 '/hannah.HannahService/RegisterProxy',
                 request_serializer=hannah__pb2.ProxyHeartbeat.SerializeToString,
@@ -283,7 +288,15 @@ class HannahServiceServicer(object):
         """--- Event stream ---
         Opens a server-side stream; Hannah pushes events as they occur.
         Pass event_types to filter (empty = all events).
-        Known event types: "car.parked", "resident.arrived", "resident.departed"
+        Known event types: "car.parked", "resident.arrived", "resident.departed", "satellite.firmware"
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def TriggerFirmwareUpdate(self, request, context):
+        """--- Firmware Manager ---
+        Trigger an immediate OTA update for a satellite (bypasses residents check).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -422,6 +435,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     servicer.SubscribeEvents,
                     request_deserializer=hannah__pb2.EventFilter.FromString,
                     response_serializer=hannah__pb2.HannahEvent.SerializeToString,
+            ),
+            'TriggerFirmwareUpdate': grpc.unary_unary_rpc_method_handler(
+                    servicer.TriggerFirmwareUpdate,
+                    request_deserializer=hannah__pb2.TriggerFirmwareUpdateRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
             'RegisterProxy': grpc.stream_stream_rpc_method_handler(
                     servicer.RegisterProxy,
@@ -899,6 +917,33 @@ class HannahService(object):
             '/hannah.HannahService/SubscribeEvents',
             hannah__pb2.EventFilter.SerializeToString,
             hannah__pb2.HannahEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def TriggerFirmwareUpdate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/TriggerFirmwareUpdate',
+            hannah__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,

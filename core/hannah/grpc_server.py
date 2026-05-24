@@ -80,6 +80,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_agent_satellite_control: Optional[Callable[[str, str, object], None]] = None,  # (room, key, value)
         on_agent_device_snapshot: Optional[Callable[[Iterable[pb.AgentDevice]], None]] = None,
         on_agent_send_residents: Optional[Callable[[Iterable[pb.AgentResident]], None]] = None,
+        on_trigger_firmware_update: Optional[Callable[[str], None]] = None,  # (device)
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -103,8 +104,9 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_agent_connect           = on_agent_connect
         self._on_agent_set_resident      = on_agent_set_resident
         self._on_agent_satellite_control = on_agent_satellite_control
-        self._on_agent_device_snapshot   = on_agent_device_snapshot
-        self._on_agent_send_residents    = on_agent_send_residents
+        self._on_agent_device_snapshot    = on_agent_device_snapshot
+        self._on_agent_send_residents     = on_agent_send_residents
+        self._on_trigger_firmware_update  = on_trigger_firmware_update or (lambda _: None)
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -262,6 +264,13 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             for dev, info in sats.items()
         ]
         return pb.GetSatellitesResponse(satellites=result)
+
+    def TriggerFirmwareUpdate(self, request, _context):
+        device = request.device
+        if not device:
+            return pb.StatusResponse(ok=False, message="device required")
+        self._on_trigger_firmware_update(device)
+        return pb.StatusResponse(ok=True, message=f"OTA-OK gesendet an {device}")
 
     def GetDevices(self, _request, _context):
         rooms_raw = self._get_devices()
@@ -519,6 +528,26 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 q.put(cmd)
             return len(self._agent_queues) > 0
 
+    def agent_firmware_event(self, device: str, version: str, update_available: bool = False) -> bool:
+        """Push a firmware version update to all connected adapters."""
+        cmd = pb.AgentCommand(firmware_event=pb.AgentFirmwareEvent(
+            device=device, version=version, update_available=update_available,
+        ))
+        with self._agent_lock:
+            for q in self._agent_queues:
+                q.put(cmd)
+            return len(self._agent_queues) > 0
+
+    def agent_ble_update(self, label: str, mac: str, room: str, satellite: str, rssi: int) -> bool:
+        """Push a BLE tag location update to all connected adapters."""
+        cmd = pb.AgentCommand(ble_update=pb.AgentBleUpdate(
+            label=label, mac=mac, room=room or "", satellite=satellite or "", rssi=rssi,
+        ))
+        with self._agent_lock:
+            for q in self._agent_queues:
+                q.put(cmd)
+            return len(self._agent_queues) > 0
+
     def AgentConnect(self, request_iterator, context):
         """
         Bidirektionaler Stream: Adapter → State-Updates, Hannah → Geräte-Befehle.
@@ -657,6 +686,14 @@ def make_resident_event(roomie_id: str, display_name: str, event: str) -> pb.Han
             display_name=display_name,
             event=event,
         ),
+    )
+
+
+def make_firmware_event(device: str, version: str) -> pb.HannahEvent:
+    return pb.HannahEvent(
+        event_type="satellite.firmware",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        firmware_event=pb.FirmwareEventProto(device=device, version=version),
     )
 
 

@@ -19,6 +19,7 @@
 #include "hannah_sensors.h"
 #include "hannah_webserver.h"
 #include "hannah_ota.h"
+#include "hannah_ble.h"
 
 static const char *TAG = "main";
 
@@ -84,6 +85,9 @@ void app_main(void)
 
     /* OTA-Update-Check (Poll im Hintergrund, kein Flash-Vorgang) */
     hannah_ota_init();
+
+    /* BLE-Scanner für Indoor-Lokalisierung */
+    hannah_ble_init();
 
     hannah_led_set_state(LED_STATE_IDLE);
 

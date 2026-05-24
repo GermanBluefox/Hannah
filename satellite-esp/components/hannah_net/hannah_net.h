@@ -69,6 +69,11 @@ void hannah_net_get_ip_str(char *buf, size_t len);
 /* MQTT-Nachricht veröffentlichen — für andere Komponenten (z.B. hannah_ota). */
 void hannah_net_mqtt_publish(const char *topic, const char *payload, int qos, int retain);
 
-/* OTA-ok-Callback: wird aufgerufen wenn hannah/<device>/ota/ok empfangen. */
+/* OTA-ok-Callback: wird aufgerufen wenn hannah/satellite/<device>/ota/ok empfangen. */
 typedef void (*hannah_net_ota_ok_cb_t)(void);
 void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb);
+
+/* BLE-Watchlist-Callback: wird aufgerufen wenn hannah/satellite/<device>/ble/watchlist empfangen.
+ * json/len zeigen direkt auf den MQTT-Payload-Puffer (nur während des Callbacks gültig). */
+typedef void (*hannah_net_ble_watchlist_cb_t)(const char *json, int len);
+void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb);

@@ -26,19 +26,19 @@ class MQTTHandler:
         self._topic_answer_out  = cfg.get("topic_answer_out",  "hannah/{device}/answer")
         self._topic_cmd_in        = cfg.get("topic_text_command_in",  "hannah/commands/textcommand")
         self._topic_cmd_answer    = cfg.get("topic_text_answer_out", "hannah/commands/answer")
-        self._topic_sat_status    = cfg.get("topic_sat_status",      "hannah/satelite/{device}/status")
-        self._topic_sat_online    = cfg.get("topic_sat_online",      "hannah/satelite/{device}/online")
-        self._topic_announcement  = cfg.get("topic_announcement",    "hannah/satelite/+/announcement")
+        self._topic_sat_status    = cfg.get("topic_sat_status",      "hannah/satellite/{device}/status")
+        self._topic_sat_online    = cfg.get("topic_sat_online",      "hannah/satellite/{device}/online")
+        self._topic_announcement  = cfg.get("topic_announcement",    "hannah/satellite/+/announcement")
         self._topic_rooms         = cfg.get("topic_rooms",            "hannah/rooms")
         self._topic_announce_in         = cfg.get("topic_announce_in",        "hannah/announce")
         self._topic_announce_ssml_in    = cfg.get("topic_announce_ssml_in",   "hannah/announceSSML")
         self._topic_notification_in     = cfg.get("topic_notification_in",    "hannah/notification")
 
-        # Satellit-Steuerung: hannah/volume, hannah/satelite/+/volume|mute|dnd
+        # Satellit-Steuerung: hannah/volume, hannah/satellite/+/volume|mute|dnd
         self._topic_global_volume    = cfg.get("topic_global_volume", "hannah/volume")
-        self._topic_sat_volume       = "hannah/satelite/+/volume"
-        self._topic_sat_mute         = "hannah/satelite/+/mute"
-        self._topic_sat_dnd          = "hannah/satelite/+/dnd"
+        self._topic_sat_volume       = "hannah/satellite/+/volume"
+        self._topic_sat_mute         = "hannah/satellite/+/mute"
+        self._topic_sat_dnd          = "hannah/satellite/+/dnd"
 
         self._on_announcement: Optional[Callable[[str, str], None]] = None
         self._on_room_announce: Optional[Callable[[str, str], None]] = None
@@ -73,6 +73,12 @@ class MQTTHandler:
 
         # OTA-Pending: fn(device, version)
         self._on_ota_pending: Optional[Callable[[str, str], None]] = None
+
+        # Firmware-Version vom Satelliten: fn(device, version)
+        self._on_firmware: Optional[Callable[[str, str], None]] = None
+
+        # BLE-RSSI-Report vom Satelliten: fn(device, mac, rssi)
+        self._on_ble_report: Optional[Callable[[str, str, int], None]] = None
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
@@ -123,19 +129,19 @@ class MQTTHandler:
     def publish_volume_state(self, level: int, device: Optional[str] = None):
         """Publiziert aktuelle Lautstärke als retained Message."""
         if device:
-            topic = f"hannah/satelite/{device}/volume/state"
+            topic = f"hannah/satellite/{device}/volume/state"
         else:
             topic = f"{self._topic_global_volume}/state"
         self._client.publish(topic, str(level), qos=1, retain=True)
 
     def publish_mute_state(self, device: str, muted: bool):
         """Publiziert Mute-Status eines Satelliten (retained)."""
-        self._client.publish(f"hannah/satelite/{device}/mute/state",
+        self._client.publish(f"hannah/satellite/{device}/mute/state",
                              "true" if muted else "false", qos=1, retain=True)
 
     def publish_dnd_state(self, device: str, active: bool):
         """Publiziert DND-Status eines Satelliten (retained)."""
-        self._client.publish(f"hannah/satelite/{device}/dnd/state",
+        self._client.publish(f"hannah/satellite/{device}/dnd/state",
                              "true" if active else "false", qos=1, retain=True)
 
     def publish_global_dnd(self, active: bool):
@@ -175,7 +181,7 @@ class MQTTHandler:
         """
         Registriert einen Callback für Announcements.
         callback(device, text) — device ist der Satellit-Name oder "all"
-        Topic: hannah/satelite/{device}/announcement
+        Topic: hannah/satellite/{device}/announcement
         """
         self._on_announcement = callback
 
@@ -212,10 +218,25 @@ class MQTTHandler:
         """fn(device, version) — wird aufgerufen wenn ein Satellit ein OTA-Update meldet."""
         self._on_ota_pending = callback
 
+    def set_firmware_handler(self, callback: Callable[[str, str], None]):
+        """fn(device, version) — wird aufgerufen wenn ein Satellit seine Firmware-Version meldet."""
+        self._on_firmware = callback
+
+    def set_ble_report_handler(self, callback: Callable[[str, str, int], None]):
+        """fn(device, mac, rssi) — wird aufgerufen wenn ein Satellit einen BLE-RSSI-Report sendet."""
+        self._on_ble_report = callback
+
+    def publish_ble_watchlist(self, device: str, macs: list[str]):
+        """Sendet die BLE-Watchlist als retained JSON an einen Satelliten."""
+        topic = f"hannah/satellite/{device}/ble/watchlist"
+        payload = json.dumps({"macs": macs})
+        self._client.publish(topic, payload, qos=1, retain=True)
+        log.debug(f"BLE-Watchlist → {device}: {len(macs)} MAC(s)")
+
     def publish_ota_ok(self, device: str):
         """Sendet OTA-Freigabe an einen Satelliten."""
-        self._client.publish(f"hannah/{device}/ota/ok", "", qos=1)
-        log.info(f"OTA-OK gesendet → hannah/{device}/ota/ok")
+        self._client.publish(f"hannah/satellite/{device}/ota/ok", "", qos=1)
+        log.info(f"OTA-OK gesendet → hannah/satellite/{device}/ota/ok")
 
     def publish_text_answer(self, text: str):
         """Publiziert eine Antwort auf hannah/answer (für Text-Command-Tests)."""
@@ -395,19 +416,51 @@ class MQTTHandler:
             client.subscribe(sub, qos=0)
             log.info(f"Abonniere Auto-Status: '{sub}'")
 
-        client.subscribe("hannah/+/ota/pending", qos=1)
-        log.info("OTA-Pending abonniert: 'hannah/+/ota/pending'")
+        client.subscribe("hannah/satellite/+/ota/pending", qos=1)
+        log.info("OTA-Pending abonniert: 'hannah/satellite/+/ota/pending'")
+        client.subscribe("hannah/satellite/+/firmware", qos=1)
+        log.info("Firmware-Version abonniert: 'hannah/satellite/+/firmware'")
+        client.subscribe("hannah/satellite/+/ble/report", qos=0)
+        log.info("BLE-Reports abonniert: 'hannah/satellite/+/ble/report'")
 
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
 
-        # OTA-Pending vom Satelliten?
-        if topic.endswith("/ota/pending") and topic.startswith("hannah/"):
+        # BLE-RSSI-Report vom Satelliten?
+        if topic.startswith("hannah/satellite/") and topic.endswith("/ble/report"):
             parts = topic.split("/")
-            if len(parts) == 3 and self._on_ota_pending:
+            if len(parts) == 5 and self._on_ble_report:
                 try:
                     data = json.loads(msg.payload.decode())
-                    device = parts[1]
+                    mac = data.get("mac", "")
+                    rssi = int(data.get("rssi", 0))
+                    device = parts[2]
+                    if mac:
+                        self._on_ble_report(device, mac, rssi)
+                except Exception:
+                    pass
+            return
+
+        # Firmware-Version vom Satelliten?
+        if topic.startswith("hannah/satellite/") and topic.endswith("/firmware"):
+            parts = topic.split("/")
+            if len(parts) == 4 and self._on_firmware:
+                try:
+                    data = json.loads(msg.payload.decode())
+                    version = data.get("version", "")
+                    if version:
+                        self._on_firmware(parts[2], version)
+                except Exception:
+                    pass
+            return
+
+        # OTA-Pending vom Satelliten?
+        if topic.startswith("hannah/satellite/") and topic.endswith("/ota/pending"):
+            parts = topic.split("/")
+            if len(parts) == 5 and self._on_ota_pending:
+                try:
+                    data = json.loads(msg.payload.decode())
+                    device = parts[2]
                     version = data.get("version", "")
                     if data.get("pending") and version:
                         self._on_ota_pending(device, version)
@@ -462,7 +515,7 @@ class MQTTHandler:
             ("mute",   "_on_mute"),
             ("dnd",    "_on_dnd"),
         ):
-            prefix = f"hannah/satelite/"
+            prefix = f"hannah/satellite/"
             suffix = f"/{ctrl}"
             if topic.startswith(prefix) and topic.endswith(suffix) and not topic.endswith("/state"):
                 device = topic[len(prefix):-len(suffix)]

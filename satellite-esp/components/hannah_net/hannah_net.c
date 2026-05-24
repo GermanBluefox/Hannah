@@ -64,7 +64,8 @@ static hannah_net_status_cb_t   s_status_cb   = NULL;
 static hannah_net_tts_cb_t      s_tts_cb      = NULL;
 static hannah_net_tts_end_cb_t  s_tts_end_cb  = NULL;
 static hannah_net_playback_cb_t s_playback_cb = NULL;
-static hannah_net_ota_ok_cb_t   s_ota_ok_cb   = NULL;
+static hannah_net_ota_ok_cb_t          s_ota_ok_cb          = NULL;
+static hannah_net_ble_watchlist_cb_t   s_ble_watchlist_cb   = NULL;
 
 /* ── Hilfsfunktionen ─────────────────────────────────────────────────────── */
 
@@ -231,7 +232,10 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
         snprintf(topic, sizeof(topic), "hannah/satellite/%s/mute",
                  hannah_config_get()->device_id);
         esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
-        snprintf(topic, sizeof(topic), "hannah/%s/ota/ok",
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/ota/ok",
+                 hannah_config_get()->device_id);
+        esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/ble/watchlist",
                  hannah_config_get()->device_id);
         esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
         break;
@@ -280,11 +284,18 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
 
         } else {
             char ota_ok_topic[128];
-            snprintf(ota_ok_topic, sizeof(ota_ok_topic), "hannah/%s/ota/ok",
+            snprintf(ota_ok_topic, sizeof(ota_ok_topic), "hannah/satellite/%s/ota/ok",
                      hannah_config_get()->device_id);
             if (strcmp(topic, ota_ok_topic) == 0) {
                 ESP_LOGI(TAG, "OTA-ok empfangen.");
                 if (s_ota_ok_cb) s_ota_ok_cb();
+            } else {
+                char ble_topic[128];
+                snprintf(ble_topic, sizeof(ble_topic), "hannah/satellite/%s/ble/watchlist",
+                         hannah_config_get()->device_id);
+                if (strcmp(topic, ble_topic) == 0 && s_ble_watchlist_cb) {
+                    s_ble_watchlist_cb(event->data, event->data_len);
+                }
             }
         }
         break;
@@ -511,7 +522,8 @@ void hannah_net_get_ip_str(char *buf, size_t len)
         snprintf(buf, len, "0.0.0.0");
 }
 
-void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb) { s_ota_ok_cb = cb; }
+void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb)        { s_ota_ok_cb        = cb; }
+void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb) { s_ble_watchlist_cb = cb; }
 
 void hannah_net_mqtt_publish(const char *topic, const char *payload, int qos, int retain)
 {

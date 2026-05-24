@@ -5,3 +5,4 @@ sdkconfig.ci
 managed_components/
 dependencies.lock
 .history
+.history_trim

@@ -6,6 +6,7 @@ erkennt Intents anhand ioBroker-Räumen/Functions
 und steuert Geräte direkt via MQTT.
 """
 import argparse
+import json
 import logging
 import os
 import signal
@@ -21,7 +22,7 @@ from hannah import audio as audio_mod
 from hannah import config as config_mod
 from hannah.car_tracker import CarManager, CarTracker
 from hannah.routines import RoutineManager
-from hannah.grpc_server import GrpcServer, HannahServicer, make_car_parked_event, make_resident_event, make_system_notification_event
+from hannah.grpc_server import GrpcServer, HannahServicer, make_car_parked_event, make_firmware_event, make_resident_event, make_system_notification_event
 from hannah.iobroker import IoBrokerClient
 from hannah.mqtt_handler import MQTTHandler
 from hannah.nlu import NLU, Intent, build_clarification_question, resolve_clarification_answer
@@ -35,6 +36,7 @@ from hannah.memory import LongTermMemory
 from hannah.user_registry import UserRegistry
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
+from hannah.ble_location import BleLocationEngine
 from hannah.__version__ import VERSION as HANNAH_VERSION
 
 
@@ -523,6 +525,26 @@ def main():
     mqtt_handler.set_global_mute_handler(_apply_global_mute)
     tts.set_backend_change_handler(mqtt_handler.publish_tts_backend)
 
+    # BLE-Lokalisierung
+    ble_cfg = cfg.get("ble", {})
+
+    def _get_satellite_room(device: str) -> Optional[str]:
+        all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
+        return all_devices.get(device)
+
+    ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room)
+
+    def _on_ble_location_change(tag, room, satellite, rssi):
+        room_str = room or ""
+        sat_str = satellite or ""
+        payload = json.dumps({"label": tag.label, "mac": tag.mac, "room": room_str,
+                              "satellite": sat_str, "rssi": rssi}, ensure_ascii=False)
+        mqtt_handler.publish_raw(f"hannah/ble/{tag.label}/location", payload)
+        grpc_servicer.agent_ble_update(tag.label, tag.mac, room_str, sat_str, rssi)
+
+    ble_engine.set_location_change_handler(_on_ble_location_change)
+    mqtt_handler.set_ble_report_handler(ble_engine.on_report)
+
     # Satellite-Online-Tracking: diff berechnen und per-device online/offline publishen
     _known_satellites: set[str] = set()
     _prev_satellite_map: dict[str, str] = {}
@@ -530,9 +552,12 @@ def main():
     def _on_satellite_change(satellite_map: dict[str, str]):
         nonlocal _known_satellites, _prev_satellite_map
         current = set(satellite_map.keys())
+        ble_macs = ble_engine.get_all_macs()
         for device in current - _known_satellites:
             mqtt_handler.publish_satellite_online(device, True)
             grpc_servicer.agent_satellite_update(device, satellite_map[device], "", True)
+            if ble_macs:
+                mqtt_handler.publish_ble_watchlist(device, ble_macs)
         for device in _known_satellites - current:
             mqtt_handler.publish_satellite_online(device, False)
             grpc_servicer.agent_satellite_update(device, _prev_satellite_map.get(device, ""), "", False)
@@ -777,6 +802,7 @@ def main():
         on_agent_satellite_control=_on_agent_satellite_control,
         on_agent_device_snapshot=_on_agent_device_snapshot,
         on_agent_send_residents=registry.sync,
+        on_trigger_firmware_update=lambda device: mqtt_handler.publish_ota_ok(device),
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)
@@ -795,6 +821,14 @@ def main():
         display = user["display_name"] if user else name
         grpc_servicer.publish_event(make_resident_event(name, display, "arrived"))
 
+    _satellite_firmware: dict[str, str] = {}
+
+    def _on_firmware_version(device: str, version: str):
+        _satellite_firmware[device] = version
+        log.info(f"Firmware-Version: {device} = {version}")
+        grpc_servicer.publish_event(make_firmware_event(device, version))
+        grpc_servicer.agent_firmware_event(device, version)
+
     _ota_pending: set[str] = set()
 
     def _release_ota_updates():
@@ -804,6 +838,7 @@ def main():
 
     def _on_ota_pending(device: str, version: str):
         log.info(f"OTA-Pending: {device} meldet Version {version}.")
+        grpc_servicer.agent_firmware_event(device, version, update_available=True)
         if not residents.is_home():
             mqtt_handler.publish_ota_ok(device)
         else:
@@ -828,6 +863,7 @@ def main():
         grpc_servicer.publish_event(make_resident_event(f"guest:{name}", name, "departed"))
 
     mqtt_handler.set_ota_pending_handler(_on_ota_pending)
+    mqtt_handler.set_firmware_handler(_on_firmware_version)
     residents.on_arrival(_on_arrival)
     residents.on_departure(_on_departure)
     residents.on_guest_arrival(_on_guest_arrival)

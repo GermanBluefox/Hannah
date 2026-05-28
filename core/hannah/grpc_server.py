@@ -111,6 +111,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
 
+
         # Satelliten die der Proxy gemeldet hat: {device: room}
         self._proxy_satellites: dict[str, str] = {}
         self._proxy_sat_lock = threading.Lock()
@@ -439,7 +440,6 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 ).start()
         transcript, answer, intent_name, tts_pcm, sample_rate = self._handle_satellite_audio(
             request.device_id,
-            request.room,
             request.audio_pcm,
             speaker,
         )
@@ -515,14 +515,15 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 q.put(cmd)
             return len(self._agent_queues) > 0
 
-    def agent_satellite_update(self, device_id: str, room: str, address: str, online: bool) -> bool:
-        """Push a satellite online/offline update to all connected adapters."""
-        cmd = pb.AgentCommand(satellite_update=pb.AgentSatelliteUpdate(
-            device_id=device_id,
-            room=room,
-            address=address,
-            online=online,
-        ))
+    def agent_satellite_update(self, device_id: str, room: str, address: str, online: bool,
+                               volume: int = None, mute: bool = None) -> bool:
+        """Push a satellite online/offline or state update to all connected adapters."""
+        kwargs = dict(device_id=device_id, room=room, address=address, online=online)
+        if volume is not None:
+            kwargs["volume"] = volume
+        if mute is not None:
+            kwargs["mute"] = mute
+        cmd = pb.AgentCommand(satellite_update=pb.AgentSatelliteUpdate(**kwargs))
         with self._agent_lock:
             for q in self._agent_queues:
                 q.put(cmd)
@@ -603,7 +604,10 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                         sc = msg.satellite_control
                         ctrl = sc.WhichOneof("control")
                         if ctrl:
-                            self._on_agent_satellite_control(sc.room, ctrl, getattr(sc, ctrl))
+                            self._on_agent_satellite_control(
+                                sc.room, ctrl, getattr(sc, ctrl),
+                                device_id=sc.device_id or "",
+                            )
                     elif which == "set_resident" and self._on_agent_set_resident:
                         r = msg.set_resident
                         self._on_agent_set_resident(r.resident_id, r.presence_state, r.is_guest)

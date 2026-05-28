@@ -67,6 +67,7 @@ static hannah_net_tts_end_cb_t  s_tts_end_cb  = NULL;
 static hannah_net_playback_cb_t s_playback_cb = NULL;
 static hannah_net_ota_ok_cb_t          s_ota_ok_cb          = NULL;
 static hannah_net_ble_watchlist_cb_t   s_ble_watchlist_cb   = NULL;
+static hannah_net_volume_cb_t          s_volume_cb          = NULL;
 
 /* ── Hilfsfunktionen ─────────────────────────────────────────────────────── */
 
@@ -231,7 +232,10 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
         esp_ota_mark_app_valid_cancel_rollback();
         esp_mqtt_client_subscribe(s_mqtt_client, "hannah/server", 0);
         char topic[128];
-        snprintf(topic, sizeof(topic), "hannah/satellite/%s/mute",
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/mute/set",
+                 hannah_config_get()->device_id);
+        esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/volume/set",
                  hannah_config_get()->device_id);
         esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
         snprintf(topic, sizeof(topic), "hannah/satellite/%s/ota/ok",
@@ -281,8 +285,15 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
                     udp_connect(host, port);
                 }
             }
-        } else if (strstr(topic, "/mute")) {
-            hannah_net_set_mute(data[0] == '1');
+        } else if (strstr(topic, "/mute/set")) {
+            bool muted = (data[0] == '1') || (strncmp(data, "true", 4) == 0);
+            hannah_net_set_mute(muted);
+
+        } else if (strstr(topic, "/volume/set")) {
+            int vol = atoi(data);
+            if (vol < 0)   vol = 0;
+            if (vol > 100) vol = 100;
+            if (s_volume_cb) s_volume_cb(vol);
 
         } else {
             char ota_ok_topic[128];
@@ -504,9 +515,14 @@ void hannah_net_set_hw_mute_callback(hannah_net_hw_mute_cb_t cb) { s_hw_mute_cb 
 
 void hannah_net_set_mute(bool muted)
 {
+    if (muted == s_muted) return;
     s_muted = muted;
     if (s_hw_mute_cb) s_hw_mute_cb(muted);
     ESP_LOGI(TAG, "Mute: %s", muted ? "AN" : "AUS");
+    char topic[128];
+    snprintf(topic, sizeof(topic), "hannah/satellite/%s/mute/state",
+             hannah_config_get()->device_id);
+    hannah_net_mqtt_publish(topic, muted ? "true" : "false", 1, 1);
 }
 
 bool hannah_net_is_ap_mode(void)
@@ -526,6 +542,17 @@ void hannah_net_get_ip_str(char *buf, size_t len)
 
 void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb)        { s_ota_ok_cb        = cb; }
 void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb) { s_ble_watchlist_cb = cb; }
+void hannah_net_set_volume_callback(hannah_net_volume_cb_t cb)        { s_volume_cb        = cb; }
+
+void hannah_net_publish_volume(int vol)
+{
+    char topic[128];
+    snprintf(topic, sizeof(topic), "hannah/satellite/%s/volume/state",
+             hannah_config_get()->device_id);
+    char payload[8];
+    snprintf(payload, sizeof(payload), "%d", vol);
+    hannah_net_mqtt_publish(topic, payload, 1, 1);
+}
 
 void hannah_net_mqtt_publish(const char *topic, const char *payload, int qos, int retain)
 {

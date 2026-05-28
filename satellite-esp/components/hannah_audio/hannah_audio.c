@@ -226,12 +226,14 @@ static void mic_task(void *arg)
             int v = s_volume + CONFIG_HANNAH_VOLUME_STEP;
             s_volume = v > 100 ? 100 : v;
             ESP_LOGI(TAG, "Lautstärke: %d%%", s_volume);
+            hannah_net_publish_volume(s_volume);
         }
         if (s_vol_down_req) {
             s_vol_down_req = false;
             int v = s_volume - CONFIG_HANNAH_VOLUME_STEP;
             s_volume = v < 0 ? 0 : v;
             ESP_LOGI(TAG, "Lautstärke: %d%%", s_volume);
+            hannah_net_publish_volume(s_volume);
         }
 
         size_t bytes_read = 0;
@@ -439,6 +441,13 @@ static void on_playback_cmd(const char *cmd)
 static void on_hw_mute(bool muted)
 {
     gpio_set_level(CONFIG_HANNAH_MUTE_HW_GPIO, muted ? 0 : 1);
+    hannah_led_set_state(muted ? LED_STATE_MUTE : LED_STATE_IDLE);
+}
+
+static void on_volume_set(int vol)
+{
+    s_volume = vol;
+    ESP_LOGI(TAG, "Lautstärke gesetzt: %d%%", s_volume);
 }
 
 /* ------------------------------------------------------------------ */
@@ -511,6 +520,7 @@ void hannah_audio_init(void)
     hannah_net_set_status_callback(on_status);
     hannah_net_set_playback_callback(on_playback_cmd);
     hannah_net_set_hw_mute_callback(on_hw_mute);
+    hannah_net_set_volume_callback(on_volume_set);
 
     xTaskCreate(mic_task,     "mic",     8192, NULL, 5, NULL);
     xTaskCreate(speaker_task, "speaker", 4096, NULL, 5, NULL);

@@ -24,19 +24,24 @@ const (
 	HannahService_LinkAccount_FullMethodName               = "/hannah.HannahService/LinkAccount"
 	HannahService_UnlinkAccount_FullMethodName             = "/hannah.HannahService/UnlinkAccount"
 	HannahService_SetTrustLevel_FullMethodName             = "/hannah.HannahService/SetTrustLevel"
+	HannahService_SetSystemMessages_FullMethodName         = "/hannah.HannahService/SetSystemMessages"
 	HannahService_GetDevices_FullMethodName                = "/hannah.HannahService/GetDevices"
 	HannahService_ControlDevice_FullMethodName             = "/hannah.HannahService/ControlDevice"
 	HannahService_SubmitText_FullMethodName                = "/hannah.HannahService/SubmitText"
 	HannahService_SubmitVoice_FullMethodName               = "/hannah.HannahService/SubmitVoice"
 	HannahService_Announce_FullMethodName                  = "/hannah.HannahService/Announce"
+	HannahService_Notify_FullMethodName                    = "/hannah.HannahService/Notify"
 	HannahService_GetSatellites_FullMethodName             = "/hannah.HannahService/GetSatellites"
 	HannahService_GetCarState_FullMethodName               = "/hannah.HannahService/GetCarState"
+	HannahService_GetAllCarStates_FullMethodName           = "/hannah.HannahService/GetAllCarStates"
 	HannahService_SubscribeEvents_FullMethodName           = "/hannah.HannahService/SubscribeEvents"
+	HannahService_TriggerFirmwareUpdate_FullMethodName     = "/hannah.HannahService/TriggerFirmwareUpdate"
 	HannahService_RegisterProxy_FullMethodName             = "/hannah.HannahService/RegisterProxy"
 	HannahService_SubmitSatelliteAudio_FullMethodName      = "/hannah.HannahService/SubmitSatelliteAudio"
 	HannahService_NotifySatelliteRegistered_FullMethodName = "/hannah.HannahService/NotifySatelliteRegistered"
 	HannahService_NotifySatelliteGone_FullMethodName       = "/hannah.HannahService/NotifySatelliteGone"
 	HannahService_EnrollVoiceprint_FullMethodName          = "/hannah.HannahService/EnrollVoiceprint"
+	HannahService_AgentConnect_FullMethodName              = "/hannah.HannahService/AgentConnect"
 )
 
 // HannahServiceClient is the client API for HannahService service.
@@ -49,6 +54,7 @@ type HannahServiceClient interface {
 	LinkAccount(ctx context.Context, in *LinkAccountRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	UnlinkAccount(ctx context.Context, in *UnlinkAccountRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	SetTrustLevel(ctx context.Context, in *SetTrustLevelRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	SetSystemMessages(ctx context.Context, in *SetSystemMessagesRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	// --- Device Control Menu ---
 	// Returns all rooms and devices with current state — for building control menus.
 	GetDevices(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetDevicesResponse, error)
@@ -61,16 +67,24 @@ type HannahServiceClient interface {
 	SubmitVoice(ctx context.Context, in *SubmitVoiceRequest, opts ...grpc.CallOption) (*SubmitVoiceResponse, error)
 	// Send a TTS announcement to one satellite or all ("all").
 	Announce(ctx context.Context, in *AnnounceRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// Send a notification from ioBroker to Hannah. Returns ok=true when queued.
+	// direct=true: skip LLM reformulation. severity: "alert"|"notify"|"info".
+	Notify(ctx context.Context, in *AgentNotification, opts ...grpc.CallOption) (*StatusResponse, error)
 	// List all currently registered UDP satellites.
 	GetSatellites(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetSatellitesResponse, error)
 	// --- Car ---
 	// Returns the current cached car state (available=false if no data received yet).
 	GetCarState(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*CarStateResponse, error)
+	// Returns all tracked car states (one per configured car).
+	GetAllCarStates(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetAllCarStatesResponse, error)
 	// --- Event stream ---
 	// Opens a server-side stream; Hannah pushes events as they occur.
 	// Pass event_types to filter (empty = all events).
-	// Known event types: "car.parked", "resident.arrived", "resident.departed"
+	// Known event types: "car.parked", "resident.arrived", "resident.departed", "satellite.firmware"
 	SubscribeEvents(ctx context.Context, in *EventFilter, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HannahEvent], error)
+	// --- Firmware Manager ---
+	// Trigger an immediate OTA update for a satellite (bypasses residents check).
+	TriggerFirmwareUpdate(ctx context.Context, in *TriggerFirmwareUpdateRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	// --- Satellite Proxy (Go gRPC proxy) ---
 	// Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
 	// audio commands back (for announcements). While this stream is open, Hannah
@@ -86,6 +100,12 @@ type HannahServiceClient interface {
 	NotifySatelliteGone(ctx context.Context, in *SatelliteRegistration, opts ...grpc.CallOption) (*StatusResponse, error)
 	// --- Speaker Enrollment ---
 	EnrollVoiceprint(ctx context.Context, in *EnrollVoiceprintRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// --- ioBroker Agent ---
+	// Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
+	// The adapter pushes state updates (device states, presence, text commands);
+	// Hannah pushes device-control commands and on-demand state-subscription requests back.
+	// The adapter initiates the connection; if Hannah restarts, the adapter reconnects.
+	AgentConnect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentMessage, AgentCommand], error)
 }
 
 type hannahServiceClient struct {
@@ -146,6 +166,16 @@ func (c *hannahServiceClient) SetTrustLevel(ctx context.Context, in *SetTrustLev
 	return out, nil
 }
 
+func (c *hannahServiceClient) SetSystemMessages(ctx context.Context, in *SetSystemMessagesRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, HannahService_SetSystemMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *hannahServiceClient) GetDevices(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetDevicesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetDevicesResponse)
@@ -196,6 +226,16 @@ func (c *hannahServiceClient) Announce(ctx context.Context, in *AnnounceRequest,
 	return out, nil
 }
 
+func (c *hannahServiceClient) Notify(ctx context.Context, in *AgentNotification, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, HannahService_Notify_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *hannahServiceClient) GetSatellites(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetSatellitesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSatellitesResponse)
@@ -210,6 +250,16 @@ func (c *hannahServiceClient) GetCarState(ctx context.Context, in *Empty, opts .
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CarStateResponse)
 	err := c.cc.Invoke(ctx, HannahService_GetCarState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hannahServiceClient) GetAllCarStates(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*GetAllCarStatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAllCarStatesResponse)
+	err := c.cc.Invoke(ctx, HannahService_GetAllCarStates_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +284,16 @@ func (c *hannahServiceClient) SubscribeEvents(ctx context.Context, in *EventFilt
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HannahService_SubscribeEventsClient = grpc.ServerStreamingClient[HannahEvent]
+
+func (c *hannahServiceClient) TriggerFirmwareUpdate(ctx context.Context, in *TriggerFirmwareUpdateRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, HannahService_TriggerFirmwareUpdate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 func (c *hannahServiceClient) RegisterProxy(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ProxyHeartbeat, ProxyCommand], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -288,6 +348,19 @@ func (c *hannahServiceClient) EnrollVoiceprint(ctx context.Context, in *EnrollVo
 	return out, nil
 }
 
+func (c *hannahServiceClient) AgentConnect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentMessage, AgentCommand], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HannahService_ServiceDesc.Streams[2], HannahService_AgentConnect_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AgentMessage, AgentCommand]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HannahService_AgentConnectClient = grpc.BidiStreamingClient[AgentMessage, AgentCommand]
+
 // HannahServiceServer is the server API for HannahService service.
 // All implementations must embed UnimplementedHannahServiceServer
 // for forward compatibility.
@@ -298,6 +371,7 @@ type HannahServiceServer interface {
 	LinkAccount(context.Context, *LinkAccountRequest) (*StatusResponse, error)
 	UnlinkAccount(context.Context, *UnlinkAccountRequest) (*StatusResponse, error)
 	SetTrustLevel(context.Context, *SetTrustLevelRequest) (*StatusResponse, error)
+	SetSystemMessages(context.Context, *SetSystemMessagesRequest) (*StatusResponse, error)
 	// --- Device Control Menu ---
 	// Returns all rooms and devices with current state — for building control menus.
 	GetDevices(context.Context, *Empty) (*GetDevicesResponse, error)
@@ -310,16 +384,24 @@ type HannahServiceServer interface {
 	SubmitVoice(context.Context, *SubmitVoiceRequest) (*SubmitVoiceResponse, error)
 	// Send a TTS announcement to one satellite or all ("all").
 	Announce(context.Context, *AnnounceRequest) (*StatusResponse, error)
+	// Send a notification from ioBroker to Hannah. Returns ok=true when queued.
+	// direct=true: skip LLM reformulation. severity: "alert"|"notify"|"info".
+	Notify(context.Context, *AgentNotification) (*StatusResponse, error)
 	// List all currently registered UDP satellites.
 	GetSatellites(context.Context, *Empty) (*GetSatellitesResponse, error)
 	// --- Car ---
 	// Returns the current cached car state (available=false if no data received yet).
 	GetCarState(context.Context, *Empty) (*CarStateResponse, error)
+	// Returns all tracked car states (one per configured car).
+	GetAllCarStates(context.Context, *Empty) (*GetAllCarStatesResponse, error)
 	// --- Event stream ---
 	// Opens a server-side stream; Hannah pushes events as they occur.
 	// Pass event_types to filter (empty = all events).
-	// Known event types: "car.parked", "resident.arrived", "resident.departed"
+	// Known event types: "car.parked", "resident.arrived", "resident.departed", "satellite.firmware"
 	SubscribeEvents(*EventFilter, grpc.ServerStreamingServer[HannahEvent]) error
+	// --- Firmware Manager ---
+	// Trigger an immediate OTA update for a satellite (bypasses residents check).
+	TriggerFirmwareUpdate(context.Context, *TriggerFirmwareUpdateRequest) (*StatusResponse, error)
 	// --- Satellite Proxy (Go gRPC proxy) ---
 	// Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
 	// audio commands back (for announcements). While this stream is open, Hannah
@@ -335,6 +417,12 @@ type HannahServiceServer interface {
 	NotifySatelliteGone(context.Context, *SatelliteRegistration) (*StatusResponse, error)
 	// --- Speaker Enrollment ---
 	EnrollVoiceprint(context.Context, *EnrollVoiceprintRequest) (*StatusResponse, error)
+	// --- ioBroker Agent ---
+	// Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
+	// The adapter pushes state updates (device states, presence, text commands);
+	// Hannah pushes device-control commands and on-demand state-subscription requests back.
+	// The adapter initiates the connection; if Hannah restarts, the adapter reconnects.
+	AgentConnect(grpc.BidiStreamingServer[AgentMessage, AgentCommand]) error
 	mustEmbedUnimplementedHannahServiceServer()
 }
 
@@ -360,6 +448,9 @@ func (UnimplementedHannahServiceServer) UnlinkAccount(context.Context, *UnlinkAc
 func (UnimplementedHannahServiceServer) SetTrustLevel(context.Context, *SetTrustLevelRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTrustLevel not implemented")
 }
+func (UnimplementedHannahServiceServer) SetSystemMessages(context.Context, *SetSystemMessagesRequest) (*StatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSystemMessages not implemented")
+}
 func (UnimplementedHannahServiceServer) GetDevices(context.Context, *Empty) (*GetDevicesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDevices not implemented")
 }
@@ -375,14 +466,23 @@ func (UnimplementedHannahServiceServer) SubmitVoice(context.Context, *SubmitVoic
 func (UnimplementedHannahServiceServer) Announce(context.Context, *AnnounceRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Announce not implemented")
 }
+func (UnimplementedHannahServiceServer) Notify(context.Context, *AgentNotification) (*StatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Notify not implemented")
+}
 func (UnimplementedHannahServiceServer) GetSatellites(context.Context, *Empty) (*GetSatellitesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSatellites not implemented")
 }
 func (UnimplementedHannahServiceServer) GetCarState(context.Context, *Empty) (*CarStateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCarState not implemented")
 }
+func (UnimplementedHannahServiceServer) GetAllCarStates(context.Context, *Empty) (*GetAllCarStatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAllCarStates not implemented")
+}
 func (UnimplementedHannahServiceServer) SubscribeEvents(*EventFilter, grpc.ServerStreamingServer[HannahEvent]) error {
 	return status.Error(codes.Unimplemented, "method SubscribeEvents not implemented")
+}
+func (UnimplementedHannahServiceServer) TriggerFirmwareUpdate(context.Context, *TriggerFirmwareUpdateRequest) (*StatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TriggerFirmwareUpdate not implemented")
 }
 func (UnimplementedHannahServiceServer) RegisterProxy(grpc.BidiStreamingServer[ProxyHeartbeat, ProxyCommand]) error {
 	return status.Error(codes.Unimplemented, "method RegisterProxy not implemented")
@@ -398,6 +498,9 @@ func (UnimplementedHannahServiceServer) NotifySatelliteGone(context.Context, *Sa
 }
 func (UnimplementedHannahServiceServer) EnrollVoiceprint(context.Context, *EnrollVoiceprintRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnrollVoiceprint not implemented")
+}
+func (UnimplementedHannahServiceServer) AgentConnect(grpc.BidiStreamingServer[AgentMessage, AgentCommand]) error {
+	return status.Error(codes.Unimplemented, "method AgentConnect not implemented")
 }
 func (UnimplementedHannahServiceServer) mustEmbedUnimplementedHannahServiceServer() {}
 func (UnimplementedHannahServiceServer) testEmbeddedByValue()                       {}
@@ -510,6 +613,24 @@ func _HannahService_SetTrustLevel_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HannahService_SetSystemMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetSystemMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).SetSystemMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_SetSystemMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).SetSystemMessages(ctx, req.(*SetSystemMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HannahService_GetDevices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Empty)
 	if err := dec(in); err != nil {
@@ -600,6 +721,24 @@ func _HannahService_Announce_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HannahService_Notify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentNotification)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).Notify(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_Notify_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).Notify(ctx, req.(*AgentNotification))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HannahService_GetSatellites_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Empty)
 	if err := dec(in); err != nil {
@@ -636,6 +775,24 @@ func _HannahService_GetCarState_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HannahService_GetAllCarStates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).GetAllCarStates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_GetAllCarStates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).GetAllCarStates(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HannahService_SubscribeEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(EventFilter)
 	if err := stream.RecvMsg(m); err != nil {
@@ -646,6 +803,24 @@ func _HannahService_SubscribeEvents_Handler(srv interface{}, stream grpc.ServerS
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HannahService_SubscribeEventsServer = grpc.ServerStreamingServer[HannahEvent]
+
+func _HannahService_TriggerFirmwareUpdate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TriggerFirmwareUpdateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).TriggerFirmwareUpdate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_TriggerFirmwareUpdate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).TriggerFirmwareUpdate(ctx, req.(*TriggerFirmwareUpdateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
 
 func _HannahService_RegisterProxy_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(HannahServiceServer).RegisterProxy(&grpc.GenericServerStream[ProxyHeartbeat, ProxyCommand]{ServerStream: stream})
@@ -726,6 +901,13 @@ func _HannahService_EnrollVoiceprint_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HannahService_AgentConnect_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HannahServiceServer).AgentConnect(&grpc.GenericServerStream[AgentMessage, AgentCommand]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HannahService_AgentConnectServer = grpc.BidiStreamingServer[AgentMessage, AgentCommand]
+
 // HannahService_ServiceDesc is the grpc.ServiceDesc for HannahService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -754,6 +936,10 @@ var HannahService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HannahService_SetTrustLevel_Handler,
 		},
 		{
+			MethodName: "SetSystemMessages",
+			Handler:    _HannahService_SetSystemMessages_Handler,
+		},
+		{
 			MethodName: "GetDevices",
 			Handler:    _HannahService_GetDevices_Handler,
 		},
@@ -774,12 +960,24 @@ var HannahService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HannahService_Announce_Handler,
 		},
 		{
+			MethodName: "Notify",
+			Handler:    _HannahService_Notify_Handler,
+		},
+		{
 			MethodName: "GetSatellites",
 			Handler:    _HannahService_GetSatellites_Handler,
 		},
 		{
 			MethodName: "GetCarState",
 			Handler:    _HannahService_GetCarState_Handler,
+		},
+		{
+			MethodName: "GetAllCarStates",
+			Handler:    _HannahService_GetAllCarStates_Handler,
+		},
+		{
+			MethodName: "TriggerFirmwareUpdate",
+			Handler:    _HannahService_TriggerFirmwareUpdate_Handler,
 		},
 		{
 			MethodName: "SubmitSatelliteAudio",
@@ -807,6 +1005,12 @@ var HannahService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "RegisterProxy",
 			Handler:       _HannahService_RegisterProxy_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "AgentConnect",
+			Handler:       _HannahService_AgentConnect_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

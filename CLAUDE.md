@@ -300,6 +300,8 @@ Hannah liest Geräte aus `0_userdata.0.virtualDevice.<Kategorie>.<Etage>.<Raum>.
 - **Hannah Android-App**: Soft-Satellite als App — primär Sprachsteuerung/Announcements, optional Sensordaten (Barometer, Temperatur) per MQTT wenn aktiviert. Gleiche MQTT-Topics wie Hardware-Satelliten, keine neue Infrastruktur nötig. Setzt Satellit-Ownership voraus (siehe unten).
 - **Satellit-Ownership + personalisiertes Routing** (Roadmap): Satelliten werden Roomies zugeordnet. Announcements an eine Person spielen auf deren Satelliten + raumlosen Satelliten, nicht auf fremde. Trigger- und Routinen-Engine werden per-Person konfigurierbar (eigene YAML/Config pro Person). Routinen/Trigger können Satellit oder Raum als Ziel-Constraint haben (z.B. "nur auf Test-ESP"). Handy-App gehört per Definition einer Person. Grundlage für alle weiteren Personalisierungs-Features.
 
+- **Update-Server als universelle Deployment-Pipeline** (Roadmap): Hannah-AutoDeploy lädt nicht mehr aus git, sondern vom Update-Server. CI lädt kompilierte Go-Binaries und Python-tar-Archive hoch. Channel-Format: `satellite-esp-stable`, `satellite-esp-dev`, `core-stable`, `core-dev` etc. Fine-Grained Access Tokens: CI bekommt breite Schreibrechte, jede Komponente nur Leserecht auf ihren Channel. Update-Server unterstützt bereits beliebige Dateitypen. Fehlt noch: Channel-Management im Update-Server (in Arbeit).
+
 **Was bereits läuft:**
 - Hannah Core vollständig funktionsfähig (STT/NLU/TTS/ioBroker-Steuerung)
 - gRPC-Server mit allen definierten Methoden implementiert

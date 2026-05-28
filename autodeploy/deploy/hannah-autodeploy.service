@@ -1,0 +1,16 @@
+[Unit]
+Description=Hannah AutoDeploy Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/hannah/autodeploy/venv/bin/python /opt/hannah/autodeploy/autodeploy.py
+Restart=on-failure
+RestartSec=30
+Environment=AUTODEPLOY_CONFIG=/etc/hannah/autodeploy.yaml
+Environment=AUTODEPLOY_STATE=/var/lib/hannah/autodeploy-state.json
+Environment=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+[Install]
+WantedBy=multi-user.target

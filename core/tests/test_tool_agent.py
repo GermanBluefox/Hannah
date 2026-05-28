@@ -1,0 +1,279 @@
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from hannah.iobroker import Device
+from hannah.llm import DummyLLM
+from hannah.tool_agent import ToolAgent
+
+
+def _make_iobroker(devices: list[Device] | None = None) -> MagicMock:
+    """Helper: IoBrokerClient-Mock mit optionaler Device-Liste."""
+    iobroker = MagicMock()
+    devs = devices or []
+    iobroker.rooms = {d.room.lower(): d.room for d in devs}
+    by_key = {d.key: d for d in devs}
+    iobroker.devices = {d.room.lower(): by_key for d in devs}
+    iobroker._devices_by_id = {d.id: d for d in devs}
+    return iobroker
+
+
+def _make_device(
+    device_id: str = "javascript.0.virtualDevice.Licht.EG.Wohnzimmer.Decke",
+    name: str = "Decke",
+    room: str = "Wohnzimmer",
+    floor: str = "EG",
+    category: str = "Licht",
+    states: dict | None = None,
+    current: dict | None = None,
+) -> Device:
+    return Device(
+        id=device_id,
+        name=name,
+        key=name.lower(),
+        room=room,
+        floor=floor,
+        category=category,
+        states=states or {"on": f"{device_id}.on"},
+        current=current or {"on": True},
+    )
+
+
+def _llm_response(content: str = "", tool_calls: list | None = None) -> dict:
+    return {
+        "content": content,
+        "tool_calls": tool_calls or [],
+        "finish_reason": "tool_calls" if tool_calls else "stop",
+    }
+
+
+def _tool_call(name: str, args: dict, call_id: str = "call_1") -> dict:
+    return {
+        "id": call_id,
+        "function": {"name": name, "arguments": json.dumps(args)},
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ToolAgent.run()
+
+
+class TestToolAgentRun:
+    def test_no_tool_calls_returns_content(self):
+        llm = MagicMock()
+        llm.chat_with_tools.return_value = _llm_response(content="Kein Problem.")
+        agent = ToolAgent(llm, _make_iobroker())
+
+        result = agent.run("test")
+
+        assert result == "Kein Problem."
+
+    def test_speak_tool_result_returned_over_final_content(self):
+        llm = MagicMock()
+        llm.chat_with_tools.side_effect = [
+            _llm_response(tool_calls=[_tool_call("speak", {"text": "Licht ist aus."})]),
+            _llm_response(content="Fertig."),
+        ]
+        agent = ToolAgent(llm, _make_iobroker())
+
+        result = agent.run("Mach das Licht aus.")
+
+        assert result == "Licht ist aus."
+
+    def test_multiple_speak_calls_joined(self):
+        llm = MagicMock()
+        llm.chat_with_tools.side_effect = [
+            _llm_response(
+                tool_calls=[
+                    _tool_call("speak", {"text": "Wohnzimmer aus."}, call_id="c1"),
+                    _tool_call("speak", {"text": "Küche aus."}, call_id="c2"),
+                ]
+            ),
+            _llm_response(content=""),
+        ]
+        agent = ToolAgent(llm, _make_iobroker())
+
+        result = agent.run("Alles aus.")
+
+        assert result == "Wohnzimmer aus.\nKüche aus."
+
+    def test_final_content_used_when_no_speak(self):
+        llm = MagicMock()
+        llm.chat_with_tools.side_effect = [
+            _llm_response(tool_calls=[_tool_call("get_all_devices", {})]),
+            _llm_response(content="Es gibt keine Geräte."),
+        ]
+        agent = ToolAgent(llm, _make_iobroker())
+
+        result = agent.run("Was gibt es?")
+
+        assert result == "Es gibt keine Geräte."
+
+    def test_max_iterations_returns_empty_without_speak(self):
+        llm = MagicMock()
+        llm.chat_with_tools.return_value = _llm_response(
+            tool_calls=[_tool_call("get_all_devices", {})]
+        )
+        agent = ToolAgent(llm, _make_iobroker())
+
+        result = agent.run("endlosschleife")
+
+        assert result == ""
+
+    def test_max_iterations_returns_spoken_parts(self):
+        responses = [
+            _llm_response(tool_calls=[_tool_call("speak", {"text": f"Teil {i}"})])
+            for i in range(10)
+        ]
+        llm = MagicMock()
+        llm.chat_with_tools.side_effect = responses
+        agent = ToolAgent(llm, _make_iobroker())
+
+        result = agent.run("endlosschleife")
+
+        assert "Teil 0" in result
+
+    def test_system_prompt_and_history_passed_to_llm(self):
+        llm = MagicMock()
+        llm.chat_with_tools.return_value = _llm_response(content="OK")
+        agent = ToolAgent(llm, _make_iobroker())
+
+        agent.run(
+            "text",
+            system_prompt="Du bist Hannah.",
+            history=[{"role": "user", "content": "Hallo"}, {"role": "assistant", "content": "Hi"}],
+        )
+
+        messages = llm.chat_with_tools.call_args[0][0]
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"].startswith("Du bist Hannah.")
+        assert messages[1]["content"] == "Hallo"
+        assert messages[-1] == {"role": "user", "content": "text"}
+
+    def test_tool_result_appended_to_messages(self):
+        dev = _make_device()
+        iobroker = _make_iobroker([dev])
+        llm = MagicMock()
+        llm.chat_with_tools.side_effect = [
+            _llm_response(tool_calls=[_tool_call("get_all_devices", {})]),
+            _llm_response(content="Fertig."),
+        ]
+        agent = ToolAgent(llm, iobroker)
+
+        agent.run("Zeig Geräte")
+
+        second_call_messages = llm.chat_with_tools.call_args_list[1][0][0]
+        tool_result_msg = next(m for m in second_call_messages if m.get("role") == "tool")
+        content = json.loads(tool_result_msg["content"])
+        assert isinstance(content, list)
+        assert content[0]["id"] == dev.id
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tool dispatch
+
+
+class TestToolDispatch:
+    def setup_method(self):
+        self.dev = _make_device(
+            device_id="javascript.0.virtualDevice.Licht.EG.Wohnzimmer.Decke",
+            name="Decke",
+            room="Wohnzimmer",
+            states={"on": "javascript.0.virtualDevice.Licht.EG.Wohnzimmer.Decke.on"},
+            current={"on": False},
+        )
+        self.iobroker = _make_iobroker([self.dev])
+        self.agent = ToolAgent(MagicMock(), self.iobroker)
+
+    def test_get_all_devices_structure(self):
+        result = self.agent._get_all_devices()
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        item = result[0]
+        assert item["id"] == self.dev.id
+        assert item["name"] == "Decke"
+        assert item["room"] == "Wohnzimmer"
+        assert item["floor"] == "EG"
+        assert item["category"] == "Licht"
+        assert "on" in item["state_keys"]
+
+    def test_get_device_state_found(self):
+        result = self.agent._get_device_state(self.dev.id)
+
+        assert result["id"] == self.dev.id
+        assert result["current"] == {"on": False}
+
+    def test_get_device_state_not_found(self):
+        result = self.agent._get_device_state("nicht.vorhanden")
+
+        assert "error" in result
+        assert "nicht.vorhanden" in result["error"]
+
+    def test_set_device_state_calls_setter(self):
+        self.iobroker.set_state.return_value = True
+
+        result = self.agent._set_device_state(
+            "javascript.0.virtualDevice.Licht.EG.Wohnzimmer.Decke.on", True
+        )
+
+        self.iobroker.set_state.assert_called_once_with(
+            "javascript.0.virtualDevice.Licht.EG.Wohnzimmer.Decke.on", True
+        )
+        assert result == {"ok": True}
+
+    def test_set_device_state_returns_setter_result(self):
+        self.iobroker.set_state.return_value = False
+
+        result = self.agent._set_device_state("some.state", 42)
+
+        assert result == {"ok": False}
+
+    def test_speak_appends_to_spoken(self):
+        spoken: list[str] = []
+
+        result = self.agent._dispatch("speak", {"text": "Hallo!"}, spoken)
+
+        assert result == {"ok": True}
+        assert spoken == ["Hallo!"]
+
+    def test_unknown_tool_returns_error(self):
+        result = self.agent._dispatch("fly_to_moon", {}, [])
+
+        assert "error" in result
+        assert "fly_to_moon" in result["error"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# LLMClient default chat_with_tools
+
+
+class TestDefaultChatWithTools:
+    def test_dummy_llm_returns_no_tool_calls(self):
+        llm = DummyLLM("Fallback.")
+
+        result = llm.chat_with_tools(
+            messages=[{"role": "user", "content": "test"}],
+            tools=[],
+        )
+
+        assert result["tool_calls"] == []
+        assert result["finish_reason"] == "stop"
+        assert result["content"] == "Fallback."
+
+    def test_default_extracts_last_user_message(self):
+        llm = DummyLLM("antwort")
+
+        result = llm.chat_with_tools(
+            messages=[
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "erste frage"},
+                {"role": "assistant", "content": "erste antwort"},
+                {"role": "user", "content": "zweite frage"},
+            ],
+            tools=[],
+        )
+
+        assert result["content"] == "antwort"
+        assert result["tool_calls"] == []

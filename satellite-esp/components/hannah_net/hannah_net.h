@@ -59,6 +59,13 @@ void hannah_net_set_mute(bool muted);
 typedef void (*hannah_net_hw_mute_cb_t)(bool muted);
 void hannah_net_set_hw_mute_callback(hannah_net_hw_mute_cb_t cb);
 
+/* Volume-Callback: wird aufgerufen wenn hannah/satellite/<device>/volume/set empfangen. */
+typedef void (*hannah_net_volume_cb_t)(int volume);
+void hannah_net_set_volume_callback(hannah_net_volume_cb_t cb);
+
+/* Publiziert den aktuellen Volume-Level auf hannah/satellite/<device>/volume/state. */
+void hannah_net_publish_volume(int vol);
+
 /* True wenn WiFi im AP-Setup-Modus läuft (keine STA-Verbindung). */
 bool hannah_net_is_ap_mode(void);
 

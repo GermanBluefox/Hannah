@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
 hannah — Voice-Assistant Middleware
-Empfängt Audio via MQTT oder UDP, transkribiert mit Whisper,
+Empfängt Audio via UDP oder gRPC-Proxy, transkribiert mit Whisper,
 erkennt Intents anhand ioBroker-Räumen/Functions
-und steuert Geräte direkt via MQTT.
+und steuert Geräte via ioBroker REST-API.
 """
 import argparse
+import datetime
 import json
 import logging
 import os
+import pathlib
 import signal
 import subprocess
 import sys
 import tempfile
 import threading
+import wave
 from typing import Optional
 
 import numpy as np
@@ -32,11 +35,13 @@ from hannah.tts import TTS
 from hannah.udp_server import UDPServer
 from hannah.conversation import ConversationContext
 from hannah.llm import load as load_llm, prepare_prompt
+from hannah.tool_agent import ToolAgent
 from hannah.memory import LongTermMemory
 from hannah.user_registry import UserRegistry
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
 from hannah.ble_location import BleLocationEngine
+from hannah.timers import TimerManager, AlarmManager, format_duration, next_alarm_dt
 from hannah.__version__ import VERSION as HANNAH_VERSION
 
 
@@ -88,6 +93,7 @@ def main():
 
     llm = load_llm(cfg.get("llm", {}))
     llm_system_prompt: str = cfg.get("llm", {}).get("system_prompt", "")
+    tool_agent = ToolAgent(llm, iobroker)
 
     mem_cfg = cfg.get("memory", {})
     memory = LongTermMemory(
@@ -100,7 +106,7 @@ def main():
         "Konzentriere dich auf das Wesentliche: worüber wurde gesprochen, was hat die Person "
         "erwähnt oder gefragt. Antworte nur mit dem Satz, ohne Einleitung."
     )
-    _ANON_SOURCES = {"anon", "mqtt", "grpc-voice"}
+    _ANON_SOURCES = {"anon", "grpc-voice"}
 
     def _on_conversation_end(source: str, history: list):
         if source in _ANON_SOURCES or not history:
@@ -138,9 +144,8 @@ def main():
 
     # ------------------------------------------------------------------
     # Kern-Pipeline: numpy-Array → Intent → Gerät schalten (Sprach-Pfad)
-    # Wird von MQTT- und UDP-Pfad gleichermaßen genutzt.
 
-    def pipeline(device: str, audio_array, publish_error, publish_text, publish_intent, publish_answer):
+    def pipeline(device: str, audio_array, publish_error, publish_answer):
         # STT
         try:
             text, no_speech_prob = stt.transcribe(audio_array)
@@ -154,9 +159,6 @@ def main():
             return
 
         log.info(f"[{device}] Text: '{text}'")
-        publish_text(text)
-        _room = (udp_server.get_registered_room(device) or device_rooms.get(device, device)).lower()
-        mqtt_handler.publish_transcript(_room, text)
 
         # Routine-Check vor NLU
         routine = routine_manager.match(text)
@@ -165,7 +167,6 @@ def main():
                 mqtt_handler.publish_raw(action.topic, action.value)
             if routine.reply:
                 _handle_feedback(device, True, routine.reply)
-            publish_intent(Intent(name="Routine", value=routine.name, raw_text=text))
             return
 
         # Offene Rückfrage auflösen
@@ -181,7 +182,6 @@ def main():
                 conv_ctx.update_from_intent(device, orig)
                 if count == 0:
                     _handle_feedback(device, False, "Tut mir leid, ich weiß nicht was du meinst.")
-                publish_intent(orig)
                 return
             # Keine Übereinstimmung → Rückfrage verwerfen, normal weiterverarbeiten
             conv_ctx.clear_clarification(device)
@@ -232,15 +232,24 @@ def main():
             targets = _resolve_targets(intent.room_id or device)
             for t in targets:
                 udp_server.send_command(t, {"type": cmd_type})
+        elif intent.name == "SetTimer":
+            seconds = int(intent.value)
+            timer_manager.set(device, seconds, lambda d: _handle_feedback(d, True, "Timer abgelaufen."))
+            _handle_feedback(device, True, f"Timer für {format_duration(seconds)} gesetzt.")
+        elif intent.name == "SetAlarm":
+            alarm_cfg = cfg.get("alarm", {})
+            target = alarm_cfg.get("satellite") or device
+            alarm_manager.set(target, intent.value, set_by=device)
+            dt = next_alarm_dt(intent.value)
+            label = f"morgen um {dt.strftime('%H:%M')} Uhr" if dt.date() > datetime.datetime.now().date() else f"um {dt.strftime('%H:%M')} Uhr"
+            _handle_feedback(device, True, f"Wecker gestellt {label}.")
         elif intent.name == "SetDND":
             active = intent.value == "on"
             _apply_global_dnd(active)
-            mqtt_handler.publish_global_dnd(active)
             _handle_feedback(device, True, "Nicht stören aktiv." if active else "Nicht stören deaktiviert.")
         elif intent.name == "SetMute":
             active = intent.value == "on"
             _apply_global_mute(active)
-            mqtt_handler.publish_global_mute(active)
             _handle_feedback(device, True, "Mikrofone stumm." if active else "Mikrofone wieder aktiv.")
         elif intent.name == "Smalltalk":
             history = conv_ctx.get_llm_history(device)
@@ -263,8 +272,6 @@ def main():
                 log.warning(f"[{device}] Keine States gesetzt — Intent nicht auflösbar.")
                 _handle_feedback(device, False, "Tut mir leid, ich weiß nicht was du meinst.")
 
-        publish_intent(intent)
-
     # ------------------------------------------------------------------
     def _speaker_context(speaker_roomie_id: str) -> str:
         """Gibt einen Zusatz-Abschnitt für den System-Prompt zurück der Sprecher-Info enthält."""
@@ -286,8 +293,8 @@ def main():
     def _handle_text(text: str, speaker_roomie_id: str = "", source: str = "") -> tuple[str, str]:
         """
         Verarbeitet einen Text-Befehl durch NLU und gibt (Antwort, Intent-Name) zurück.
-        Kein MQTT, kein TTS — reines Text-in/Text-out.
-        Wird von process_text_command (MQTT) und dem gRPC-Server (Telegram/Satelliten) genutzt.
+        Kein TTS — reines Text-in/Text-out.
+        Wird vom gRPC-Server (Telegram/Satelliten/ioBroker-Adapter) genutzt.
 
         speaker_roomie_id: optionale Roomie-ID aus Voice-ID-Erkennung.
         source: Kontext-Schlüssel (Gerät, Roomie-ID, Kanal). Leer = speaker_roomie_id oder "anon".
@@ -367,24 +374,38 @@ def main():
         elif intent.name == "SetDND":
             active = intent.value == "on"
             _apply_global_dnd(active)
-            mqtt_handler.publish_global_dnd(active)
             answer = "Nicht stören aktiv." if active else "Nicht stören deaktiviert."
         elif intent.name == "SetMute":
             active = intent.value == "on"
             _apply_global_mute(active)
-            mqtt_handler.publish_global_mute(active)
             answer = "Mikrofone stumm." if active else "Mikrofone wieder aktiv."
+        elif intent.name == "SetAlarm":
+            alarm_cfg = cfg.get("alarm", {})
+            target = alarm_cfg.get("satellite") or _source
+            alarm_manager.set(target, intent.value, set_by=_source)
+            dt = next_alarm_dt(intent.value)
+            label = f"morgen um {dt.strftime('%H:%M')} Uhr" if dt.date() > datetime.datetime.now().date() else f"um {dt.strftime('%H:%M')} Uhr"
+            answer = f"Wecker gestellt {label}."
         elif intent.name == "Smalltalk":
             sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_roomie_id)
             history = conv_ctx.get_llm_history(_source)
-            answer = llm.chat(text, system_prompt=sp, history=history)
-            conv_ctx.add_llm_exchange(_source, text, answer)
-            conv_ctx.set_smalltalk_active(_source, True)
+            answer = tool_agent.run(text, system_prompt=sp, history=history)
+            if answer:
+                conv_ctx.add_llm_exchange(_source, text, answer)
+                conv_ctx.set_smalltalk_active(_source, True)
+            else:
+                answer = "Das habe ich leider nicht verstanden."
         elif intent.name == "Query":
             answer = iobroker.answer_query(intent) or "Keine Antwort verfügbar."
             conv_ctx.update_from_intent(_source, intent)
         elif intent.name == "Unknown":
-            answer = "Intent nicht erkannt."
+            sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_roomie_id)
+            history = conv_ctx.get_llm_history(_source)
+            answer = tool_agent.run(text, system_prompt=sp, history=history)
+            if answer:
+                conv_ctx.add_llm_exchange(_source, text, answer)
+            else:
+                answer = "Das habe ich leider nicht verstanden."
         else:
             count = iobroker.execute(intent)
             if count > 0:
@@ -394,43 +415,20 @@ def main():
 
         return answer, intent.name
 
-    def process_text_command(text: str):
-        """Text-Command direkt aus MQTT — überspringt STT und TTS/UDP."""
-        answer, _ = _handle_text(text, source="mqtt")
-        mqtt_handler.publish_text_answer(answer)
-
     # ── Satellit-Steuerung: Volume / Mute / DND ───────────────────────────────
     _global_volume: int = 80          # 0-100
     _device_volume: dict[str, int] = {}
     _device_mute:   dict[str, bool] = {}
     _device_dnd:    dict[str, bool] = {}
 
-    def _get_volume(device: str) -> int:
-        return _device_volume.get(device, _global_volume)
-
-    def _scale_pcm(pcm: bytes, volume: int) -> bytes:
-        if volume == 100:
-            return pcm
-        factor = volume / 100.0
-        arr = np.frombuffer(pcm, dtype=np.int16)
-        scaled = np.clip(np.round(arr * factor), -32768, 32767).astype(np.int16)
-        return scaled.tobytes()
-
     def _send_audio(target: str, pcm: bytes, rate: int, label: str = ""):
-        """Sendet PCM an einen Satelliten — mit Lautstärke-Skalierung."""
-        pcm = _scale_pcm(pcm, _get_volume(target))
-        _all = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
-        _room = _all.get(target, target).lower()
-        mqtt_handler.publish_speaking(_room, True)
+        """Sendet PCM an einen Satelliten."""
         if grpc_servicer.has_proxy():
             grpc_servicer.push_audio_to_proxy(target, pcm, rate)
             log.info(f"{label}Announcement → {target} (via Proxy)")
         else:
-            mqtt_handler.publish_satellite_status(target, "speaking")
             udp_server.send_tts(target, pcm, sample_rate=rate)
-            mqtt_handler.publish_satellite_status(target, "idle")
             log.info(f"{label}Announcement → {target} (via UDP)")
-        mqtt_handler.publish_speaking(_room, False)
 
     def _resolve_targets(device: str, label: str = "") -> list[str]:
         """Löst device/room/group/'all' auf eine Liste von Ziel-Geräten auf."""
@@ -458,17 +456,30 @@ def main():
         nonlocal _global_volume
         if device:
             _device_volume[device] = level
-            mqtt_handler.publish_volume_state(level, device)
             log.info(f"Lautstärke {device}: {level}%")
+            all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
+            room = all_devices.get(device, "")
+            grpc_servicer.agent_satellite_update(device, room, "", True, volume=level)
         else:
             _global_volume = level
-            mqtt_handler.publish_volume_state(level)
+            for d in _resolve_targets("all"):
+                _device_volume[d] = level
+                mqtt_handler.publish_volume_set(d, level)
             log.info(f"Lautstärke global: {level}%")
 
     def _on_mute(device: str, muted: bool):
+        if _device_mute.get(device) == muted:
+            return
         _device_mute[device] = muted
-        mqtt_handler.publish_mute_state(device, muted)
         log.info(f"Mute {device}: {muted}")
+        all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
+        room = all_devices.get(device, "")
+        grpc_servicer.agent_satellite_update(device, room, "", True, mute=muted)
+        if room:
+            for sibling, sibling_room in all_devices.items():
+                if sibling != device and sibling_room.lower() == room.lower():
+                    mqtt_handler.publish_mute_set(sibling, muted)
+                    _device_mute[sibling] = muted
 
     def _on_dnd(device: str, active: bool):
         _device_dnd[device] = active
@@ -483,10 +494,10 @@ def main():
         log.info(f"Globales DND: {active}")
 
     def _apply_global_mute(active: bool):
-        """Setzt Mute auf allen bekannten Satelliten und publiziert den globalen State."""
+        """Setzt Mute auf allen bekannten Satelliten."""
         for device in _resolve_targets("all"):
             _device_mute[device] = active
-            mqtt_handler.publish_mute_state(device, active)
+            mqtt_handler.publish_mute_set(device, active)
         log.info(f"Globales Mute: {active}")
 
     # ── Announcements ─────────────────────────────────────────────────────────
@@ -517,13 +528,9 @@ def main():
     mqtt_handler.set_announcement_handler(process_announcement)
     mqtt_handler.set_room_announce_handler(process_room_announce)
     mqtt_handler.set_room_announce_ssml_handler(process_ssml_announcement)
-    mqtt_handler.set_text_command_handler(process_text_command)
     mqtt_handler.set_volume_handler(_on_volume)
     mqtt_handler.set_mute_handler(_on_mute)
     mqtt_handler.set_dnd_handler(_on_dnd)
-    mqtt_handler.set_global_dnd_handler(_apply_global_dnd)
-    mqtt_handler.set_global_mute_handler(_apply_global_mute)
-    tts.set_backend_change_handler(mqtt_handler.publish_tts_backend)
 
     # BLE-Lokalisierung
     ble_cfg = cfg.get("ble", {})
@@ -533,6 +540,11 @@ def main():
         return all_devices.get(device)
 
     ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room)
+    timer_manager = TimerManager()
+    alarm_manager = AlarmManager(
+        persist_path=cfg.get("alarm", {}).get("persist", "alarms.json"),
+        on_fire=lambda alarm_id, target: _handle_feedback(target, True, "Wecker! Guten Morgen!"),
+    )
 
     def _on_ble_location_change(tag, room, satellite, rssi):
         room_str = room or ""
@@ -545,6 +557,19 @@ def main():
     ble_engine.set_location_change_handler(_on_ble_location_change)
     mqtt_handler.set_ble_report_handler(ble_engine.on_report)
 
+    # Connect-Sound: einmalig beim Start laden
+    _connect_pcm: Optional[bytes] = None
+    _connect_rate: int = 0
+    _connect_sound_path = pathlib.Path(__file__).parent / "sounds" / "satellite_connected.wav"
+    if _connect_sound_path.exists():
+        try:
+            with wave.open(str(_connect_sound_path), "rb") as _wf:
+                _connect_pcm = _wf.readframes(_wf.getnframes())
+                _connect_rate = _wf.getframerate()
+            log.info(f"Connect-Sound geladen: {_connect_sound_path.name} ({_connect_rate} Hz)")
+        except Exception as _exc:
+            log.warning(f"Connect-Sound konnte nicht geladen werden: {_exc}")
+
     # Satellite-Online-Tracking: diff berechnen und per-device online/offline publishen
     _known_satellites: set[str] = set()
     _prev_satellite_map: dict[str, str] = {}
@@ -554,16 +579,19 @@ def main():
         current = set(satellite_map.keys())
         ble_macs = ble_engine.get_all_macs()
         for device in current - _known_satellites:
-            mqtt_handler.publish_satellite_online(device, True)
             grpc_servicer.agent_satellite_update(device, satellite_map[device], "", True)
             if ble_macs:
                 mqtt_handler.publish_ble_watchlist(device, ble_macs)
+            if _connect_pcm:
+                threading.Thread(
+                    target=_send_audio,
+                    args=(device, _connect_pcm, _connect_rate),
+                    daemon=True,
+                ).start()
         for device in _known_satellites - current:
-            mqtt_handler.publish_satellite_online(device, False)
             grpc_servicer.agent_satellite_update(device, _prev_satellite_map.get(device, ""), "", False)
         _known_satellites = current
         _prev_satellite_map = dict(satellite_map)
-        mqtt_handler.publish_rooms(satellite_map)
     trigger_engine = TriggerEngine(
         path=cfg.get("triggers_file", "triggers.yaml"),
         announce_fn=process_announcement,
@@ -640,7 +668,7 @@ def main():
 
         return transcript, answer, intent_name, audio_ogg_out
 
-    def _handle_satellite_audio(device: str, room: str, pcm_bytes: bytes, speaker_roomie_id: str = "") -> tuple[str, str, str, bytes, int]:
+    def _handle_satellite_audio(device: str, pcm_bytes: bytes, speaker_roomie_id: str = "") -> tuple[str, str, str, bytes, int]:
         """
         Verarbeitet eine vollständige Satellit-Aufnahme via Go-Proxy:
         Raw PCM → STT → NLU → TTS → (transcript, answer, intent_name, tts_pcm, sample_rate)
@@ -665,12 +693,6 @@ def main():
         log.info(f"[{device}] Satellit-Transkript: {transcript!r}"
                  + (f" (Sprecher: {speaker_roomie_id})" if speaker_roomie_id else ""))
         answer, intent_name = _handle_text(transcript, speaker_roomie_id=speaker_roomie_id, source=device)
-
-        mqtt_handler.publish_text(device, transcript)
-        mqtt_handler.publish_answer(device, answer)
-        mqtt_handler.publish_transcript(room.lower(), transcript)
-        if speaker_roomie_id:
-            mqtt_handler.publish_speaker(speaker_roomie_id)
 
         tts_pcm = b""
         sample_rate = 0
@@ -732,25 +754,28 @@ def main():
         residents.update(topic, str(presence_state))
 
     def _on_agent_text_command(text: str) -> tuple[str, str]:
-        answer, intent_name = _handle_text(text, source="iobroker")
-        mqtt_handler.publish_text_answer(answer)
-        return answer, intent_name
+        return _handle_text(text, source="iobroker")
 
     def _on_agent_set_resident(resident_id: str, presence_state: int, _is_guest: bool):
         residents.set_presence(resident_id, presence_state)
 
-    def _on_agent_satellite_control(room: str, key: str, value: object):
-        devices = udp_server.registered_devices()
-        targets = [d for d, r in devices.items() if room == "all" or r.lower() == room.lower()]
+    def _on_agent_satellite_control(room: str, key: str, value: object, device_id: str = ""):
+        all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
+        if device_id:
+            targets = [device_id] if device_id in all_devices else []
+        else:
+            targets = [d for d, r in all_devices.items() if room == "all" or r.lower() == room.lower()]
         if key == "mute":
             for d in targets:
-                mqtt_handler.publish_mute_state(d, bool(value))
+                _device_mute[d] = bool(value)
+                mqtt_handler.publish_mute_set(d, bool(value))
         elif key == "dnd":
             for d in targets:
                 mqtt_handler.publish_dnd_state(d, bool(value))
         elif key == "volume":
             for d in targets:
-                mqtt_handler.publish_volume_state(int(value), d)
+                _device_volume[d] = int(value)
+                mqtt_handler.publish_volume_set(d, int(value))
         elif key in ("announcement", "announcement_ssml"):
             if tts.enabled:
                 result = (tts.synthesize_ssml(str(value)) if key == "announcement_ssml"
@@ -812,7 +837,7 @@ def main():
     # Presence-Updates kommen via gRPC (_on_agent_resident); MQTT wird nur noch
     # für das Zurückschreiben von Presence-States in den Residents-Adapter genutzt.
 
-    residents = ResidentsClient(cfg.get("residents", {}), mqtt_handler.publish_raw)
+    residents = ResidentsClient(cfg.get("residents", {}))
     residents.set_setter(grpc_servicer.agent_set_resident)
 
     def _on_arrival(name: str):
@@ -956,40 +981,28 @@ def main():
     # UDP-Pfad
 
     def process_audio_udp(device: str, raw_pcm: bytes):
-        mqtt_handler.publish_satellite_status(device, "processing")
         try:
             audio_array = audio_mod.from_raw_pcm(raw_pcm, audio_cfg)
         except Exception as e:
             log.error(f"[{device}] UDP Audio-Konvertierung fehlgeschlagen: {e}")
-            mqtt_handler.publish_satellite_status(device, "idle")
             return
 
         if len(audio_array) == 0:
-            mqtt_handler.publish_satellite_status(device, "idle")
             return
 
         pipeline(
             device,
             audio_array,
             publish_error   = lambda m: log.error(f"[{device}] {m}"),
-            publish_text    = lambda t: mqtt_handler.publish_text(device, t),
             publish_answer  = lambda a: _handle_udp_answer(device, a),
-            publish_intent  = lambda i: mqtt_handler.publish_intent(device, i),
         )
-        # idle wird von _handle_udp_answer/_handle_feedback gesetzt (nach TTS),
-        # oder hier wenn kein TTS folgt
-        if not tts.enabled:
-            mqtt_handler.publish_satellite_status(device, "idle")
 
     def _handle_udp_answer(device: str, answer: str):
-        mqtt_handler.publish_answer(device, answer)
         if tts.enabled:
             result = tts.synthesize(answer)
             if result:
                 pcm, rate = result
-                mqtt_handler.publish_satellite_status(device, "speaking")
                 udp_server.send_tts(device, pcm, sample_rate=rate)
-        mqtt_handler.publish_satellite_status(device, "idle")
 
     def _handle_feedback(satellite_device: str, is_success: bool, text: str):
         """
@@ -1004,32 +1017,22 @@ def main():
             # Erfolgreiche Steuerung: Confirmation-Ton
             if tts.enabled:
                 pcm, rate = tts.confirmation_tone()
-                mqtt_handler.publish_satellite_status(satellite_device, "speaking")
                 udp_server.send_tts(satellite_device, pcm, sample_rate=rate)
         elif text and tts.enabled:
             # Smalltalk oder Fehler: Text sprechen
             result = tts.synthesize(text)
             if result:
                 pcm, rate = result
-                mqtt_handler.publish_satellite_status(satellite_device, "speaking")
                 udp_server.send_tts(satellite_device, pcm, sample_rate=rate)
-
-        if text:
-            mqtt_handler.publish_answer(satellite_device, text)
-        mqtt_handler.publish_satellite_status(satellite_device, "idle")
 
     feedback_timeout = cfg.get("iobroker", {}).get("feedback_timeout", 3.0)
     iobroker.set_feedback_handler(_handle_feedback, timeout=feedback_timeout)
-
-    def _on_udp_session_start(device: str):
-        mqtt_handler.publish_satellite_status(device, "listening")
 
     tts.warm_cache(cfg.get("tts", {}).get("warm_phrases", []))
 
     udp_server = UDPServer(
         cfg.get("udp", {}),
         process_audio_udp,
-        on_session_start=_on_udp_session_start,
         on_satellite_change=_on_satellite_change,
     )
     udp_server.start()

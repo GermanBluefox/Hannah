@@ -128,11 +128,12 @@ static void check_for_update(void)
         return;
     }
 
-    char url[192];
+    const char *current = esp_app_get_description()->version;
+    char url[256];
     if (cfg->ota_channel[0] != '\0')
-        snprintf(url, sizeof(url), "%s/latest?channel=%s", cfg->ota_url, cfg->ota_channel);
+        snprintf(url, sizeof(url), "%s/latest?channel=%s&current=%s&device=%s", cfg->ota_url, cfg->ota_channel, current, cfg->device_id);
     else
-        snprintf(url, sizeof(url), "%s/latest", cfg->ota_url);
+        snprintf(url, sizeof(url), "%s/latest?current=%s&device=%s", cfg->ota_url, current, cfg->device_id);
 
     char auth_header[192];
     snprintf(auth_header, sizeof(auth_header), "Bearer %s", cfg->ota_token);
@@ -185,8 +186,7 @@ static void check_for_update(void)
         return;
     }
 
-    const char *latest  = jver->valuestring;
-    const char *current = esp_app_get_description()->version;
+    const char *latest = jver->valuestring;
 
     ESP_LOGI(TAG, "Firmware: aktuell=%s  verfügbar=%s", current, latest);
 

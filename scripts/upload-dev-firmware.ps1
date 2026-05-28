@@ -104,7 +104,11 @@ if (-not $NoBuild) {
 # Abort if working tree is dirty — dirty builds break OTA version matching
 $DirtyFiles = git -C $RepoRoot status --porcelain 2>$null
 if ($DirtyFiles) {
-    Write-Error "Working tree has uncommitted changes - binary version will be tagged -dirty. Commit or stash first."; exit 1
+    if ($NoBuild) {
+        Write-Warning "Working tree is dirty. If the binary was built before committing, it contains a -dirty version string that will cause an OTA update loop. Rebuild without -NoBuild to be safe."
+    } else {
+        Write-Error "Working tree has uncommitted changes - binary version will be tagged -dirty. Commit or stash first."; exit 1
+    }
 }
 
 # Determine version
@@ -119,7 +123,7 @@ if (-not (Test-Path $BinPath)) {
     exit 1
 }
 
-$UploadUrl = "${BaseUrl}/upload/${Version}?channel=${Channel}"
+$UploadUrl = "${BaseUrl}/releases/${Version}?channel=${Channel}"
 Write-Host "Uploading $Version to channel '$Channel'..." -ForegroundColor Cyan
 Write-Host "  URL: $UploadUrl"
 

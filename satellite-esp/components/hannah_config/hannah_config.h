@@ -16,7 +16,7 @@ typedef struct {
     uint8_t  wakeword_threshold;  /* Erkennungsschwelle 0–100 (entspricht 0.00–1.00) */
     char     ota_url[128];
     char     ota_token[128];      /* nur aus Kconfig, nie per NVS überschrieben */
-    char     ota_channel[16];
+    char     ota_channel[32];
 } hannah_config_t;
 
 /* Lädt Einstellungen aus NVS — sdkconfig-Werte als Fallback beim Erststart. */

@@ -10,6 +10,21 @@ log = logging.getLogger(__name__)
 
 _STRIP_CHARS = re.compile(r"[.,!?;:()\[\]]")
 
+_HOUR_WORDS: dict[str, int] = {
+    "ein": 1, "eins": 1, "zwei": 2, "drei": 3, "vier": 4, "fuenf": 5,
+    "sechs": 6, "sieben": 7, "acht": 8, "neun": 9, "zehn": 10,
+    "elf": 11, "zwoelf": 12, "dreizehn": 13, "vierzehn": 14,
+    "fuenfzehn": 15, "sechzehn": 16, "siebzehn": 17, "achtzehn": 18,
+    "neunzehn": 19, "zwanzig": 20, "einundzwanzig": 21, "zweiundzwanzig": 22,
+    "dreiundzwanzig": 23, "vierundzwanzig": 24,
+}
+
+_MINUTE_WORDS: dict[str, int] = {
+    "null": 0, "fuenf": 5, "zehn": 10, "fuenfzehn": 15, "zwanzig": 20,
+    "fuenfundzwanzig": 25, "dreissig": 30, "fuenfunddreissig": 35,
+    "vierzig": 40, "fuenfundvierzig": 45, "fuenfzig": 50, "fuenfundfuenfzig": 55,
+}
+
 def _normalize(s: str) -> str:
     """Normalisiert Text für NLU-Matching: Umlaute→Ascii, ß→ss, Kleinschreibung."""
     s = s.lower()
@@ -88,6 +103,9 @@ class NLU:
             "tuer":     "door",
             "tueren":   "door",
             "rollladen":"blind",
+            "klima":       "climate",
+            "klimaanlage": "climate",
+            "klimaanlagen":"climate",
         })
         # Wörter die auf Smalltalk hinweisen (persönliche Anrede / keine Gerätebezug)
         self._smalltalk_words: set[str] = set(cfg.get("smalltalk_words", [
@@ -196,13 +214,17 @@ class NLU:
         is_query            = self._is_query(tokens, raw)
         category_filter     = self._find_category(tokens)
         query_state         = self._find_query_state(joined) if is_query else None
+        norm_tokens         = {_normalize(t) for t in tokens}
+        climate_mode        = self._find_climate_mode(norm_tokens)
+        fan_speed           = self._find_fan_speed(norm_tokens)
+        timer_seconds       = self._find_timer_seconds(raw) if "timer" in norm_tokens else None
+        alarm_time          = self._find_alarm_time(raw) if bool({"wecker", "alarm"} & norm_tokens) else None
 
         no_device_context = device is None and room_key is None and category_filter is None
         # Mehrdeutige Farbwörter (z.B. "weiß" = Verb) nur werten wenn Gerätekontext vorhanden
         color               = self._find_color(joined, require_context=no_device_context)
 
         # CarQuery: Auto-Wörter ohne Geräte-/Raumbezug
-        norm_tokens = {_normalize(t) for t in tokens}
 
         # "alles/alle" als Wildcard — erlaubt TurnOn/TurnOff ohne spezifischen Raum/Gerät
         _has_all = no_device_context and bool({"alles", "alle"} & norm_tokens)
@@ -292,6 +314,10 @@ class NLU:
             and level is None
             and temperature is None
             and color is None
+            and climate_mode is None
+            and fan_speed is None
+            and timer_seconds is None
+            and alarm_time is None
             and not (is_query and not no_device_context and not _has_smalltalk_words)
             and (no_device_context or _has_smalltalk_words)
         )
@@ -316,10 +342,18 @@ class NLU:
             intent_name, value, unit = "SetDND", "off" if _has_off else "on", None
         elif is_mute_cmd:
             intent_name, value, unit = "SetMute", "off" if _has_off else "on", None
+        elif timer_seconds is not None:
+            intent_name, value, unit = "SetTimer", timer_seconds, None
+        elif alarm_time is not None:
+            intent_name, value, unit = "SetAlarm", alarm_time, None
         elif is_smalltalk:
             intent_name, value, unit = "Smalltalk", None, None
         elif is_query and not no_device_context:
             intent_name, value, unit = "Query", None, None
+        elif climate_mode is not None and not is_query:
+            intent_name, value, unit = "SetMode", climate_mode, None
+        elif fan_speed is not None and not is_query:
+            intent_name, value, unit = "SetFanSpeed", fan_speed, None
         elif temperature is not None and not is_query:
             intent_name, value, unit = "SetTemperature", temperature, "°C"
         elif level is not None:
@@ -334,7 +368,7 @@ class NLU:
             intent_name, value, unit = "Unknown", None, None
             log.debug(f"NLU: Kein Intent erkannt für '{raw}'")
 
-        _actionable = intent_name in ("TurnOn", "TurnOff", "SetLevel", "SetColor", "SetTemperature", "Query")
+        _actionable = intent_name in ("TurnOn", "TurnOff", "SetLevel", "SetColor", "SetTemperature", "SetMode", "SetFanSpeed", "Query")
         intent = Intent(
             name=intent_name,
             room=room_name,
@@ -444,6 +478,113 @@ class NLU:
         match = re.search(pattern, text)
         if match:
             return float(match.group(1).replace(",", "."))
+        return None
+
+    def _find_timer_seconds(self, text: str) -> Optional[int]:
+        """Erkennt Zeitangaben: '20 Minuten', '1 Stunde 30 Minuten', '90 Sekunden'."""
+        t = text.lower()
+        total = 0
+        for pattern, factor in (
+            (r"(\d+(?:[.,]\d+)?)\s*stund(?:en|e)?", 3600),
+            (r"(\d+(?:[.,]\d+)?)\s*minut(?:en|e)?", 60),
+            (r"(\d+(?:[.,]\d+)?)\s*sekund(?:en|e)?", 1),
+        ):
+            m = re.search(pattern, t)
+            if m:
+                total += int(float(m.group(1).replace(",", ".")) * factor)
+        if re.search(r"eineinhalb\s+stund", t):
+            total += 5400
+        if re.search(r"eineinhalb\s+minut", t):
+            total += 90
+        return total if total > 0 else None
+
+    def _find_climate_mode(self, norm_tokens: set[str]) -> Optional[str]:
+        """Erkennt Klimaanlagen-Betriebsmodus aus normalisierten Tokens."""
+        if norm_tokens & {"kuehlen", "kuehl", "kuehlung", "kuehlmodus"}:
+            return "cool"
+        if norm_tokens & {"heizen", "heizbetrieb", "aufwaermen"}:
+            return "heat"
+        if norm_tokens & {"trocknen", "trocken", "entfeuchten", "dry"}:
+            return "dry"
+        if norm_tokens & {"lueften", "lueftung", "ventilator", "fan"}:
+            return "fan_only"
+        if "auto" in norm_tokens:
+            return "auto"
+        return None
+
+    def _find_alarm_time(self, text: str) -> Optional[str]:
+        """Erkennt Uhrzeitangaben und gibt 'HH:MM' zurück.
+
+        Unterstützt: '7:30', '7:30 Uhr', 'halb acht', 'Viertel nach sieben',
+        'Viertel vor acht', 'dreiviertel acht', 'sieben Uhr dreißig', 'um sieben Uhr'.
+        """
+        t = _normalize(text)
+
+        # 1. Numerisch: "7:30" oder "07:30"
+        m = re.search(r'\b(\d{1,2}):(\d{2})\b', text)
+        if m:
+            h, mi = int(m.group(1)), int(m.group(2))
+            if 0 <= h <= 23 and 0 <= mi <= 59:
+                return f"{h:02d}:{mi:02d}"
+
+        # 2. "halb X" → X-1:30  (z.B. "halb acht" = 07:30)
+        m = re.search(r'\bhalb\s+(\w+)', t)
+        if m:
+            h = _HOUR_WORDS.get(m.group(1))
+            if h is not None:
+                return f"{(h - 1) % 24:02d}:30"
+
+        # 3. "dreiviertel X" oder "viertel vor X" → X-1:45
+        m = re.search(r'\b(?:dreiviertel|viertel\s+vor)\s+(\w+)', t)
+        if m:
+            h = _HOUR_WORDS.get(m.group(1))
+            if h is not None:
+                return f"{(h - 1) % 24:02d}:45"
+
+        # 4. "viertel nach X" → X:15
+        m = re.search(r'\bviertel\s+nach\s+(\w+)', t)
+        if m:
+            h = _HOUR_WORDS.get(m.group(1))
+            if h is not None:
+                return f"{h % 24:02d}:15"
+
+        # 5. "X uhr Y" → X:Y  (Y als Zahlwort oder Ziffer)
+        m = re.search(r'\b(\w+)\s+uhr\s+(\w+)', t)
+        if m:
+            h = _HOUR_WORDS.get(m.group(1)) or (int(m.group(1)) if m.group(1).isdigit() else None)
+            mi_str = m.group(2)
+            mi = int(mi_str) if mi_str.isdigit() else _MINUTE_WORDS.get(mi_str)
+            if h is not None and mi is not None and 0 <= h <= 23 and 0 <= mi <= 59:
+                return f"{h:02d}:{mi:02d}"
+
+        # 6. "X uhr" → X:00
+        m = re.search(r'\b(\w+)\s+uhr\b', t)
+        if m:
+            h = _HOUR_WORDS.get(m.group(1))
+            if h is None and m.group(1).isdigit():
+                h = int(m.group(1))
+            if h is not None and 0 <= h <= 23:
+                return f"{h:02d}:00"
+
+        # 7. "um X" (reines Zahlwort, ohne "Uhr") → X:00
+        m = re.search(r'\bum\s+(\w+)', t)
+        if m:
+            h = _HOUR_WORDS.get(m.group(1))
+            if h is not None:
+                return f"{h:02d}:00"
+
+        return None
+
+    def _find_fan_speed(self, norm_tokens: set[str]) -> Optional[str]:
+        """Erkennt Lüftergeschwindigkeit aus normalisierten Tokens."""
+        if norm_tokens & {"leise", "langsam", "niedrig", "schwach"}:
+            return "low"
+        if norm_tokens & {"mittel", "mittelschnell"}:
+            return "medium"
+        if norm_tokens & {"schnell", "stark", "hoch", "voll", "maximum", "maximal"}:
+            return "high"
+        if "auto" in norm_tokens:
+            return "auto"
         return None
 
     def _find_color(self, text: str, require_context: bool = False) -> Optional[str]:

@@ -33,8 +33,7 @@ class ResidentsClient:
     Auf Änderungen des user_roomie (z.B. "leonie") und Gäste wird mit Callbacks reagiert.
     """
 
-    def __init__(self, cfg: dict, publish_fn: Callable[[str, str], None]):
-        self._publish = publish_fn
+    def __init__(self, cfg: dict):
         self._lock = threading.Lock()
         self._cache: dict[str, dict[str, object]] = {}
 

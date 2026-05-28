@@ -5,6 +5,109 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.14.0
+### Hannah Core
+* Added: LLM Tool Agent (`hannah/tool_agent.py`) — handles complex requests via OpenAI-compatible function-calling; tools: `get_all_devices`, `get_device_state`, `set_device_state`, `speak`
+* Changed: `Unknown` and `Smalltalk` intents now both route to the Tool Agent instead of bare `llm.chat()`
+* Changed: `LLMClient` — added `chat_with_tools(messages, tools)` method; `OpenAICompatibleLLM` implements native tool calling, other backends fall back to regular `chat()`
+* Changed: `get_all_devices` tool now returns `state_keys` (list of available state names) and `current` (actual values) separately to prevent LLM misreading key names as values
+* Added: tool usage rules appended to system prompt in every Tool Agent call (always use `speak`, no repeated tool calls)
+
+### Scripts
+* Added: `scripts/hannah_shell.py` — interactive text shell for testing NLU/Tool Agent via gRPC `SubmitText` without Telegram
+
+## 0.13.1
+* Fixed: MQTT-triggered mute/unmute now correctly updates the LED state (was only updated on button press)
+
+## 0.13.0
+### Proto
+* Changed: `AgentSatelliteUpdate` — added optional `volume` (int32) and `mute` (bool) fields
+* Changed: `AgentSatelliteControl` — added optional `device_id` (string) for per-satellite targeting
+
+### Hannah Core
+* Changed: satellite volume/mute now reported via `volume/state` / `mute/state` topics (satellite-initiated); Hannah subscribes to these instead of command topics
+* Changed: `_on_agent_satellite_control` for volume/mute now publishes `volume/set` / `mute/set` commands to satellites (previously published state topics)
+* Added: mute room-replication — when one satellite reports a mute state change, Hannah replicates `mute/set` to all satellites in the same room
+* Added: global volume command (`hannah/volume`) now sends `volume/set` to all satellites
+* Removed: PCM volume scaling in Hannah Core (`_scale_pcm`, `_get_volume`); volume is applied satellite-side
+
+### ESP Firmware
+* Added: Vol+/Vol- buttons now publish new level to `hannah/satellite/<device>/volume/state`
+* Added: subscribe to `hannah/satellite/<device>/volume/set`; received value is applied to local playback volume
+* Added: change detection in `hannah_net_set_mute()` — state is only published if it actually changed
+
+## 0.12.5
+### CI
+* Fixed: `skip_if_unchanged` calls were removed from all upload jobs for the v0.12.4 release to force a full upload — this commit restores them
+
+### Hannah Core
+* Removed: all ioBroker-facing MQTT publishes (transcript, speaking, satellite_status, rooms, online, global dnd/mute, text commands); ioBroker communication is now exclusively via gRPC
+* Removed: REST API client code from `iobroker.py` (`requests`, `_get_enum`, `_get_objects`); device data is now fully gRPC-driven
+* Removed: `publish_fn` parameter from `ResidentsClient` (unused)
+* Removed: PCM volume scaling in Hannah Core (`_scale_pcm`); volume will be applied satellite-side
+* Kept: per-satellite MQTT for volume/mute/dnd control, announcements/notifications, OTA/BLE/sensors
+
+### ESP Firmware
+* Fixed: mute command topic changed from `…/mute` to `…/mute/set`; state feedback published on `…/mute/state`
+* Fixed: mute value parsing now accepts `true`/`false` in addition to `1`/`0`
+
+## 0.12.4
+### CI
+* Fixed: Upload jobs fetched tags without pruning deleted ones (`--tags`) — replaced with `--tags --prune --prune-tags` so stale tags in the runner cache no longer cause `skip_if_unchanged` to compare against a non-existent previous tag
+
+## 0.12.3
+### AutoDeploy
+* New: Generates a persistent device ID (UUID v4) on first start, stored in `/var/lib/hannah/autodeploy-device-id`; sent as `?device=<uuid>` with every `/latest` poll to enable accurate per-installation device counting on the Update Server
+
+### ESP Firmware
+* New: Sends `?device=<device_id>` (NVS-backed device ID) with every OTA `/latest` request to enable accurate per-device counting on the Update Server
+
+## 0.12.2
+### CI
+* Fixed: `skip_if_unchanged` caused SIGPIPE (exit 141) — replaced `grep | head -1` with `awk`
+
+## 0.12.1
+### AutoDeploy
+* Fixed: `UnboundLocalError` for `current` variable in `deploy_component()` — `state.get(name)` was called after `get_latest()` which already needed it
+
+### CI
+* Changed: Renamed job groups for clarity — `test:python` → `test:core`, `test:go` → `test:proxy`, `test:satellite` → `test:satellite:pi`, `build:amd64/arm64` → `build:proxy:amd64/arm64`, `publish:amd64/arm64` → `publish:proxy:amd64/arm64`
+* Changed: `PACKAGE_NAME` variable renamed to `PROXY_PACKAGE_NAME`
+* New: Upload jobs skip the Update-Server upload if the component directory has no changes since the previous release tag (`skip_if_unchanged` function in `.upload`)
+
+## 0.12.0
+### ESP Firmware
+* Changed: OTA update-check requests now include `?current=<version>` so the Update-Server can track installed version distribution
+
+### AutoDeploy
+* Changed: `get_latest()` now passes the currently installed version as `current` query parameter to the Update-Server
+
+## 0.11.0
+### Hannah Core
+* New: Connect sound — Hannah plays `core/sounds/satellite_connected.wav` (if present) on the satellite when it registers via the proxy
+* New: Timer — "Hannah, stelle einen Timer auf 20 Minuten" fires TTS on the source satellite when the countdown ends
+* New: Alarm — "Hannah, stelle einen Wecker auf 7 Uhr 30" sets a persistent alarm that fires on the configured `alarm.satellite` (falls back to source satellite); survives Hannah restarts via `alarms.json`
+
+## 0.10.0
+### Hannah Core
+* New: `climate` device type — NLU recognizes `SetMode` (`SetMode`: cool/heat/dry/fan_only/auto) and `SetFanSpeed` (low/medium/high/auto) intents; German compound words ("Klimaanlage", "Klimaanlagen") map to `climate` category
+* New: Climate device query answers report on/off state, operating mode, current temperature, target temperature, and fan speed
+
+## 0.9.1
+### ESP Firmware
+* Fixed: `ota_channel` buffer increased from 16 to 32 bytes — channel names longer than 15 characters (e.g. `satellite-esp-dev`) were silently truncated
+
+### CI
+* Changed: GitLab Generic Registry publish jobs and Hannah Update-Server upload jobs split into separate stages (`publish` and `upload`) with clearer naming
+* Changed: Upload jobs use `{latestTag}-dev` (e.g. `v0.9.0-dev`) as version fallback when `FORCE_PUBLISH` runs without a tag
+
+### AutoDeploy
+* New: `autodeploy.py` — polls Update-Server channels and deploys updates; supports self-update
+* New: `install.sh` — downloads and installs the AutoDeploy agent from the Update-Server, sets up Python venv and systemd service
+* Fixed: State was not saved before service restart, causing an infinite redeploy loop on self-update
+* Fixed: Replacing a running executable raised `ETXTBSY` — file is now unlinked before copy
+* Changed: `hannah-autodeploy.service` sets `REQUESTS_CA_BUNDLE` to system trust store
+
 ## 0.9.0
 ### ESP Firmware
 * New: `hannah_sensors` now publishes readings every 30s to `hannah/satellite/{device}/sensors` (retained, QoS 1); JSON payload includes `temperature`, `pressure`, `humidity`, and optionally `gas_resistance` (BME680 only)

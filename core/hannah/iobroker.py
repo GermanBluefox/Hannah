@@ -2,7 +2,6 @@ import logging
 import re
 import threading
 import time
-import requests
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Iterable, Optional
 from hannah.proto.hannah_pb2 import AgentDevice as AgentDevice
@@ -61,9 +60,6 @@ class IoBrokerClient:
     """
 
     def __init__(self, cfg: dict):
-        host = cfg.get("host", "localhost")
-        port = cfg.get("port", 8093)
-        self._base = f"http://{host}:{port}"
         self._prefix = cfg.get("virtual_device_prefix", "javascript.0.virtualDevice")
         # YAML parst 'on'/'off' als Boolean — Keys explizit zu str konvertieren
         raw_names = cfg.get("state_names", {
@@ -104,11 +100,6 @@ class IoBrokerClient:
             target=self._timeout_loop, daemon=True, name="iobroker-confirm"
         )
         self._timeout_thread.start()
-
-    @property
-    def state_topic_prefix(self) -> str:
-        """MQTT-Topic-Prefix für State-Updates, z.B. 'javascript/0/virtualDevice'."""
-        return self._prefix.replace(".", "/")
 
     def set_setter(self, fn: Callable[[str, str], bool]):
         """Register the gRPC state setter: fn(state_id, json_value) → True if adapter is connected."""
@@ -441,6 +432,13 @@ class IoBrokerClient:
         "blind": [
             ("level", "%", None),
         ],
+        "climate": [
+            ("on",       "", "bool_an"),
+            ("mode",     "", None),
+            ("current",  "°C", None),
+            ("expected", "°C Soll", None),
+            ("fanSpeed", "", None),
+        ],
     }
 
     def _describe_category(self, category: str, targets: list, room: str) -> Optional[str]:
@@ -458,6 +456,8 @@ class IoBrokerClient:
                     continue
                 if fmt == "bool_offen":
                     parts.append("offen" if val else "geschlossen")
+                elif fmt == "bool_an":
+                    parts.append("an" if val else "aus")
                 elif fmt == "bool_bewegung":
                     parts.append("Bewegung erkannt" if val else "keine Bewegung")
                 elif isinstance(val, float):
@@ -472,9 +472,44 @@ class IoBrokerClient:
         prefix = f"Im {room}" if len(targets) > 1 else f"{targets[0].name} im {room}"
         return prefix + ": " + ", ".join(lines) + "."
 
+    _MODE_LABELS: dict[str, str] = {
+        "cool":     "Kühlen",
+        "heat":     "Heizen",
+        "dry":      "Entfeuchten",
+        "fan_only": "Lüfter",
+        "auto":     "Auto",
+    }
+    _FAN_LABELS: dict[str, str] = {
+        "low":    "niedrig",
+        "medium": "mittel",
+        "high":   "hoch",
+        "auto":   "auto",
+    }
+
     def _describe_device(self, dev: "Device", qs: Optional[str]) -> str:
         name = dev.name
         room = dev.room
+
+        if dev.category == "climate":
+            parts = []
+            on = dev.current.get("on")
+            if on is not None:
+                parts.append("an" if on else "aus")
+            mode = dev.current.get("mode")
+            if mode is not None:
+                parts.append(f"Modus {self._MODE_LABELS.get(str(mode), str(mode))}")
+            current = dev.current.get("current")
+            if current is not None:
+                parts.append(f"{float(current):.1f}°C")
+            expected = dev.current.get("expected")
+            if expected is not None:
+                parts.append(f"Soll {float(expected):.1f}°C")
+            fan = dev.current.get("fanSpeed")
+            if fan is not None:
+                parts.append(f"Lüfter {self._FAN_LABELS.get(str(fan), str(fan))}")
+            if not parts:
+                return f"Ich habe keine Daten für {name} im {room}."
+            return f"{name} im {room}: {', '.join(parts)}."
 
         # Kategorie-basierte Sensor-Beschreibung
         cat_answer = self._describe_category(dev.category, [dev], room)
@@ -669,14 +704,6 @@ class IoBrokerClient:
             pass
         return s
 
-    def _state_id_to_topic(self, state_id: str) -> str:
-        """
-        javascript.0.virtualDevice.Licht.EG.Wohnzimmer.DeckeSeite.on
-        → hannah/set/devices/Licht/EG/Wohnzimmer/DeckeSeite/on
-        """
-        suffix = state_id[len(self._prefix):].lstrip(".")
-        return "hannah/set/devices/" + suffix.replace(".", "/")
-
     # ------------------------------------------------------------------
     # Intern
 
@@ -691,88 +718,11 @@ class IoBrokerClient:
             return "color", intent.value
         if intent.name == "SetTemperature":
             return "expected", intent.value
+        if intent.name == "SetMode":
+            return "mode", intent.value
+        if intent.name == "SetFanSpeed":
+            return "fanSpeed", intent.value
         return None, None
-
-    def _load_room_mapping(self) -> dict[str, str]:
-        """
-        Lädt enum/rooms und gibt {member_id: kanonischer_raumname} zurück.
-        Jeder Member-Eintrag (und alle seine Eltern) wird dem Raum zugeordnet.
-        """
-        try:
-            rooms_raw = self._get_enum("rooms")
-        except Exception as e:
-            log.warning(f"enum/rooms nicht ladbar, Fallback auf Pfad-Segmente: {e}")
-            return {}
-
-        mapping: dict[str, str] = {}
-        for room in rooms_raw:
-            name = self._extract_name(room)
-            if not name:
-                continue
-            for member in room.get("common", {}).get("members", []):
-                mapping[member] = name
-                # Auch den Parent eintragen damit device_id ohne State-Suffix matcht
-                # z.B. "...Schlafzimmer.on" → auch "...Schlafzimmer" → Raum
-                parent = member.rsplit(".", 1)[0]
-                if parent not in mapping:
-                    mapping[parent] = name
-
-        log.info(f"Raum-Mapping: {len(rooms_raw)} Räume, {len(mapping)} Members geladen.")
-        return mapping
-
-    def _find_room_for_device(self, device_id: str, member_to_room: dict[str, str]) -> Optional[str]:
-        """
-        Sucht den Raum für eine Device-ID indem die ID und alle Eltern-Prefixe
-        gegen das Member-Mapping geprüft werden. Längster Treffer gewinnt.
-        """
-        parts = device_id.split(".")
-        # Von spezifisch (ganzer Pfad) nach allgemein (kürzerer Prefix)
-        for length in range(len(parts), 0, -1):
-            candidate = ".".join(parts[:length])
-            if candidate in member_to_room:
-                return member_to_room[candidate]
-        return None
-
-    def _extract_name(self, obj: dict) -> Optional[str]:
-        """Extrahiert den lokalisierten Namen aus einem ioBroker-Enum-Objekt."""
-        name = obj.get("common", {}).get("name", "")
-        if isinstance(name, dict):
-            return name.get("de") or name.get("en") or next(iter(name.values()), None)
-        return str(name) if name else None
-
-    def _get_enum(self, kind: str) -> list[dict]:
-        """Ruft /v1/enum/rooms oder /v1/enum/functions ab."""
-        url = f"{self._base}/v1/enum/{kind}"
-        resp = requests.get(url, headers={"accept": "application/json"}, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            members = data.get("members")
-            if isinstance(members, list) and members and isinstance(members[0], dict):
-                return members
-            return [v for v in data.values() if isinstance(v, dict)]
-        return []
-
-    def _get_objects(self, pattern: str) -> list[dict]:
-        url = f"{self._base}/v1/objects"
-        resp = requests.get(
-            url,
-            params={"pattern": pattern, "type": "state"},
-            headers={"accept": "application/json"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            if "rows" in data:
-                return [row.get("value", row) for row in data["rows"]]
-            return [{"_id": k, **v} for k, v in data.items() if isinstance(v, dict)]
-        return []
-
 
     def _log_device_map(self):
         log.info("─" * 60)

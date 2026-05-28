@@ -96,6 +96,22 @@ class LLMClient(ABC):
         result = self.chat(text, system_prompt=_CLASSIFY_PROMPT)
         return "COMMAND" in result.upper()
 
+    def chat_with_tools(self, messages: list[dict], tools: list[dict]) -> dict:  # pyright: ignore[reportUnusedParameter]
+        """
+        Tool-Use-Aufruf. Gibt dict mit 'content', 'tool_calls', 'finish_reason' zurück.
+
+        Default-Implementierung delegiert an chat() ohne Tool-Support —
+        ausreichend für DummyLLM und Backends ohne Function-Calling.
+        """
+        user_msg = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+        system = next((m["content"] for m in messages if m.get("role") == "system"), "")
+        history = [m for m in messages if m.get("role") not in ("system", "user")]
+        return {
+            "content": self.chat(user_msg, system_prompt=system, history=history or None),
+            "tool_calls": [],
+            "finish_reason": "stop",
+        }
+
 
 class DummyLLM(LLMClient):
     """Gibt eine feste Antwort zurück — kein API-Aufruf."""
@@ -177,7 +193,38 @@ class OpenAICompatibleLLM(LLMClient):
         except Exception as exc:
             log.error("LLM-Anfrage fehlgeschlagen: %s", exc)
             return _DEFAULT_FALLBACK
-        
+
+    def chat_with_tools(self, messages: list[dict], tools: list[dict]) -> dict:
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+
+        payload: dict = {
+            "model":      self._model,
+            "messages":   messages,
+            "max_tokens": self._max_tokens,
+        }
+        if tools:
+            payload["tools"] = tools
+
+        try:
+            resp = requests.post(self._url, json=payload, headers=headers, timeout=self._timeout)
+            resp.raise_for_status()
+            choice = resp.json()["choices"][0]
+            msg = choice["message"]
+            return {
+                "content":      msg.get("content") or "",
+                "tool_calls":   msg.get("tool_calls") or [],
+                "finish_reason": choice.get("finish_reason", "stop"),
+            }
+        except requests.exceptions.Timeout:
+            log.warning("LLM tool call: Timeout nach %.1fs", self._timeout)
+            return {"content": _DEFAULT_FALLBACK, "tool_calls": [], "finish_reason": "stop"}
+        except Exception as exc:
+            log.error("LLM tool call fehlgeschlagen: %s", exc)
+            return {"content": _DEFAULT_FALLBACK, "tool_calls": [], "finish_reason": "stop"}
+
+
 class OllamaLLM(LLMClient):
     """
     Client für die native Ollama API (/api/chat).

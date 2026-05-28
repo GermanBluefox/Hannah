@@ -5,6 +5,8 @@ package hannah;
 option java_package = "io.hannah";
 option java_outer_classname = "HannahProto";
 
+option go_package = "dev.kernstock.net/gessinger/voice/hannah/proxy/proto/hannah";
+
 // ============================================================
 //  Hannah gRPC Service
 //
@@ -25,7 +27,8 @@ service HannahService {
   rpc GetUser       (GetUserRequest)       returns (UserResponse);
   rpc LinkAccount   (LinkAccountRequest)   returns (StatusResponse);
   rpc UnlinkAccount (UnlinkAccountRequest) returns (StatusResponse);
-  rpc SetTrustLevel (SetTrustLevelRequest) returns (StatusResponse);
+  rpc SetTrustLevel       (SetTrustLevelRequest)       returns (StatusResponse);
+  rpc SetSystemMessages   (SetSystemMessagesRequest)   returns (StatusResponse);
 
   // --- Device Control Menu ---
   // Returns all rooms and devices with current state — for building control menus.
@@ -40,19 +43,27 @@ service HannahService {
   rpc SubmitVoice   (SubmitVoiceRequest)   returns (SubmitVoiceResponse);
   // Send a TTS announcement to one satellite or all ("all").
   rpc Announce      (AnnounceRequest)      returns (StatusResponse);
+  // Send a notification from ioBroker to Hannah. Returns ok=true when queued.
+  // direct=true: skip LLM reformulation. severity: "alert"|"notify"|"info".
+  rpc Notify        (AgentNotification)    returns (StatusResponse);
   // List all currently registered UDP satellites.
   rpc GetSatellites (Empty)               returns (GetSatellitesResponse);
 
   // --- Car ---
   // Returns the current cached car state (available=false if no data received yet).
-  rpc GetCarState   (Empty)               returns (CarStateResponse);
-  rpc GetAllCarStates (Empty)             returns (GetAllCarStatesResponse);
+  rpc GetCarState      (Empty)            returns (CarStateResponse);
+  // Returns all tracked car states (one per configured car).
+  rpc GetAllCarStates  (Empty)            returns (GetAllCarStatesResponse);
 
   // --- Event stream ---
   // Opens a server-side stream; Hannah pushes events as they occur.
   // Pass event_types to filter (empty = all events).
-  // Known event types: "car.parked", "resident.arrived", "resident.departed"
+  // Known event types: "car.parked", "resident.arrived", "resident.departed", "satellite.firmware"
   rpc SubscribeEvents (EventFilter)       returns (stream HannahEvent);
+
+  // --- Firmware Manager ---
+  // Trigger an immediate OTA update for a satellite (bypasses residents check).
+  rpc TriggerFirmwareUpdate (TriggerFirmwareUpdateRequest) returns (StatusResponse);
 
   // --- Satellite Proxy (Go gRPC proxy) ---
   // Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
@@ -63,13 +74,20 @@ service HannahService {
   // Hannah runs the full pipeline (STT → NLU → TTS → MQTT status) and returns
   // the result so the proxy can play TTS audio back to the satellite.
   rpc SubmitSatelliteAudio(SubmitSatelliteAudioRequest)        returns (SubmitSatelliteAudioResponse);
+  // Notify Hannah that a satellite registered or disconnected via the proxy.
+  // Hannah updates its room registry (hannah/rooms MQTT) immediately.
+  rpc NotifySatelliteRegistered(SatelliteRegistration)         returns (StatusResponse);
+  rpc NotifySatelliteGone      (SatelliteRegistration)         returns (StatusResponse);
 
   // --- Speaker Enrollment ---
-  // Register a voice sample for a roomie so a Voice-ID service can identify
-  // them later. Requires trust_level >= 10 to enroll others; own voiceprint
-  // can be enrolled at trust_level >= 5.
-  // Returns ok=false with a message if no Voice-ID backend is configured.
   rpc EnrollVoiceprint    (EnrollVoiceprintRequest)            returns (StatusResponse);
+
+  // --- ioBroker Agent ---
+  // Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
+  // The adapter pushes state updates (device states, presence, text commands);
+  // Hannah pushes device-control commands and on-demand state-subscription requests back.
+  // The adapter initiates the connection; if Hannah restarts, the adapter reconnects.
+  rpc AgentConnect (stream AgentMessage) returns (stream AgentCommand);
 }
 
 // ============================================================
@@ -88,13 +106,14 @@ message StatusResponse {
 // ============================================================
 
 message User {
-  string uuid         = 1;
-  string roomie_id    = 2;
-  string display_name = 3;
-  int32  trust_level  = 4;
-  bool   active       = 5;
+  string uuid            = 1;
+  string roomie_id       = 2;
+  string display_name    = 3;
+  int32  trust_level     = 4;
+  bool   active          = 5;
   // linked_accounts: service → account_id  (e.g. "telegram" → "123456789")
   map<string, string> linked_accounts = 6;
+  bool   system_messages = 7;  // receives ioBroker/system notifications via Telegram
 }
 
 message GetUsersRequest {
@@ -138,6 +157,11 @@ message UnlinkAccountRequest {
 message SetTrustLevelRequest {
   string roomie_id = 1;
   int32  level     = 2;  // clamped to [0, 10]
+}
+
+message SetSystemMessagesRequest {
+  string roomie_id = 1;
+  bool   enabled   = 2;
 }
 
 // ============================================================
@@ -194,6 +218,10 @@ message CarStateResponse {
   CarStateProto state    = 2;
 }
 
+message GetAllCarStatesResponse {
+  repeated CarStateProto states = 1;
+}
+
 message CarStateProto {
   // position
   float  latitude      = 1;
@@ -216,17 +244,11 @@ message CarStateProto {
   // Roomie-ID des Fahrzeughalters (leer = kein Owner-Filter)
   string owner_roomie = 13;
 
-  // Metadaten aus ioBroker (info/displayName, info/plate, info/vin)
-  string display_name  = 14;
-  string plate         = 15;
-  string vin           = 16;
-
-  // Heimadresse — für "steht zu Hause"-Erkennung im Client
-  string home_address  = 17;
-}
-
-message GetAllCarStatesResponse {
-  repeated CarStateProto states = 1;
+  // Metadaten
+  string display_name = 14;  // z.B. "Leonies Golf"
+  string plate        = 15;  // Nummernschild
+  string vin          = 16;  // Fahrzeug-Identifikationsnummer
+  string home_address = 17;  // Heimadresse für "steht zu Hause"-Erkennung
 }
 
 // ============================================================
@@ -239,13 +261,28 @@ message EventFilter {
 }
 
 message HannahEvent {
-  string event_type = 1;   // "car.parked" | "resident.arrived" | "resident.departed"
+  string event_type = 1;   // "car.parked" | "resident.arrived" | "resident.departed" | "system.notification" | "satellite.firmware"
   string timestamp  = 2;   // ISO 8601 UTC
 
   oneof payload {
-    CarStateProto      car_state      = 10;
-    ResidentEventProto resident_event = 11;
+    CarStateProto            car_state            = 10;
+    ResidentEventProto       resident_event       = 11;
+    SystemNotificationEvent  system_notification  = 12;
+    FirmwareEventProto       firmware_event       = 13;
   }
+}
+
+message SystemNotificationEvent {
+  string text = 1;  // LLM-reformulierter Benachrichtigungstext
+}
+
+message FirmwareEventProto {
+  string device  = 1;
+  string version = 2;
+}
+
+message TriggerFirmwareUpdateRequest {
+  string device = 1;
 }
 
 message ResidentEventProto {
@@ -341,10 +378,196 @@ message ControlDeviceRequest {
 //  Speaker Enrollment messages
 // ============================================================
 
-// Register a voice sample so a Voice-ID service can build a voiceprint.
-// The actual forwarding to the Voice-ID backend is handled by Hannah Core.
 message EnrollVoiceprintRequest {
   string roomie_id   = 1;  // whose voice this sample belongs to
   bytes  audio_pcm   = 2;  // raw PCM, 16-bit signed mono
   int32  sample_rate = 3;  // e.g. 16000
+}
+
+// ============================================================
+//  Satellite Proxy registration messages
+// ============================================================
+
+message SatelliteRegistration {
+  string device_id = 1;  // satellite device name, e.g. "sat-wohnzimmer"
+  string room      = 2;  // room name as reported by satellite, e.g. "Wohnzimmer"
+}
+
+// ============================================================
+//  ioBroker Agent messages
+// ============================================================
+
+// Sent by the HannahAgent ioBroker adapter over the AgentConnect stream.
+message AgentMessage {
+  oneof payload {
+    AgentStateUpdate      state_update      = 1;  // any ioBroker state changed
+    AgentResidentUpdate   resident_update   = 2;  // residents adapter presence changed
+    AgentTextCommand      text_command      = 3;  // text command state changed
+    AgentSatelliteControl satellite_control = 4;  // satellite control command
+    AgentDeviceSnapshot   send_snapshot     = 5;  // initial snapshot with all states
+    AgentResidentSnapshot send_residents    = 6;  // initial snapshot with all residents
+  }
+}
+
+// Adapter instructs Hannah to control satellites in a room or a specific satellite.
+// room: room name as registered, or "all" for all rooms.
+// device_id: if non-empty, only the named satellite is targeted (volume/mute only);
+//            room is still required (used for room-scoped commands and as fallback).
+message AgentSatelliteControl {
+  string room      = 1;
+  string device_id = 7;  // optional: target a specific satellite instead of the whole room
+  oneof control {
+    bool   dnd               = 2;  // set do-not-disturb
+    bool   mute              = 3;  // mute/unmute microphone
+    int32  volume            = 4;  // set volume (0–100)
+    string announcement      = 5;  // speak plain-text announcement
+    string announcement_ssml = 6;  // speak SSML announcement
+  }
+}
+
+// An ioBroker state change event. ack=true means the device confirmed the value
+// (as opposed to ack=false which is the "desired" value). Hannah uses this to
+// verify that a SetState command was executed successfully.
+message AgentStateUpdate {
+  string state_id = 1;  // full ioBroker state ID, e.g. "javascript.0.virtualDevice.Licht.EG.Wohnzimmer.DeckeSeite.on"
+  string value    = 2;  // JSON-encoded value: "true", "42", "\"text\""
+  bool   ack      = 3;  // true = confirmed by device
+  int64  ts       = 4;  // Unix timestamp in milliseconds
+}
+
+// A change from the ioBroker residents adapter.
+message AgentResidentUpdate {
+  string roomie_id      = 1;
+  int32  presence_state = 2;  // residents adapter presence value (0=absent, 1=home, …)
+  bool   is_guest       = 3;
+}
+
+// The text-command state in ioBroker changed — treat as a SubmitText call.
+message AgentTextCommand {
+  string text = 1;
+}
+
+// Sent by Hannah Core over the AgentConnect stream.
+message AgentCommand {
+  oneof command {
+    AgentSetState        set_state        = 1;  // Hannah wants to control an ioBroker device
+    AgentWatchMore       watch_more       = 2;  // Hannah needs additional states streamed
+    AgentSetResident     set_resident     = 3;  // Hannah wants to set a resident's presence state
+    AgentSatelliteUpdate satellite_update = 4;  // a satellite registered or disconnected
+    AgentTextAnswer      text_answer      = 5;  // Hannah's answer to a text command
+    AgentFirmwareEvent   firmware_event   = 6;  // satellite firmware version update
+    AgentBleUpdate       ble_update       = 7;  // BLE tag location changed
+    AgentSensorUpdate    sensor_update    = 8;  // satellite sensor reading
+  }
+}
+
+message AgentFirmwareEvent {
+  string device           = 1;
+  string version          = 2;
+  bool   update_available = 3;  // true = newer version pending, false = current version report
+}
+
+// Hannah instructs the adapter to set an ioBroker state.
+// The adapter calls setForeignState(); the resulting ack=true AgentStateUpdate
+// confirms execution back to Hannah.
+message AgentSetState {
+  string state_id = 1;  // ioBroker state ID to write
+  string value    = 2;  // JSON-encoded value
+}
+
+// Hannah requests additional state IDs to be included in the AgentStateUpdate stream.
+// Used by the trigger engine at runtime when triggers reference arbitrary state IDs
+// (e.g. unless.state: "0_userdata.0.feeded") that aren't covered by enum discovery.
+message AgentWatchMore {
+  repeated string state_ids = 1;
+}
+
+// Hannah instructs the adapter to set a resident's presence state in the residents adapter.
+// is_guest determines whether the target path is .roomie. or .guest.
+message AgentSetResident {
+  string resident_id    = 1;  // e.g. "leonie", "hannah"
+  int32  presence_state = 2;  // residents adapter presence value (0=absent, 1=home, …)
+  bool   is_guest       = 3;  // false → residents.<n>.roomie.<id>, true → residents.<n>.guest.<id>
+}
+
+// Hannah notifies the adapter that a satellite registered or disconnected,
+// or that a satellite's volume or mute state changed.
+// The adapter updates hannah.<instance>.satellites.rooms.<room>.* states accordingly.
+message AgentSatelliteUpdate {
+  string device_id    = 1;  // satellite device ID
+  string room         = 2;  // room the satellite is assigned to
+  string address      = 3;  // UDP address (empty if not applicable)
+  bool   online       = 4;  // true = registered/online, false = gone/offline
+  optional int32 volume = 5;  // current volume level (0–100); absent = no change
+  optional bool  mute   = 6;  // current mute state; absent = no change
+}
+
+// Hannah sends the answer to a text command back to the adapter.
+// The adapter sets hannah.<instance>.textAnswer accordingly.
+message AgentTextAnswer {
+  string text   = 1;  // plain-text answer
+  string intent = 2;  // detected intent name
+}
+
+// A notification from the ioBroker adapter.
+// direct=true: skip LLM, play text unchanged (severity ignored).
+// direct=false: LLM reformulates text; severity controls tone ("alert"|"notify"|"info").
+message AgentNotification {
+  string text     = 1;
+  bool   direct   = 2;
+  string severity = 3;  // "alert" | "notify" | "info" — only used when direct=false
+}
+
+message AgentStateValue {
+    string value = 1;
+    bool ack      = 2;
+}
+
+// A device from the ioBroker adapter
+message AgentDevice {
+    string state_id  = 1;
+    string floor     = 2;
+    string room      = 3;
+    string device    = 4;
+    string device_type        = 5;
+    repeated string functions = 6;
+    AgentStateValue value     = 7;
+}
+
+// a list with all known devices from the ioBroker adapter
+message AgentDeviceSnapshot {
+    repeated AgentDevice devices = 1;
+}
+
+// A resident from the ioBroker adapter
+message AgentResident {
+  string roomie_id   = 1;
+  string name        = 2;
+  bool   is_guest    = 3;
+}
+
+// a list with all known residents
+message AgentResidentSnapshot {
+  repeated AgentResident residents = 1;
+}
+
+// Hannah notifies the adapter that a BLE tag's location has changed.
+// The adapter creates/updates states under hannah.<instance>.ble.<label>.*.
+// room and satellite are empty when the tag is no longer visible.
+message AgentBleUpdate {
+  string label     = 1;  // human-readable tag name (from config, used as state path)
+  string mac       = 2;  // MAC address (lowercase, colon-separated)
+  string room      = 3;  // room name (empty = tag not visible / stale)
+  string satellite = 4;  // satellite device ID that last detected the tag
+  int32  rssi      = 5;  // last known RSSI in dBm (0 when room is empty)
+}
+// Hannah notifies the adapter of a satellite's sensor reading.
+// The adapter creates/updates states under hannah.<instance>.satellites.<device>.sensors.*.
+// gas_resistance is omitted (0.0) when not available (BMP280+AHT20 hardware).
+message AgentSensorUpdate {
+  string device          = 1;  // satellite device ID
+  float  temperature     = 2;  // °C
+  float  pressure        = 3;  // hPa
+  float  humidity        = 4;  // % relative humidity (0 when not available)
+  float  gas_resistance  = 5;  // Ω VOC raw resistance (0 when not available)
 }

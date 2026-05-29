@@ -24,12 +24,67 @@ _TOOLS: list[dict] = [
         "function": {
             "name": "get_all_devices",
             "description": (
-                "Gibt alle bekannten Smart-Home-Geräte mit Metadaten zurück "
-                "(ID, Name, Raum, Etage, Kategorie, verfügbare State-Suffixe). "
-                "Rufe das auf bevor du States setzt, um gültige IDs zu kennen. "
-                "Aktuelle Zustandswerte sind nicht enthalten — dafür get_device_state verwenden."
+                "Gibt alle bekannten Smart-Home-Geräte zurück (ID, Name, Raum, Kategorie). "
+                "Nur zur Übersicht — keine Zustandswerte. "
+                "Für aktive Geräte: get_active_devices. "
+                "Für Geräte in einem Raum: get_devices_in_room. "
+                "Für eine Kategorie: get_devices_by_category."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_active_devices",
+            "description": (
+                "Gibt alle Geräte zurück die gerade aktiv sind "
+                "(on=true oder level>0), inklusive aktueller Zustandswerte. "
+                "Ideal für Fragen wie 'Was läuft gerade?' oder 'Was ist eingeschaltet?'."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_devices_in_room",
+            "description": (
+                "Gibt alle Geräte in einem bestimmten Raum zurück "
+                "(ID, Name, Kategorie, verfügbare State-Suffixe). "
+                "Ideal wenn Fragen oder Befehle einen Raum betreffen."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "room": {
+                        "type": "string",
+                        "description": "Raumname, z.B. 'Wohnzimmer' oder 'Küche'",
+                    }
+                },
+                "required": ["room"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_devices_by_category",
+            "description": (
+                "Gibt alle Geräte einer Kategorie zurück "
+                "(ID, Name, Raum, verfügbare State-Suffixe). "
+                "Ideal für Massen-Aktionen wie 'alle Lichter aus'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "description": "Kategoriename, z.B. 'Licht', 'Heizung', 'Steckdosen'",
+                    }
+                },
+                "required": ["category"],
+            },
         },
     },
     {
@@ -183,6 +238,12 @@ class ToolAgent:
     def _dispatch(self, name: str, args: dict, spoken: list[str]) -> object:
         if name == "get_all_devices":
             return self._get_all_devices()
+        if name == "get_active_devices":
+            return self._get_active_devices()
+        if name == "get_devices_in_room":
+            return self._get_devices_in_room(args.get("room", ""))
+        if name == "get_devices_by_category":
+            return self._get_devices_by_category(args.get("category", ""))
         if name == "get_device_state":
             return self._get_device_state(args.get("device_id", ""))
         if name == "set_device_state":
@@ -192,6 +253,9 @@ class ToolAgent:
             spoken.append(text)
             return {"ok": True}
         return {"error": f"Unbekanntes Tool: {name}"}
+
+    # ------------------------------------------------------------------
+    # Tool-Implementierungen
 
     def _get_all_devices(self) -> list[dict]:
         result: list[dict] = []
@@ -203,11 +267,66 @@ class ToolAgent:
                         "id": dev.id,
                         "name": dev.name,
                         "room": room_name,
-                        "floor": dev.floor,
+                        "category": dev.category,
+                    }
+                )
+        return result
+
+    def _get_active_devices(self) -> list[dict]:
+        result: list[dict] = []
+        for room_key, devs in self._iobroker.devices.items():
+            room_name = self._iobroker.rooms.get(room_key, room_key)
+            for dev in devs.values():
+                if self._is_active(dev):
+                    result.append(
+                        {
+                            "id": dev.id,
+                            "name": dev.name,
+                            "room": room_name,
+                            "category": dev.category,
+                            "current": dev.current,
+                        }
+                    )
+        return result
+
+    def _get_devices_in_room(self, room: str) -> list[dict]:
+        room_lower = room.lower()
+        result: list[dict] = []
+        for room_key, devs in self._iobroker.devices.items():
+            room_name = self._iobroker.rooms.get(room_key, room_key)
+            if room_lower not in room_name.lower():
+                continue
+            for dev in devs.values():
+                result.append(
+                    {
+                        "id": dev.id,
+                        "name": dev.name,
                         "category": dev.category,
                         "state_keys": list(dev.states.keys()),
                     }
                 )
+        if not result:
+            return [{"error": f"Kein Raum '{room}' gefunden"}]
+        return result
+
+    def _get_devices_by_category(self, category: str) -> list[dict]:
+        category_lower = category.lower()
+        result: list[dict] = []
+        for room_key, devs in self._iobroker.devices.items():
+            room_name = self._iobroker.rooms.get(room_key, room_key)
+            for dev in devs.values():
+                if category_lower not in dev.category.lower():
+                    continue
+                result.append(
+                    {
+                        "id": dev.id,
+                        "name": dev.name,
+                        "room": room_name,
+                        "state_keys": list(dev.states.keys()),
+                    }
+                )
+        if not result:
+            return [{"error": f"Keine Geräte in Kategorie '{category}' gefunden"}]
         return result
 
     def _get_device_state(self, device_id: str) -> dict:
@@ -224,3 +343,13 @@ class ToolAgent:
     def _set_device_state(self, state_id: str, value: object) -> dict:
         ok = self._iobroker.set_state(state_id, value)
         return {"ok": ok}
+
+    @staticmethod
+    def _is_active(dev) -> bool:
+        current = dev.current or {}
+        for key, val in current.items():
+            if key == "on" and val:
+                return True
+            if key == "level" and val and int(val) > 0:
+                return True
+        return False

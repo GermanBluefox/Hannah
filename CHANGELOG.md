@@ -5,6 +5,13 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.14.4
+### Hannah Core
+* Added: `get_active_devices` tool — returns only active devices (on=true or level>0) with current state; ideal for "was läuft gerade?"
+* Added: `get_devices_in_room(room)` tool — returns devices in a specific room with state keys; for targeted queries and control
+* Added: `get_devices_by_category(category)` tool — returns devices of a category with state keys; for bulk actions like "alle Lichter aus"
+* Changed: `get_all_devices` now returns only id/name/room/category (no state_keys, no current) — pure discovery tool to reduce token usage
+
 ## 0.14.3
 ### Hannah Core
 * Fixed: `get_all_devices` tool no longer returns `current` state values — payload was too large for LLM token budget; use `get_device_state` for current values

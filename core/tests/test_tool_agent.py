@@ -195,9 +195,10 @@ class TestToolDispatch:
         assert item["id"] == self.dev.id
         assert item["name"] == "Decke"
         assert item["room"] == "Wohnzimmer"
-        assert item["floor"] == "EG"
         assert item["category"] == "Licht"
-        assert "on" in item["state_keys"]
+        assert "floor" not in item
+        assert "state_keys" not in item
+        assert "current" not in item
 
     def test_get_device_state_found(self):
         result = self.agent._get_device_state(self.dev.id)

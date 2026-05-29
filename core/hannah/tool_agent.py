@@ -135,8 +135,10 @@ class ToolAgent:
             messages.extend(history)
         messages.append({"role": "user", "content": text})
 
-        for _ in range(_MAX_ITERATIONS):
+        for i in range(_MAX_ITERATIONS):
+            log.info("[tool_agent] Iteration %d/%d", i + 1, _MAX_ITERATIONS)
             response = self._llm.chat_with_tools(messages, _TOOLS)
+            log.info("[tool_agent] finish_reason=%s tool_calls=%d", response.get("finish_reason"), len(response.get("tool_calls") or []))
             tool_calls: list[dict] = response.get("tool_calls") or []
 
             if not tool_calls:

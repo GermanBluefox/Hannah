@@ -203,12 +203,13 @@ class OpenAICompatibleLLM(LLMClient):
             "model":      self._model,
             "messages":   messages,
             "max_tokens": self._max_tokens,
+            "stream":     False,
         }
         if tools:
             payload["tools"] = tools
 
         try:
-            resp = requests.post(self._url, json=payload, headers=headers, timeout=self._timeout)
+            resp = requests.post(self._url, json=payload, headers=headers, timeout=(10, self._timeout))
             resp.raise_for_status()
             choice = resp.json()["choices"][0]
             msg = choice["message"]

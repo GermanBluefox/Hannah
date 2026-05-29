@@ -7,8 +7,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=hannah-telegram
-WorkingDirectory=/opt/hannah-telegram/telegram
-ExecStart=/opt/hannah-telegram/venv/bin/python main.py --config /etc/hannah-telegram/config.yaml
+WorkingDirectory=/opt/hannah/telegram
+ExecStart=/opt/hannah/telegram/venv/bin/python main.py --config /etc/hannah-telegram/config.yaml
 Restart=on-failure
 RestartSec=5s
 

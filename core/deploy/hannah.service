@@ -10,9 +10,9 @@ StartLimitBurst=5
 [Service]
 Type=simple
 User=hannah
-WorkingDirectory=/opt/hannah-core/core
-ExecStart=/opt/hannah-core/venv/bin/python main.py -c /etc/hannah/config.yaml
-Environment=HOME=/opt/hannah-core
+WorkingDirectory=/opt/hannah/core
+ExecStart=/opt/hannah/core/venv/bin/python main.py -c /etc/hannah/config.yaml
+Environment=HOME=/opt/hannah/core
 Restart=on-failure
 RestartSec=10
 
@@ -24,7 +24,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 ReadOnlyPaths=/etc/hannah
-ReadWritePaths=/opt/hannah-core
+ReadWritePaths=/opt/hannah/core
 
 [Install]
 WantedBy=multi-user.target

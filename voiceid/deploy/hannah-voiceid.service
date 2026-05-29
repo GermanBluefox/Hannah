@@ -7,10 +7,10 @@ After=network.target local-fs.target
 [Service]
 Type=simple
 User=hannah-voiceid
-WorkingDirectory=/opt/hannah-voiceid/voiceid
-Environment=HOME=/opt/hannah-voiceid
+WorkingDirectory=/opt/hannah/voiceid
+Environment=HOME=/opt/hannah/voiceid
 
-ExecStart=/opt/hannah-voiceid/venv/bin/python app.py --config /etc/hannah-voiceid/config.yaml
+ExecStart=/opt/hannah/voiceid/venv/bin/python app.py --config /etc/hannah-voiceid/config.yaml
 Restart=on-failure
 RestartSec=5s
 
@@ -21,7 +21,7 @@ ExecStartPre=/bin/mountpoint -q /mnt/hannah_mem
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadOnlyPaths=/etc/hannah-voiceid
-ReadWritePaths=/mnt/hannah_mem /opt/hannah-voiceid
+ReadWritePaths=/mnt/hannah_mem /opt/hannah/voiceid
 
 [Install]
 WantedBy=multi-user.target

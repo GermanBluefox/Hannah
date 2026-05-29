@@ -26,7 +26,8 @@ _TOOLS: list[dict] = [
             "description": (
                 "Gibt alle bekannten Smart-Home-Geräte mit Metadaten zurück "
                 "(ID, Name, Raum, Etage, Kategorie, verfügbare State-Suffixe). "
-                "Rufe das auf bevor du States setzt, um gültige IDs zu kennen."
+                "Rufe das auf bevor du States setzt, um gültige IDs zu kennen. "
+                "Aktuelle Zustandswerte sind nicht enthalten — dafür get_device_state verwenden."
             ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -205,7 +206,6 @@ class ToolAgent:
                         "floor": dev.floor,
                         "category": dev.category,
                         "state_keys": list(dev.states.keys()),
-                        "current": dev.current,
                     }
                 )
         return result

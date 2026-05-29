@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.14.3
+### Hannah Core
+* Fixed: `get_all_devices` tool no longer returns `current` state values — payload was too large for LLM token budget; use `get_device_state` for current values
+
 ## 0.14.2
 ### CI
 * Fixed: `upload:core` CI job did not include `main.py` in the release archive — services deployed via autodeploy were missing the entry point

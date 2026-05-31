@@ -15,8 +15,10 @@ def _normalize(s: str) -> str:
 
 @dataclass
 class RoutineAction:
-    topic: str
-    value: str
+    topic: str = ""
+    value: str = ""
+    say: str = ""
+    room: str = "all"
 
 
 @dataclass
@@ -63,10 +65,12 @@ class RoutineManager:
 
             routines: list[Routine] = []
             for r in data.get("routines", []):
-                actions = [
-                    RoutineAction(topic=a["topic"], value=str(a.get("value", "true")))
-                    for a in r.get("actions", [])
-                ]
+                actions = []
+                for a in r.get("actions", []):
+                    if "say" in a:
+                        actions.append(RoutineAction(say=a["say"], room=a.get("room", "all")))
+                    else:
+                        actions.append(RoutineAction(topic=a["topic"], value=str(a.get("value", "true"))))
                 routines.append(Routine(
                     name=r["name"],
                     triggers=[_normalize(t) for t in r.get("triggers", [])],

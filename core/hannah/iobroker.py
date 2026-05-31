@@ -15,6 +15,17 @@ log = logging.getLogger(__name__)
 
 _UMLAUT_MAP = {"ae": "ä", "oe": "ö", "ue": "ü", "Ae": "Ä", "Oe": "Ö", "Ue": "Ü"}
 
+_CATEGORY_LABELS: dict[str, str] = {
+    "light":   "Lichter",
+    "socket":  "Steckdosen",
+    "climate": "Klimageräte",
+    "blind":   "Rollläden",
+    "sensor":  "Sensoren",
+}
+
+def _category_label(cat: Optional[str]) -> str:
+    return _CATEGORY_LABELS.get(cat, cat) if cat else "Geräte"
+
 def _normalize_umlauts(s: str) -> str:
     """Ersetzt ae/oe/ue durch Umlaute: Buero → Büro, Sued → Süd."""
     return re.sub(r"[AaOoUu]e", lambda m: _UMLAUT_MAP.get(m.group(), m.group()), s)
@@ -368,7 +379,7 @@ class IoBrokerClient:
         """Globale Abfrage über alle Räume — fasst Ergebnisse raumweise zusammen."""
         if not targets:
             if category_filter:
-                return f"Ich kenne keine {category_filter}-Geräte."
+                return f"Ich kenne keine {_category_label(category_filter)}."
             return "Ich habe keine Gerätedaten."
 
         # Sensor-Kategorien direkt beschreiben (haben kein on/off)
@@ -378,17 +389,16 @@ class IoBrokerClient:
                 desc = self._describe_device(dev, qs)
                 if desc:
                     lines.append(desc)
-            return " ".join(lines) if lines else f"Keine {category_filter}-Daten verfügbar."
+            return " ".join(lines) if lines else f"Keine {_category_label(category_filter)}-Daten verfügbar."
 
         if qs == "on" or qs is None:
             # Räume mit eingeschalteten Geräten nennen (nur Raumnamen, keine Geräteliste)
             rooms_on = sorted({dev.room for dev in targets if dev.current.get("on") is True})
 
             if not rooms_on:
-                label = f"{category_filter}-Geräte" if category_filter else "Geräte"
-                return f"Keine {label} sind eingeschaltet."
+                return f"Keine {_category_label(category_filter)} sind eingeschaltet."
 
-            label = category_filter if category_filter else "Geräte"
+            label = _category_label(category_filter)
             return f"Eingeschaltete {label} in: {', '.join(rooms_on)}."
 
         if qs == "level":

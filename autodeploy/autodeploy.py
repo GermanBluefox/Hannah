@@ -68,10 +68,13 @@ def get_latest(base_url: str, token: str, channel: str, current_version: str | N
     return r.json()
 
 
-def download_release(base_url: str, token: str, channel: str, version: str, dest: Path) -> None:
+def download_release(url: str, token: str, dest: Path, device_id: str | None = None) -> None:
+    params = {}
+    if device_id:
+        params["device"] = device_id
     r = requests.get(
-        f"{base_url}/releases/{version}",
-        params={"channel": channel},
+        url,
+        params=params or None,
         headers=_headers(token),
         timeout=120,
         stream=True,
@@ -133,6 +136,7 @@ def deploy_component(component: dict, base_url: str, token: str, state: dict, de
     channel = component["channel"]
     install_dir = Path(component["install_dir"])
     current = state.get(name)
+    current_rev: int = state.get("_revisions", {}).get(name, 0)
 
     try:
         latest = get_latest(base_url, token, channel, current_version=current, device_id=device_id)
@@ -143,20 +147,25 @@ def deploy_component(component: dict, base_url: str, token: str, state: dict, de
     if latest is None:
         log.debug("[%s] No releases on channel '%s'.", name, channel)
         return False
-    if current == latest["version"]:
-        log.debug("[%s] Already at %s.", name, current)
+
+    server_rev: int = latest.get("revision", 0)
+    if current == latest["version"] and current_rev >= server_rev:
+        log.debug("[%s] Already at %s rev %d.", name, current, current_rev)
         return False
 
-    log.info("[%s] Update: %s → %s", name, current or "(none)", latest["version"])
+    log.info("[%s] Update: %s rev %d → %s rev %d",
+             name, current or "(none)", current_rev, latest["version"], server_rev)
 
+    download_url = latest.get("url", f"{base_url}/releases/{latest['version']}?channel={channel}")
     tmp_archive = Path(tempfile.mktemp(suffix=".tar.gz"))
     try:
-        download_release(base_url, token, channel, latest["version"], tmp_archive)
+        download_release(download_url, token, tmp_archive, device_id=device_id)
         if not _verify_sha256(tmp_archive, latest.get("sha256", "")):
             return False
         _extract_and_copy(tmp_archive, install_dir)
         state[name] = latest["version"]
-        log.info("[%s] Deployed %s.", name, latest["version"])
+        state.setdefault("_revisions", {})[name] = server_rev
+        log.info("[%s] Deployed %s rev %d.", name, latest["version"], server_rev)
         return True
     except Exception as e:
         log.error("[%s] Deployment failed: %s", name, e)

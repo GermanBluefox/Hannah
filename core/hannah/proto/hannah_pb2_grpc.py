@@ -157,6 +157,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.TimerConnect = channel.stream_stream(
+                '/hannah.HannahService/TimerConnect',
+                request_serializer=hannah__pb2.TimerMessage.SerializeToString,
+                response_deserializer=hannah__pb2.TimerCommand.FromString,
+                _registered_method=True)
         self.AgentConnect = channel.stream_stream(
                 '/hannah.HannahService/AgentConnect',
                 request_serializer=hannah__pb2.AgentMessage.SerializeToString,
@@ -342,6 +347,16 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def TimerConnect(self, request_iterator, context):
+        """--- Timer Service ---
+        Bidirectional stream between the Hannah Timer Service and Hannah Core.
+        The Timer Service initiates the connection; if Hannah restarts, the service reconnects.
+        Hannah sends timer commands (create, cancel, list); the service fires events when timers expire.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def AgentConnect(self, request_iterator, context):
         """--- ioBroker Agent ---
         Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
@@ -465,6 +480,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     servicer.EnrollVoiceprint,
                     request_deserializer=hannah__pb2.EnrollVoiceprintRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'TimerConnect': grpc.stream_stream_rpc_method_handler(
+                    servicer.TimerConnect,
+                    request_deserializer=hannah__pb2.TimerMessage.FromString,
+                    response_serializer=hannah__pb2.TimerCommand.SerializeToString,
             ),
             'AgentConnect': grpc.stream_stream_rpc_method_handler(
                     servicer.AgentConnect,
@@ -1079,6 +1099,33 @@ class HannahService(object):
             '/hannah.HannahService/EnrollVoiceprint',
             hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def TimerConnect(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            '/hannah.HannahService/TimerConnect',
+            hannah__pb2.TimerMessage.SerializeToString,
+            hannah__pb2.TimerCommand.FromString,
             options,
             channel_credentials,
             insecure,

@@ -1,5 +1,8 @@
 # Hannah — Voice Assistant Middleware
 
+[![pipeline status](https://dev.kernstock.net/gessinger/voice/hannah/badges/master/pipeline.svg)](https://dev.kernstock.net/gessinger/voice/hannah/-/commits/master)
+[![Latest Release](https://dev.kernstock.net/gessinger/voice/hannah/-/badges/release.svg)](https://dev.kernstock.net/gessinger/voice/hannah/-/releases)
+
 Hannah ist eine selbst gehostete Sprachassistenten-Middleware für ioBroker.  
 Konzept: offline, kein Cloud-Zwang, kein API-Key — wie Alexa, aber für dein eigenes Smart Home.
 

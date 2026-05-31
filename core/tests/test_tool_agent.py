@@ -35,8 +35,8 @@ def _make_device(
         room=room,
         floor=floor,
         category=category,
-        states=states or {"on": f"{device_id}.on"},
-        current=current or {"on": True},
+        states=states if states is not None else {"on": f"{device_id}.on"},
+        current=current if current is not None else {"on": True},
     )
 
 
@@ -165,9 +165,9 @@ class TestToolAgentRun:
 
         second_call_messages = llm.chat_with_tools.call_args_list[1][0][0]
         tool_result_msg = next(m for m in second_call_messages if m.get("role") == "tool")
-        content = json.loads(tool_result_msg["content"])
-        assert isinstance(content, list)
-        assert content[0]["id"] == dev.id
+        content = tool_result_msg["content"]
+        assert isinstance(content, str)
+        assert dev.id in content
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -189,28 +189,24 @@ class TestToolDispatch:
     def test_get_all_devices_structure(self):
         result = self.agent._get_all_devices()
 
-        assert isinstance(result, list)
-        assert len(result) == 1
-        item = result[0]
-        assert item["id"] == self.dev.id
-        assert item["name"] == "Decke"
-        assert item["room"] == "Wohnzimmer"
-        assert item["category"] == "Licht"
-        assert "floor" not in item
-        assert "state_keys" not in item
-        assert "current" not in item
+        assert isinstance(result, str)
+        assert self.dev.id in result
+        assert "Decke" in result
+        assert "Wohnzimmer" in result
+        assert "Licht" in result
 
     def test_get_device_state_found(self):
         result = self.agent._get_device_state(self.dev.id)
 
-        assert result["id"] == self.dev.id
-        assert result["current"] == {"on": False}
+        assert isinstance(result, str)
+        assert "Decke" in result
+        assert "on" in result
 
     def test_get_device_state_not_found(self):
         result = self.agent._get_device_state("nicht.vorhanden")
 
-        assert "error" in result
-        assert "nicht.vorhanden" in result["error"]
+        assert isinstance(result, str)
+        assert "nicht.vorhanden" in result
 
     def test_set_device_state_calls_setter(self):
         self.iobroker.set_state.return_value = True
@@ -244,6 +240,26 @@ class TestToolDispatch:
 
         assert "error" in result
         assert "fly_to_moon" in result["error"]
+
+    def test_is_active_on_true(self):
+        dev = _make_device(current={"on": True, "level": 80})
+        assert ToolAgent._is_active(dev) is True
+
+    def test_is_active_on_false_with_level(self):
+        dev = _make_device(current={"on": False, "level": 80})
+        assert ToolAgent._is_active(dev) is False
+
+    def test_is_active_no_on_state_level_positive(self):
+        dev = _make_device(current={"level": 50})
+        assert ToolAgent._is_active(dev) is True
+
+    def test_is_active_no_on_state_level_zero(self):
+        dev = _make_device(current={"level": 0})
+        assert ToolAgent._is_active(dev) is False
+
+    def test_is_active_empty_current(self):
+        dev = _make_device(current={})
+        assert ToolAgent._is_active(dev) is False
 
 
 # ──────────────────────────────────────────────────────────────────────────────

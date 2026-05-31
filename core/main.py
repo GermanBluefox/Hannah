@@ -8,6 +8,8 @@ und steuert Geräte via ioBroker REST-API.
 import argparse
 import datetime
 import json
+import time
+import uuid
 import logging
 import os
 import pathlib
@@ -41,7 +43,7 @@ from hannah.user_registry import UserRegistry
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
 from hannah.ble_location import BleLocationEngine
-from hannah.timers import TimerManager, AlarmManager, format_duration, next_alarm_dt
+from hannah.timers import AlarmManager, HannahTimerStore, format_duration, next_alarm_dt
 from hannah.__version__ import VERSION as HANNAH_VERSION
 
 
@@ -164,7 +166,10 @@ def main():
         routine = routine_manager.match(text)
         if routine:
             for action in routine.actions:
-                mqtt_handler.publish_raw(action.topic, action.value)
+                if action.say:
+                    process_announcement(action.room, action.say)
+                else:
+                    mqtt_handler.publish_raw(action.topic, action.value)
             if routine.reply:
                 _handle_feedback(device, True, routine.reply)
             return
@@ -234,8 +239,16 @@ def main():
                 udp_server.send_command(t, {"type": cmd_type})
         elif intent.name == "SetTimer":
             seconds = int(intent.value)
-            timer_manager.set(device, seconds, lambda d: _handle_feedback(d, True, "Timer abgelaufen."))
-            _handle_feedback(device, True, f"Timer für {format_duration(seconds)} gesetzt.")
+            label = intent.label or format_duration(seconds)
+            timer_id = str(uuid.uuid4())
+            fire_at = int(time.time()) + seconds
+            room_id = intent.room_id or "all"
+            timer_store.set(timer_id, label, fire_at, room_id)
+            grpc_servicer.timer_create(timer_id, label, fire_at, room_id)
+            reply = f"Timer für {format_duration(seconds)} gesetzt."
+            if intent.label:
+                reply = f"Timer für {format_duration(seconds)} gesetzt: {intent.label}."
+            _handle_feedback(device, True, reply)
         elif intent.name == "SetAlarm":
             alarm_cfg = cfg.get("alarm", {})
             target = alarm_cfg.get("satellite") or device
@@ -304,7 +317,10 @@ def main():
         routine = routine_manager.match(text)
         if routine:
             for action in routine.actions:
-                mqtt_handler.publish_raw(action.topic, action.value)
+                if action.say:
+                    process_announcement(action.room, action.say)
+                else:
+                    mqtt_handler.publish_raw(action.topic, action.value)
             return routine.reply or "Routine ausgeführt.", "Routine"
 
         # Smalltalk-Modus: LLM-Classifier vor NLU schalten
@@ -540,10 +556,12 @@ def main():
         return all_devices.get(device)
 
     ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room)
-    timer_manager = TimerManager()
     alarm_manager = AlarmManager(
         persist_path=cfg.get("alarm", {}).get("persist", "alarms.json"),
         on_fire=lambda alarm_id, target: _handle_feedback(target, True, "Wecker! Guten Morgen!"),
+    )
+    timer_store = HannahTimerStore(
+        db_path=cfg.get("timers", {}).get("db", "timers.db"),
     )
 
     def _on_ble_location_change(tag, room, satellite, rssi):
@@ -786,10 +804,29 @@ def main():
                         udp_server.send_tts(d, pcm, rate)
         log.info(f"[satellite_control] room={room!r} {key}={value!r} → {len(targets)} Satelliten")
 
+    _iobroker_ready: bool = False
+
+    def _on_timer_fired(timer_id: str, label: str):
+        entry = timer_store.get(timer_id)
+        if not entry:
+            log.warning(f"[timer] TimerFired für unbekannte ID {timer_id!r} ({label!r}) — ignoriert.")
+            return
+        room = entry.get("room", "all")
+        announce_label = entry.get("label") or label
+        timer_store.remove(timer_id)
+        process_announcement(room, f"Dein Timer ist abgelaufen: {announce_label}.")
+
+    def _on_timer_connected():
+        if _iobroker_ready:
+            grpc_servicer.timer_send_ready()
+
     def _on_agent_device_snapshot(devices):
+        nonlocal _iobroker_ready
         iobroker.handle_device_snapshot(devices)
         nlu._rooms = {**iobroker.rooms, **_group_pseudo_rooms}
         nlu._devices = iobroker.devices
+        _iobroker_ready = True
+        grpc_servicer.timer_send_ready()
 
     def _on_agent_connect():
         state_ids = trigger_engine.get_referenced_state_ids()
@@ -828,6 +865,8 @@ def main():
         on_agent_device_snapshot=_on_agent_device_snapshot,
         on_agent_send_residents=registry.sync,
         on_trigger_firmware_update=lambda device: mqtt_handler.publish_ota_ok(device),
+        on_timer_fired=_on_timer_fired,
+        on_timer_connected=_on_timer_connected,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)
@@ -936,13 +975,14 @@ def main():
         if llm is not None:
             try:
                 _tone = {
-                    "alert":  "Drücke dich dabei klar und etwas dringlicher aus.",
-                    "notify": "Drücke dich freundlich und sachlich aus.",
-                    "info":   "Drücke dich beiläufig und entspannt aus.",
-                }.get(severity, "Drücke dich freundlich und sachlich aus.")
+                    "alert":  "Drücke dich dabei klar und direkt aus, zeig dass es wichtig ist.",
+                    "notify": "Drücke dich locker und direkt aus, wie eine Mitbewohnerin die kurz Bescheid gibt.",
+                    "info":   "Drücke dich beiläufig aus, als würdest du es nebenbei erwähnen.",
+                }.get(severity, "Drücke dich locker und direkt aus.")
                 notification_prompt = (
-                    "Du bist ein freundlicher Smart-Home-Assistent. "
-                    "Formuliere die folgende Systemmeldung in einem kurzen, natürlichen Satz um. "
+                    "Du bist Hannah, eine 24-jährige Mitbewohnerin. "
+                    "Formuliere die folgende Systemmeldung kurz und natürlich um — "
+                    "du redest mit deiner Mitbewohnerin, nicht mit einem Kunden. "
                     "Behalte dabei alle konkreten Details wie Adapter-Namen und Versionsnummern bei. "
                     "Datumsangaben im Format M/D/YYYY oder M/D/YYYY, H:MM:SS AM/PM sind Zeitstempel — "
                     "nenne sie als Datum oder Uhrzeit, nicht als Versionsnummer. "

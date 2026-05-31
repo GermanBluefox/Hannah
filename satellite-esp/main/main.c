@@ -89,7 +89,6 @@ void app_main(void)
     /* BLE-Scanner für Indoor-Lokalisierung */
     hannah_ble_init();
 
-    hannah_led_set_state(LED_STATE_IDLE);
-
+    /* LED bleibt in BOOT — hannah_audio mic_task setzt LED_STATE_IDLE nach Warmup */
     ESP_LOGI(TAG, "All components initialized.");
 }

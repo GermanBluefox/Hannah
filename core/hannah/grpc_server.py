@@ -81,6 +81,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_agent_device_snapshot: Optional[Callable[[Iterable[pb.AgentDevice]], None]] = None,
         on_agent_send_residents: Optional[Callable[[Iterable[pb.AgentResident]], None]] = None,
         on_trigger_firmware_update: Optional[Callable[[str], None]] = None,  # (device)
+        on_timer_fired: Optional[Callable[[str, str], None]] = None,          # (timer_id, label)
+        on_timer_connected: Optional[Callable[[], None]] = None,
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -107,6 +109,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_agent_device_snapshot    = on_agent_device_snapshot
         self._on_agent_send_residents     = on_agent_send_residents
         self._on_trigger_firmware_update  = on_trigger_firmware_update or (lambda _: None)
+        self._on_timer_fired    = on_timer_fired
+        self._on_timer_connected = on_timer_connected
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -123,6 +127,10 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         # Per-connection command queues for active agent streams
         self._agent_queues: list[queue.Queue] = []
         self._agent_lock = threading.Lock()
+
+        # Single queue for the connected Timer Service (at most one at a time)
+        self._timer_queue: Optional[queue.Queue] = None
+        self._timer_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public: proxy helpers (called from main.py)
@@ -250,6 +258,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             return pb.StatusResponse(ok=False, message="notification not configured")
         try:
             severity = "direct" if request.direct else (request.severity or "notify")
+            log.info(f"[grpc] Notify empfangen: severity={severity!r} text={request.text!r}")
             threading.Thread(
                 target=self._notificate, args=(request.text, severity), daemon=True
             ).start()
@@ -566,6 +575,45 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             log.debug(f"agent_sensor_update({device}): pushed to {n} adapter(s)")
             return n > 0
 
+    # ------------------------------------------------------------------
+    # Timer Service (called from main.py)
+
+    def timer_connected(self) -> bool:
+        """True if the Timer Service stream is currently active."""
+        with self._timer_lock:
+            return self._timer_queue is not None
+
+    def timer_send_ready(self) -> bool:
+        """Send TimerReady to the connected Timer Service. No-op if not connected."""
+        with self._timer_lock:
+            if self._timer_queue is None:
+                return False
+            self._timer_queue.put(pb.TimerCommand(ready=pb.TimerReady()))
+        log.info("[grpc] TimerReady gesendet")
+        return True
+
+    def timer_create(self, timer_id: str, label: str, fire_at: int,
+                     room: str, roomie_id: str = "") -> bool:
+        """Send TimerCreate to the Timer Service. Returns False if not connected."""
+        kwargs = dict(timer_id=timer_id, label=label, fire_at=fire_at, room=room)
+        if roomie_id:
+            kwargs["roomie_id"] = roomie_id
+        cmd = pb.TimerCommand(create=pb.TimerCreate(**kwargs))
+        with self._timer_lock:
+            if self._timer_queue is None:
+                return False
+            self._timer_queue.put(cmd)
+        return True
+
+    def timer_cancel(self, timer_id: str) -> bool:
+        """Send TimerCancel to the Timer Service. Returns False if not connected."""
+        cmd = pb.TimerCommand(cancel=pb.TimerCancel(timer_id=timer_id))
+        with self._timer_lock:
+            if self._timer_queue is None:
+                return False
+            self._timer_queue.put(cmd)
+        return True
+
     def AgentConnect(self, request_iterator, context):
         """
         Bidirektionaler Stream: Adapter → State-Updates, Hannah → Geräte-Befehle.
@@ -645,6 +693,72 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 if q in self._agent_queues:
                     self._agent_queues.remove(q)
             log.info("[grpc] ioBroker-Adapter disconnected")
+
+    def TimerConnect(self, request_iterator, context):
+        """
+        Bidirektionaler Stream: Timer Service → TimerMessage, Hannah → TimerCommand.
+
+        Nur ein Timer Service kann gleichzeitig verbunden sein. Bei erneutem
+        Connect wird die bestehende Verbindung verdrängt.
+        """
+        q: queue.Queue = queue.Queue()
+        with self._timer_lock:
+            if self._timer_queue is not None:
+                log.warning("[grpc] Timer Service reconnect — bestehende Verbindung wird verdrängt")
+                self._timer_queue.put(None)  # EOF für alten Stream
+            self._timer_queue = q
+        log.info("[grpc] Timer Service connected")
+
+        if self._on_timer_connected:
+            try:
+                self._on_timer_connected()
+            except Exception as e:
+                log.warning(f"[grpc] on_timer_connected Fehler: {e}")
+
+        def _drain():
+            try:
+                for msg in request_iterator:
+                    which = msg.WhichOneof("payload")
+                    if which == "ack":
+                        log.info(
+                            f"[grpc] Timer Service Ack: {msg.ack.message!r}"
+                            f" ({msg.ack.active_timers} aktive Timer)"
+                        )
+                    elif which == "fired":
+                        fired = msg.fired
+                        log.info(f"[grpc] TimerFired: {fired.timer_id!r} ({fired.label!r})")
+                        if self._on_timer_fired:
+                            try:
+                                self._on_timer_fired(fired.timer_id, fired.label)
+                            except Exception as e:
+                                log.error(f"[grpc] on_timer_fired Fehler: {e}")
+                    elif which == "list":
+                        log.debug(f"[grpc] TimerListResponse: {len(msg.list.timers)} Timer")
+                    else:
+                        log.warning(f"[grpc] Unbekanntes TimerMessage-Payload: {which!r}")
+            except Exception as e:
+                log.debug(f"[grpc] Timer Service drain ended: {e}")
+            finally:
+                q.put(None)
+
+        drain_thread = threading.Thread(target=_drain, daemon=True, name="timer-drain")
+        drain_thread.start()
+
+        try:
+            while context.is_active():
+                try:
+                    cmd = q.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+                if cmd is None:
+                    break
+                yield cmd
+        finally:
+            drain_thread.join(timeout=2)
+            with self._timer_lock:
+                if self._timer_queue is q:
+                    self._timer_queue = None
+            log.info("[grpc] Timer Service disconnected")
 
     def EnrollVoiceprint(self, request, _context):
         if self._enroll_voiceprint is None:

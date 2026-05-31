@@ -9,4 +9,5 @@ idf_component_register(
         esp_app_format
         app_update
         espressif__cjson
+        nvs_flash
 )

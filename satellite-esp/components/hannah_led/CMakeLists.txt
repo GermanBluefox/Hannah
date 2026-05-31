@@ -4,4 +4,7 @@ idf_component_register(
     REQUIRES
         driver
         espressif__led_strip
+        freertos
+    PRIV_REQUIRES
+        esp_common
 )

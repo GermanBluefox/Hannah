@@ -71,6 +71,7 @@ class Intent:
     query_state: Optional[str] = None  # "on" | "level" | "color" | None (= alles)
     value: Optional[object] = None     # float (SetLevel) | str (SetColor)
     unit: Optional[str] = None         # "%" | "color"
+    label: Optional[str] = None        # Timer-Label, z.B. "Spazierengehen"
     raw_text: str = ""
     confidence: float = 1.0
     candidates: list = field(default_factory=list)  # [(room_id, room_name), ...] bei Mehrdeutigkeit
@@ -217,7 +218,9 @@ class NLU:
         norm_tokens         = {_normalize(t) for t in tokens}
         climate_mode        = self._find_climate_mode(norm_tokens)
         fan_speed           = self._find_fan_speed(norm_tokens)
-        timer_seconds       = self._find_timer_seconds(raw) if "timer" in norm_tokens else None
+        _timer_trigger = bool({"timer", "erinnere", "erinnern", "erinnerung"} & norm_tokens)
+        timer_seconds       = self._find_timer_seconds(raw) if _timer_trigger else None
+        timer_label         = self._find_timer_label(raw) if timer_seconds is not None else None
         alarm_time          = self._find_alarm_time(raw) if bool({"wecker", "alarm"} & norm_tokens) else None
 
         no_device_context = device is None and room_key is None and category_filter is None
@@ -322,6 +325,8 @@ class NLU:
             and (no_device_context or _has_smalltalk_words)
         )
 
+        intent_label: Optional[str] = None
+
         if is_car:
             car_scope = self._find_car_scope(norm_tokens)
             intent_name, value, unit = "CarQuery", car_scope, None
@@ -344,6 +349,7 @@ class NLU:
             intent_name, value, unit = "SetMute", "off" if _has_off else "on", None
         elif timer_seconds is not None:
             intent_name, value, unit = "SetTimer", timer_seconds, None
+            intent_label = timer_label
         elif alarm_time is not None:
             intent_name, value, unit = "SetAlarm", alarm_time, None
         elif is_smalltalk:
@@ -379,6 +385,7 @@ class NLU:
             query_state=query_state,
             value=value,
             unit=unit,
+            label=intent_label,
             raw_text=raw,
             candidates=room_candidates if _actionable else [],
         )
@@ -497,6 +504,19 @@ class NLU:
         if re.search(r"eineinhalb\s+minut", t):
             total += 90
         return total if total > 0 else None
+
+    def _find_timer_label(self, text: str) -> Optional[str]:
+        """Extrahiert Label aus 'erinnere mich in X Minuten an Y' → 'Y'."""
+        t = text.lower()
+        m = re.search(r'\d+(?:[.,]\d+)?\s*(?:stund|minut|sekund)\w*', t)
+        if not m:
+            return None
+        rest = t[m.end():]
+        lm = re.search(r'\bans?\s+(.+)', rest)
+        if not lm:
+            return None
+        label = re.sub(r'^(?:den|die|das|dem|der|einen|einem|ein)\s+', '', lm.group(1).strip())
+        return label.strip() if label.strip() else None
 
     def _find_climate_mode(self, norm_tokens: set[str]) -> Optional[str]:
         """Erkennt Klimaanlagen-Betriebsmodus aus normalisierten Tokens."""

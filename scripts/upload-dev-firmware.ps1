@@ -54,7 +54,7 @@ if (-not $BaseUrl) { Write-Error "HANNAH_UPDATE_BASE_URL is not set."; exit 1 }
 
 # List
 if ($List) {
-    $ListUrl = "${BaseUrl}/firmware?channel=${Channel}"
+    $ListUrl = "${BaseUrl}/releases?channel=${Channel}"
     Write-Host "Firmware list (channel: $Channel):" -ForegroundColor Cyan
     $Response = Invoke-WebRequest -Uri $ListUrl -Headers @{ Authorization = "Bearer $Token" } -UseBasicParsing
     $Json = $Response.Content | ConvertFrom-Json
@@ -73,7 +73,7 @@ if ($List) {
 
 # Delete
 if ($Delete) {
-    $DeleteUrl = "${BaseUrl}/firmware/${Delete}?channel=${Channel}"
+    $DeleteUrl = "${BaseUrl}/releases/${Delete}?channel=${Channel}"
     Write-Host "Deleting $Delete from channel '$Channel'..." -ForegroundColor Yellow
     $Response = Invoke-WebRequest -Method Delete -Uri $DeleteUrl -Headers @{ Authorization = "Bearer $Token" } -UseBasicParsing
     Write-Host "Done. Server responded: $($Response.StatusCode)" -ForegroundColor Green
@@ -113,7 +113,7 @@ if ($DirtyFiles) {
 
 # Determine version
 if (-not $Version) {
-    $Version = git -C $RepoRoot describe --tags --always 2>$null
+    $Version = git -C $RepoRoot describe --tags --always --dirty 2>$null
     if (-not $Version) { $Version = "dev" }
 }
 

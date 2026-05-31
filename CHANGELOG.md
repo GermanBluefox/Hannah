@@ -5,6 +5,89 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.18.4
+### Hannah Core
+* Fixed: NLU responses no longer contain raw internal category names (e.g. "light") — mapped to German labels: Lichter, Steckdosen, Klimageräte, Rollläden, Sensoren
+
+## 0.18.3
+### Satellite Firmware
+* Fixed: false wakeword trigger immediately after boot — wakeword frontend is now fed audio during the 5-second warmup period so model state is fully initialized before detection begins; previously the uninitialized frontend caused a consistent false trigger ~200 ms after warmup ended
+* Fixed: TTS audio chunks silently dropped during playback — speaker queue depth increased from 8 to 256 entries; send is now blocking with a 2-second timeout to apply backpressure instead of discarding chunks
+* Fixed: OTA reliability — mbedTLS TLS IN buffer reduced from 16 KB to 8 KB via `MBEDTLS_ASYMMETRIC_CONTENT_LEN`; frees internal RAM headroom consumed by DSR_16S PDM downsampling
+
+## 0.18.2
+### Satellite Firmware
+* Fixed: PDM microphone channel selection corrected — SPH0641LU4H-1 with SEL=VDD outputs on the right channel (index 1), not left; previously all captured audio was zero
+* Fixed: PDM digital gain increased from default (1×) to 8× — default gain produced inaudibly quiet signal for the SPH0641LU4H-1
+
+## 0.18.1
+### Hardware (PCB Rev. 4)
+* Changed: SW1 (EN) tap rerouted closer to ESP pin for more clearance to C3/C4/R3
+* Changed: SW2 (IO0) rerouted for more clearance between R6 and button body; AMP_LRC/AMP_BCLK traces rerouted away from button area
+* Changed: UART connector (J4) TX/RX swapped to match adapter pinout without crossing cables
+
+### Satellite Firmware
+* Changed: wakeword enable/disable is now a runtime decision — `CONFIG_HANNAH_WAKEWORD_ENABLED=y` compiles in the wakeword code, NVS `wakeword_enabled` decides at boot whether wakeword or PTT mode is active
+* Added: VAD silence timeout (`vad_silence_ms`) is now stored in NVS and configurable via web UI (200–10000 ms); default remains 1500 ms
+* Fixed: after wakeword detection, VAD cannot end the stream for the first 2 seconds — prevents cutoff during the natural pause between wakeword and spoken command
+
+## 0.18.0
+### AutoDeploy
+* Changed: revision field from update server is now compared alongside version — same version but higher revision triggers redeployment; revision is persisted in state file
+* Changed: download URL is now taken from the server response `url` field; `device=<id>` query parameter added to download requests
+
+### Satellite Firmware
+* Changed: OTA now compares server `revision` field in addition to version — same version but higher revision triggers an update; revision is persisted in NVS after successful OTA
+* Changed: OTA download URL now includes `device=<id>` query parameter (matching the `/latest` check request)
+
+## 0.17.0
+### Hardware (PCB Rev. 4)
+* Changed: PCB revision bumped from 3 to 4
+* Fixed: ALPS SKRPABE010 button LCSC part numbers corrected for all 6 buttons (Mute, Vol-, Vol+, PTT, EN, IO0)
+* Changed: ESP32-S3-WROOM-1U LCSC part number updated to N16R8 variant (was accidentally N16R2 in Rev. 3)
+
+### Satellite Firmware
+* Added: LED animations per state — BOOT rotating white, WAKE pulsing blue, STREAM rotating blue arc, SPEAK green breathing, MUTE dim static red, ERROR fast red blink; driven by a 50 Hz FreeRTOS task
+
+## 0.16.3
+### Satellite Firmware
+* Fixed: LED stays in SPEAK (green) state until the speaker task has finished playing all TTS audio — previously `status=idle` from the server would immediately reset the LED while chunks were still queued for playback
+
+## 0.16.2
+### Hardware (PCB Rev. 3)
+* Fixed: ALPS SKRPABE010 footprint corrected — contacts were bridged on the wrong axis causing EN and IO0 to be permanently pulled to GND; all 6 button footprints (EN, IO0, Mute, Vol-, Vol+, PTT) replaced
+### Satellite Firmware
+* Added: `sdkconfig.defaults.rev2` — build target for PCB Rev. 2 (PDM mics, BMP280, external LED ring, corrected GPIO assignments)
+
+## 0.16.1
+### Hannah Core
+* Added: INFO log in `Notify` gRPC handler — logs severity and text on every received notification to diagnose duplicate delivery
+
+## 0.16.0
+### Hannah Core
+* Changed: `SetTimer` voice intent now routes through the external Timer Service — generates a UUID timer_id, persists metadata in `HannahTimerStore`, and calls `grpc_servicer.timer_create()`; in-process `TimerManager` removed for timer commands
+* Added: NLU label extraction for timer commands — "erinnere mich in X Minuten an Y" triggers `SetTimer` and extracts Y as label; response includes label if detected ("Timer für 40 Minuten gesetzt: Spazierengehen.")
+
+## 0.15.0
+### Hannah Core
+* Added: `say` action type in routines — routines can now speak text via TTS as part of their action sequence; optional `room` parameter (default: `all`)
+* Added: Hannah Timer Service gRPC interface — `TimerConnect` bidirectional stream, `TimerReady` signal sent after ioBroker device snapshot; `HannahTimerStore` (SQLite) persists timer metadata (label, room, roomie_id, fire_at) locally; on `TimerFired`, Hannah looks up metadata and plays TTS announcement
+
+## 0.14.7
+### Hannah Core
+* Changed: notification reformulation prompt now uses Hannah's persona ("24-jährige Mitbewohnerin") and per-severity tone tuning for more natural, less formal spoken notifications
+
+## 0.14.6
+### Hannah Core
+* Fixed: `get_active_devices` now correctly uses the `on` state as the sole indicator of activity when present — previously a non-zero `level` alone would mark a device as active even if `on=false` (e.g. lights with a saved level but physically off)
+* Changed: `get_active_devices` output now includes total device count (e.g. "5 von 47") to give the LLM context for relative statements
+
+## 0.14.5
+### Hannah Core
+* Added: INFO-level payload size logging in tool agent — logs message count and character count per iteration, and tool result size after each dispatch
+* Fixed: tool agent now blocks duplicate tool calls (same name + same arguments) server-side and returns an error forcing the LLM to call `speak` instead of looping
+* Changed: tool agent query tools now return human-readable text instead of raw JSON — `get_all_devices`, `get_active_devices`, `get_devices_in_room`, `get_devices_by_category`, `get_device_state` all return formatted strings that LLMs can directly use for spoken answers
+
 ## 0.14.4
 ### Hannah Core
 * Added: `get_active_devices` tool — returns only active devices (on=true or level>0) with current state; ideal for "was läuft gerade?"
@@ -51,7 +134,7 @@
 * Added: global volume command (`hannah/volume`) now sends `volume/set` to all satellites
 * Removed: PCM volume scaling in Hannah Core (`_scale_pcm`, `_get_volume`); volume is applied satellite-side
 
-### ESP Firmware
+### Satellite Firmware
 * Added: Vol+/Vol- buttons now publish new level to `hannah/satellite/<device>/volume/state`
 * Added: subscribe to `hannah/satellite/<device>/volume/set`; received value is applied to local playback volume
 * Added: change detection in `hannah_net_set_mute()` — state is only published if it actually changed
@@ -67,7 +150,7 @@
 * Removed: PCM volume scaling in Hannah Core (`_scale_pcm`); volume will be applied satellite-side
 * Kept: per-satellite MQTT for volume/mute/dnd control, announcements/notifications, OTA/BLE/sensors
 
-### ESP Firmware
+### Satellite Firmware
 * Fixed: mute command topic changed from `…/mute` to `…/mute/set`; state feedback published on `…/mute/state`
 * Fixed: mute value parsing now accepts `true`/`false` in addition to `1`/`0`
 
@@ -79,7 +162,7 @@
 ### AutoDeploy
 * New: Generates a persistent device ID (UUID v4) on first start, stored in `/var/lib/hannah/autodeploy-device-id`; sent as `?device=<uuid>` with every `/latest` poll to enable accurate per-installation device counting on the Update Server
 
-### ESP Firmware
+### Satellite Firmware
 * New: Sends `?device=<device_id>` (NVS-backed device ID) with every OTA `/latest` request to enable accurate per-device counting on the Update Server
 
 ## 0.12.2
@@ -96,7 +179,7 @@
 * New: Upload jobs skip the Update-Server upload if the component directory has no changes since the previous release tag (`skip_if_unchanged` function in `.upload`)
 
 ## 0.12.0
-### ESP Firmware
+### Satellite Firmware
 * Changed: OTA update-check requests now include `?current=<version>` so the Update-Server can track installed version distribution
 
 ### AutoDeploy
@@ -114,7 +197,7 @@
 * New: Climate device query answers report on/off state, operating mode, current temperature, target temperature, and fan speed
 
 ## 0.9.1
-### ESP Firmware
+### Satellite Firmware
 * Fixed: `ota_channel` buffer increased from 16 to 32 bytes — channel names longer than 15 characters (e.g. `satellite-esp-dev`) were silently truncated
 
 ### CI
@@ -129,7 +212,7 @@
 * Changed: `hannah-autodeploy.service` sets `REQUESTS_CA_BUNDLE` to system trust store
 
 ## 0.9.0
-### ESP Firmware
+### Satellite Firmware
 * New: `hannah_sensors` now publishes readings every 30s to `hannah/satellite/{device}/sensors` (retained, QoS 1); JSON payload includes `temperature`, `pressure`, `humidity`, and optionally `gas_resistance` (BME680 only)
 
 ### Hannah Core
@@ -140,7 +223,7 @@
 * New: `sensor_update = 8` added to `AgentCommand.command` oneof
 
 ## 0.8.3
-### ESP Firmware
+### Satellite Firmware
 * New: OTA rollback — `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` enabled; firmware marks itself valid after first successful MQTT connection, otherwise the bootloader automatically reverts to the previous partition on the next reboot
 * New: OTA rollback loop prevention — after a rollback, the previously invalid partition version is compared against the server's latest; if they match, `ota/failed` (with `reason: rollback`) is published instead of `ota/pending` to prevent an update loop
 * New: OTA channel config (`HANNAH_OTA_CHANNEL`) — Kconfig string, NVS-backed, configurable via WebUI; appended as `?channel=<value>` to the update server request; devkit default: `dev`
@@ -154,15 +237,15 @@
 * Changed: firmware is now uploaded to the `stable` channel (`?channel=stable`) instead of the implicit default
 
 ## 0.8.2
-### ESP Firmware
+### Satellite Firmware
 * Fixed: `.history_trim` VS Code Local History directory was accidentally tracked as a git submodule — removed from index and added to `.gitignore`; fixes CI submodule init failure
 
 ## 0.8.1
-### ESP Firmware
+### Satellite Firmware
 * Changed: OTA version check uses semver comparison instead of strict string equality — downgrades and git-describe suffixes (e.g. `0.8.0-1-gabcdef`) are no longer treated as available updates
 
 ## 0.8.0
-### ESP Firmware
+### Satellite Firmware
 * New: `hannah_ble` component — passive BLE scanner for indoor localisation; MAC-based watchlist from `hannah/satellite/{device}/ble/watchlist`; RSSI reports to `hannah/satellite/{device}/ble/report`; rate-limited per MAC (Kconfig: `HANNAH_BLE_REPORT_INTERVAL_MS`); NimBLE host in dedicated FreeRTOS task; BLE/WiFi coexistence via `CONFIG_ESP_COEX_SW_COEXIST_ENABLE`
 
 ### Hannah Core
@@ -179,7 +262,7 @@
 * New: `BleWatcher` class — handles `ble_update` commands; creates/updates `hannah.0.ble.{label}.{room,satellite,rssi}` states on first update
 
 ## 0.7.0
-### ESP Firmware
+### Satellite Firmware
 * New: `hannah_ota` publishes firmware version to `hannah/satellite/{device}/firmware` (retained, QoS 1) after boot — enables firmware visibility in ioBroker
 * Changed: OTA MQTT topics renamed from `hannah/{device}/ota/*` to `hannah/satellite/{device}/ota/*` for consistency with the satellite topic namespace
 * Fixed: OTA-pending MQTT handler never fired due to wrong topic-part count (was checking `len==3`, correct is `len==5`)
@@ -201,7 +284,7 @@
 ### Hardware
 * New: Hardware Rev 3 PCB — iterates on Rev 2; ESP32-S3-WROOM-1U (external U.FL antenna, no keep-out conflict with LED ring); hierarchical schematic (Audio, Supplementals, Power_Control sub-sheets); AHT20 humidity sensor integrated directly on board sharing BMP280 I2C bus; LD2410 24GHz radar presence sensor header (5-pin: 5V, GND, TX, RX, OUT); 24× SK6812MINI-E LED ring directly on PCB at 3.3V (replaces JST connector + SN74AHCT125D level shifter); BMP280 I2C bus unified with shared SDA/SCL (was on separate GPIOs); I2C pull-up resistors moved to root sheet; fixed mic power circuit bug (R10 was on MOSFET drain instead of gate)
 
-### ESP Firmware
+### Satellite Firmware
 * New: `hannah_config` component — NVS-backed configuration (WiFi credentials, device ID, OTA token/URL); persists across reboots, readable at runtime via `hannah_config_get()`
 * New: `hannah_webserver` component — HTTP setup UI served in AP mode; WiFi network picker (APSTA scan), device settings (device ID, OTA token/URL), live log viewer (ring buffer, 1s polling)
 * New: WiFi provisioning — AP fallback when no credentials are stored; APSTA mode for simultaneous scan and serve; credentials written to NVS on submit

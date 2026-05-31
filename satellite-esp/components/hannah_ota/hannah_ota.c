@@ -16,12 +16,15 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include "esp_ota_ops.h"
 #include "esp_log.h"
 #include "esp_app_desc.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_system.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -31,6 +34,30 @@ static const char *TAG = "ota";
 
 #define OTA_HTTP_BUF_SIZE   512
 #define OTA_STARTUP_DELAY_S 60
+
+#define NVS_NAMESPACE   "ota"
+#define NVS_KEY_REV     "revision"
+
+static int32_t s_pending_revision = -1;  /* Revision die gerade heruntergeladen wird */
+
+static int32_t nvs_read_revision(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return 0;
+    int32_t rev = 0;
+    nvs_get_i32(h, NVS_KEY_REV, &rev);
+    nvs_close(h);
+    return rev;
+}
+
+static void nvs_write_revision(int32_t rev)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_i32(h, NVS_KEY_REV, rev);
+    nvs_commit(h);
+    nvs_close(h);
+}
 
 /* ── Semver-Vergleich ─────────────────────────────────────────────────────── */
 
@@ -188,7 +215,15 @@ static void check_for_update(void)
 
     const char *latest = jver->valuestring;
 
-    ESP_LOGI(TAG, "Firmware: aktuell=%s  verfügbar=%s", current, latest);
+    /* Revision aus Server-Antwort lesen (optional, default 0) */
+    int32_t server_rev = 0;
+    const cJSON *jrev = cJSON_GetObjectItemCaseSensitive(root, "revision");
+    if (cJSON_IsNumber(jrev)) server_rev = (int32_t)jrev->valueint;
+
+    int32_t local_rev = nvs_read_revision();
+
+    ESP_LOGI(TAG, "Firmware: aktuell=%s rev=%"PRId32"  verfügbar=%s rev=%"PRId32,
+             current, local_rev, latest, server_rev);
 
     /* Nach einem Rollback: die zuletzt ungültige Partition enthält dieselbe Version
      * wie der Server → statt ota/pending wird ota/failed publiziert damit Hannah
@@ -211,13 +246,21 @@ static void check_for_update(void)
     }
 
     int dev_channel = (cfg->ota_channel[0] != '\0' && strcmp(cfg->ota_channel, "stable") != 0);
-    if (semver_gt(latest, current, dev_channel)) {
-        strncpy(s_pending_url, jurl->valuestring, sizeof(s_pending_url) - 1);
-        s_pending_url[sizeof(s_pending_url) - 1] = '\0';
+    int needs_update = semver_gt(latest, current, dev_channel) ||
+                       (strcmp(latest, current) == 0 && server_rev > local_rev);
+
+    if (needs_update) {
+        /* Download-URL mit device-ID anreichern */
+        const char *base_url = jurl->valuestring;
+        int has_query = (strchr(base_url, '?') != NULL);
+        snprintf(s_pending_url, sizeof(s_pending_url), "%s%sdevice=%s",
+                 base_url, has_query ? "&" : "?", cfg->device_id);
+
+        s_pending_revision = server_rev;
 
         char payload[128];
         snprintf(payload, sizeof(payload),
-                 "{\"version\":\"%s\",\"pending\":true}", latest);
+                 "{\"version\":\"%s\",\"revision\":%"PRId32",\"pending\":true}", latest, server_rev);
         char topic[96];
         snprintf(topic, sizeof(topic), "hannah/satellite/%s/ota/pending", cfg->device_id);
         hannah_net_mqtt_publish(topic, payload, 1, 0);
@@ -266,7 +309,12 @@ static void ota_update_task(void *arg)
 
         esp_err_t err = esp_https_ota(&ota_cfg);
         if (err == ESP_OK) {
-            ESP_LOGI(TAG, "OTA erfolgreich — Neustart.");
+            if (s_pending_revision >= 0) {
+                nvs_write_revision(s_pending_revision);
+                ESP_LOGI(TAG, "OTA erfolgreich — Revision %"PRId32" gespeichert — Neustart.", s_pending_revision);
+            } else {
+                ESP_LOGI(TAG, "OTA erfolgreich — Neustart.");
+            }
             esp_restart();
         } else {
             ESP_LOGE(TAG, "OTA fehlgeschlagen: %s", esp_err_to_name(err));

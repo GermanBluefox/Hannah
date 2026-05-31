@@ -174,6 +174,7 @@ class ToolAgent:
         Gibt den endgültigen Antworttext zurück (wird vom Aufrufer per TTS gesprochen).
         """
         spoken: list[str] = []
+        called: set[tuple[str, str]] = set()
 
         _TOOL_RULES = (
             "\n\nRegeln für Tool-Nutzung:"
@@ -192,7 +193,8 @@ class ToolAgent:
         messages.append({"role": "user", "content": text})
 
         for i in range(_MAX_ITERATIONS):
-            log.info("[tool_agent] Iteration %d/%d", i + 1, _MAX_ITERATIONS)
+            payload_chars = sum(len(json.dumps(m, ensure_ascii=False)) for m in messages)
+            log.info("[tool_agent] Iteration %d/%d — payload %d msgs / ~%d chars", i + 1, _MAX_ITERATIONS, len(messages), payload_chars)
             response = self._llm.chat_with_tools(messages, _TOOLS)
             log.info("[tool_agent] finish_reason=%s tool_calls=%d", response.get("finish_reason"), len(response.get("tool_calls") or []))
             tool_calls: list[dict] = response.get("tool_calls") or []
@@ -218,14 +220,22 @@ class ToolAgent:
                 except json.JSONDecodeError:
                     args = {}
 
-                result = self._dispatch(func_name, args, spoken)
-                log.debug("[tool_agent] %s(%s) → %s", func_name, args, result)
+                call_key = (func_name, call.get("function", {}).get("arguments", "{}"))
+                if call_key in called:
+                    result = "Dieses Tool wurde bereits mit denselben Argumenten aufgerufen. Nutze jetzt speak um zu antworten."
+                    log.warning("[tool_agent] Duplikat-Aufruf blockiert: %s(%s)", func_name, args)
+                else:
+                    called.add(call_key)
+                    result = self._dispatch(func_name, args, spoken)
+                result_chars = len(result) if isinstance(result, str) else len(json.dumps(result, ensure_ascii=False))
+                log.info("[tool_agent] %s(%s) → %d chars", func_name, args, result_chars)
+                log.debug("[tool_agent] %s result: %s", func_name, result)
 
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call_id,
-                        "content": json.dumps(result, ensure_ascii=False),
+                        "content": result if isinstance(result, str) else json.dumps(result, ensure_ascii=False),
                     }
                 )
 
@@ -257,88 +267,66 @@ class ToolAgent:
     # ------------------------------------------------------------------
     # Tool-Implementierungen
 
-    def _get_all_devices(self) -> list[dict]:
-        result: list[dict] = []
+    def _get_all_devices(self) -> str:
+        lines: list[str] = []
         for room_key, devs in self._iobroker.devices.items():
             room_name = self._iobroker.rooms.get(room_key, room_key)
             for dev in devs.values():
-                result.append(
-                    {
-                        "id": dev.id,
-                        "name": dev.name,
-                        "room": room_name,
-                        "category": dev.category,
-                    }
-                )
-        return result
+                lines.append(f"- {room_name}: {dev.name} ({dev.category}) [ID: {dev.id}]")
+        if not lines:
+            return "Keine Geräte bekannt."
+        return f"Bekannte Geräte ({len(lines)}):\n" + "\n".join(lines)
 
-    def _get_active_devices(self) -> list[dict]:
-        result: list[dict] = []
+    def _get_active_devices(self) -> str:
+        total = sum(len(devs) for devs in self._iobroker.devices.values())
+        lines: list[str] = []
         for room_key, devs in self._iobroker.devices.items():
             room_name = self._iobroker.rooms.get(room_key, room_key)
             for dev in devs.values():
                 if self._is_active(dev):
-                    result.append(
-                        {
-                            "id": dev.id,
-                            "name": dev.name,
-                            "room": room_name,
-                            "category": dev.category,
-                            "current": dev.current,
-                        }
-                    )
-        return result
+                    state = self._format_active_state(dev.current or {})
+                    lines.append(f"- {room_name}: {dev.name} ({dev.category}) — {state} [ID: {dev.id}]")
+        if not lines:
+            return "Keine Geräte sind aktuell aktiv."
+        return f"Aktive Geräte ({len(lines)} von {total}):\n" + "\n".join(lines)
 
-    def _get_devices_in_room(self, room: str) -> list[dict]:
+    def _get_devices_in_room(self, room: str) -> str:
         room_lower = room.lower()
-        result: list[dict] = []
+        lines: list[str] = []
+        matched_room = room
         for room_key, devs in self._iobroker.devices.items():
             room_name = self._iobroker.rooms.get(room_key, room_key)
             if room_lower not in room_name.lower():
                 continue
+            matched_room = room_name
             for dev in devs.values():
-                result.append(
-                    {
-                        "id": dev.id,
-                        "name": dev.name,
-                        "category": dev.category,
-                        "state_keys": list(dev.states.keys()),
-                    }
-                )
-        if not result:
-            return [{"error": f"Kein Raum '{room}' gefunden"}]
-        return result
+                states = ", ".join(dev.states.keys())
+                lines.append(f"- {dev.name} ({dev.category}) [ID: {dev.id}, States: {states}]")
+        if not lines:
+            return f"Kein Raum '{room}' gefunden."
+        return f"Geräte im {matched_room} ({len(lines)}):\n" + "\n".join(lines)
 
-    def _get_devices_by_category(self, category: str) -> list[dict]:
+    def _get_devices_by_category(self, category: str) -> str:
         category_lower = category.lower()
-        result: list[dict] = []
+        lines: list[str] = []
         for room_key, devs in self._iobroker.devices.items():
             room_name = self._iobroker.rooms.get(room_key, room_key)
             for dev in devs.values():
                 if category_lower not in dev.category.lower():
                     continue
-                result.append(
-                    {
-                        "id": dev.id,
-                        "name": dev.name,
-                        "room": room_name,
-                        "state_keys": list(dev.states.keys()),
-                    }
-                )
-        if not result:
-            return [{"error": f"Keine Geräte in Kategorie '{category}' gefunden"}]
-        return result
+                states = ", ".join(dev.states.keys())
+                lines.append(f"- {room_name}: {dev.name} [ID: {dev.id}, States: {states}]")
+        if not lines:
+            return f"Keine Geräte in Kategorie '{category}' gefunden."
+        return f"{category}-Geräte ({len(lines)}):\n" + "\n".join(lines)
 
-    def _get_device_state(self, device_id: str) -> dict:
+    def _get_device_state(self, device_id: str) -> str:
         dev = self._iobroker._devices_by_id.get(device_id)
         if not dev:
-            return {"error": f"Gerät '{device_id}' nicht gefunden"}
-        return {
-            "id": dev.id,
-            "name": dev.name,
-            "room": dev.room,
-            "current": dev.current,
-        }
+            return f"Gerät '{device_id}' nicht gefunden."
+        current = dev.current or {}
+        state_str = ", ".join(f"{k}={v}" for k, v in current.items()) or "keine Zustandswerte"
+        return f"Gerät: {dev.name} ({dev.room}, {dev.category})\nZustand: {state_str}"
 
     def _set_device_state(self, state_id: str, value: object) -> dict:
         ok = self._iobroker.set_state(state_id, value)
@@ -347,9 +335,20 @@ class ToolAgent:
     @staticmethod
     def _is_active(dev) -> bool:
         current = dev.current or {}
-        for key, val in current.items():
-            if key == "on" and val:
-                return True
-            if key == "level" and val and int(val) > 0:
-                return True
-        return False
+        if "on" in current:
+            return bool(current["on"])
+        level = current.get("level")
+        return bool(level and int(level) > 0)
+
+    @staticmethod
+    def _format_active_state(current: dict) -> str:
+        parts = []
+        if current.get("on"):
+            parts.append("eingeschaltet")
+        level = current.get("level")
+        if level is not None and int(level) > 0:
+            parts.append(f"{level}%")
+        color = current.get("color")
+        if color:
+            parts.append(f"Farbe {color}")
+        return ", ".join(parts) if parts else "aktiv"

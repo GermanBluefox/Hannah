@@ -47,12 +47,13 @@ static const char *TAG = "hannah_audio";
 #define STEP_BYTES_RAW  (STEP_SAMPLES * 8)   /* 32-bit slots I2S  */
 #endif
 
-/* VAD: wie viele 10ms-Frames ohne Sprache bis audio_end */
-#define VAD_SILENCE_FRAMES \
-    (CONFIG_HANNAH_VAD_SILENCE_MS / 10)
+/* VAD_SILENCE_FRAMES wird zur Laufzeit aus hannah_config_get()->vad_silence_ms berechnet */
 
 /* Speaker-Queue */
-#define SPK_QUEUE_DEPTH 128
+#define SPK_QUEUE_DEPTH 256
+
+/* Mic-Warmup: erste Frames nach Boot verwerfen (PDM-Transienten, Fehlauslöser) */
+#define WARMUP_FRAMES 500  /* 500 × 10ms = 5s */
 
 /* ------------------------------------------------------------------ */
 /* Typen                                                                 */
@@ -74,10 +75,11 @@ typedef enum {
 static i2s_chan_handle_t s_rx_chan    = NULL;
 static i2s_chan_handle_t s_tx_chan    = NULL;
 static QueueHandle_t     s_spk_queue = NULL;
-static volatile bool     s_ptt_active       = false;
-static volatile bool     s_streaming_paused = false;
-static volatile bool     s_vol_up_req       = false;
-static volatile bool     s_vol_down_req     = false;
+static volatile bool     s_ptt_active        = false;
+static volatile bool     s_streaming_paused  = false;
+static volatile bool     s_vol_up_req        = false;
+static volatile bool     s_vol_down_req      = false;
+static volatile bool     s_speaking_active   = false;
 static volatile int      s_volume           = CONFIG_HANNAH_VOLUME_DEFAULT;
 static hannah_vad_state_t s_vad;
 static float              s_noise_floor_ema = 0.020f; /* adaptiver Noise-Floor-Schätzer */
@@ -134,8 +136,9 @@ static esp_err_t mic_init(void)
             .invert_flags = { .clk_inv = false },
         },
     };
+    pdm_cfg.clk_cfg.dn_sample_mode = I2S_PDM_DSR_16S;
     ESP_ERROR_CHECK(i2s_channel_init_pdm_rx_mode(s_rx_chan, &pdm_cfg));
-    ESP_LOGI(TAG, "Mic PDM I2S%d: %dHz stereo", CONFIG_HANNAH_MIC_I2S_PORT, SAMPLE_RATE);
+    ESP_LOGI(TAG, "Mic PDM I2S%d: %dHz stereo DSR_16S", CONFIG_HANNAH_MIC_I2S_PORT, SAMPLE_RATE);
 #else
     // INMP441 requires ≥32 BCLK cycles per channel — use 32-bit slot width.
     // Data sits in bits [31:8]; we shift down in mic_task.
@@ -203,13 +206,18 @@ static void mic_task(void *arg)
         ESP_LOGE(TAG, "mic_task: kein Speicher"); vTaskDelete(NULL); return;
     }
 
-    audio_state_t state  = AUDIO_STATE_IDLE;
-    bool          was_ptt = false;
+    audio_state_t state           = AUDIO_STATE_IDLE;
+    bool          was_ptt         = false;
+    int           warmup_remaining = WARMUP_FRAMES;
 
 #if CONFIG_HANNAH_WAKEWORD_ENABLED
-    ESP_LOGI(TAG, "Mic-Task: Wakeword-Modus (Schwelle=%.2f, VAD=%dms).",
-             hannah_config_get()->wakeword_threshold / 100.0f,
-             CONFIG_HANNAH_VAD_SILENCE_MS);
+    if (hannah_config_get()->wakeword_enabled) {
+        ESP_LOGI(TAG, "Mic-Task: Wakeword-Modus (Schwelle=%.2f, VAD=%dms).",
+                 hannah_config_get()->wakeword_threshold / 100.0f,
+                 hannah_config_get()->vad_silence_ms);
+    } else {
+        ESP_LOGI(TAG, "Mic-Task: PTT-Modus (Wakeword kompiliert, per Config deaktiviert).");
+    }
 #else
     ESP_LOGI(TAG, "Mic-Task: PTT-Modus.");
 #endif
@@ -241,11 +249,12 @@ static void mic_task(void *arg)
                          &bytes_read, pdMS_TO_TICKS(200));
 
 #if CONFIG_HANNAH_MIC_TYPE_PDM
-        /* PDM: 16-bit stereo → linker Kanal (SEL=VDD → L) */
+        /* PDM: 16-bit stereo → rechter Kanal (SPH0641: SEL=VDD → R, Index 1) */
         size_t frames    = bytes_read / 4;
         int16_t *s16     = (int16_t *)raw;
         for (size_t i = 0; i < frames; i++) {
-            mono[i] = s16[i * 2];
+            int32_t s = (int32_t)s16[i * 2 + 1] * 64;
+            mono[i] = (int16_t)(s > 32767 ? 32767 : (s < -32768 ? -32768 : s));
         }
 #else
         /* I2S: 32-bit slots → linker Kanal (INMP441: MSB in bits[31:8]) */
@@ -256,6 +265,20 @@ static void mic_task(void *arg)
         }
 #endif
         size_t mono_samples = frames;
+
+        /* Warmup: Frontend füttern aber nicht triggern */
+        if (warmup_remaining > 0) {
+            --warmup_remaining;
+#if CONFIG_HANNAH_WAKEWORD_ENABLED
+            if (hannah_config_get()->wakeword_enabled)
+                hannah_wakeword_process(mono);
+#endif
+            if (warmup_remaining == 0) {
+                hannah_led_set_state(LED_STATE_IDLE);
+                ESP_LOGI(TAG, "Mic-Warmup abgeschlossen.");
+            }
+            continue;
+        }
 
         if (hannah_net_is_muted()) {
             state = AUDIO_STATE_IDLE;
@@ -271,74 +294,92 @@ static void mic_task(void *arg)
 
 /* -- Wakeword-Modus -------------------------------------------------- */
 #if CONFIG_HANNAH_WAKEWORD_ENABLED
-        float confidence = hannah_wakeword_process(mono);
+        if (hannah_config_get()->wakeword_enabled) {
+            float confidence = hannah_wakeword_process(mono);
 
-        switch (state) {
-        case AUDIO_STATE_IDLE: {
-            /* Noise-Floor-Tracking: schneller Anstieg, langsamer Abfall.
-             * Frames > 0.05 (Wakeword-Sprache) werden ignoriert. */
-            float rms_idle = hannah_rms(mono, (int)mono_samples);
-            if (rms_idle < 0.05f) {
-                if (rms_idle > s_noise_floor_ema)
-                    s_noise_floor_ema = s_noise_floor_ema * 0.90f + rms_idle * 0.10f;
-                else
-                    s_noise_floor_ema = s_noise_floor_ema * 0.999f + rms_idle * 0.001f;
+            switch (state) {
+            case AUDIO_STATE_IDLE: {
+                /* Noise-Floor-Tracking: schneller Anstieg, langsamer Abfall.
+                 * Frames > 0.05 (Wakeword-Sprache) werden ignoriert. */
+                float rms_idle = hannah_rms(mono, (int)mono_samples);
+                if (rms_idle < 0.05f) {
+                    if (rms_idle > s_noise_floor_ema)
+                        s_noise_floor_ema = s_noise_floor_ema * 0.90f + rms_idle * 0.10f;
+                    else
+                        s_noise_floor_ema = s_noise_floor_ema * 0.999f + rms_idle * 0.001f;
+                }
+
+                /* PTT oder Wake-Word → Streaming starten */
+                if ((s_ptt_active && !was_ptt) ||
+                    confidence >= hannah_config_get()->wakeword_threshold / 100.0f) {
+                    bool  by_wakeword  = !(s_ptt_active && !was_ptt);
+                    float min_thr      = CONFIG_HANNAH_VAD_ENERGY_THRESHOLD / 32767.0f;
+                    float adaptive_thr = s_noise_floor_ema * 2.0f;
+                    if (adaptive_thr < min_thr) adaptive_thr = min_thr;
+                    int vad_silence_frames = (int)(hannah_config_get()->vad_silence_ms / 10);
+                    hannah_led_set_state(LED_STATE_WAKE);
+                    vTaskDelay(pdMS_TO_TICKS(150));
+                    hannah_led_set_state(LED_STATE_STREAM);
+                    hannah_vad_stream_init(&s_vad, 3, vad_silence_frames, adaptive_thr);
+                    if (by_wakeword) s_vad.speaking = 1;
+                    s_stream_frames = 0;
+                    ESP_LOGI(TAG, "%s erkannt → Streaming. VAD thr=%.4f (noise_ema=%.4f)",
+                             by_wakeword ? "Wake-Word" : "PTT", adaptive_thr, s_noise_floor_ema);
+                    state = AUDIO_STATE_STREAMING;
+                }
+                break;
             }
 
-            /* PTT oder Wake-Word → Streaming starten */
-            if ((s_ptt_active && !was_ptt) ||
-                confidence >= hannah_config_get()->wakeword_threshold / 100.0f) {
-                bool  by_wakeword  = !(s_ptt_active && !was_ptt);
-                float min_thr      = CONFIG_HANNAH_VAD_ENERGY_THRESHOLD / 32767.0f;
-                float adaptive_thr = s_noise_floor_ema * 2.0f;
-                if (adaptive_thr < min_thr) adaptive_thr = min_thr;
-                hannah_led_set_state(LED_STATE_WAKE);
-                vTaskDelay(pdMS_TO_TICKS(150));
+            case AUDIO_STATE_STREAMING: {
+                static int s_rms_log_ctr = 0;
+                hannah_net_send_audio((uint8_t *)mono, mono_samples * 2);
+                s_stream_frames++;
+                if (++s_rms_log_ctr >= 50) {
+                    s_rms_log_ctr = 0;
+                    ESP_LOGI(TAG, "VAD RMS=%.4f thr=%.4f silence=%d/%d",
+                             hannah_rms(mono, (int)mono_samples),
+                             s_vad.threshold, s_vad.offset_count, s_vad.offset_windows);
+                }
+                bool ptt_end   = (was_ptt && !s_ptt_active);
+                bool vad_end   = (!ptt_end &&
+                                  s_stream_frames >= 200 &&  /* mind. 2s nach Wakeword bevor VAD abschneiden darf */
+                                  hannah_vad_feed(&s_vad, mono, (int)mono_samples) == HANNAH_VAD_OFFSET);
+                bool timed_out = (s_stream_frames >= 1000);  /* 10s Hard-Limit */
+                if (ptt_end || vad_end || timed_out) {
+                    hannah_net_send_audio_end();
+                    hannah_led_set_state(LED_STATE_IDLE);
+                    state = AUDIO_STATE_IDLE;
+                    s_rms_log_ctr = 0;
+                    if (ptt_end)       ESP_LOGI(TAG, "PTT losgelassen → audio_end.");
+                    else if (vad_end)  ESP_LOGI(TAG, "VAD: Stille erkannt → audio_end.");
+                    else               ESP_LOGI(TAG, "Stream-Timeout (10s) → audio_end.");
+                }
+                break;
+            }
+            }
+        } else {
+            /* PTT-Modus: Wakeword kompiliert, aber per Config deaktiviert */
+            bool ptt = s_ptt_active;
+            if (!was_ptt && ptt) {
                 hannah_led_set_state(LED_STATE_STREAM);
-                hannah_vad_stream_init(&s_vad, 3, VAD_SILENCE_FRAMES, adaptive_thr);
-                if (by_wakeword) s_vad.speaking = 1;
-                s_stream_frames = 0;
-                ESP_LOGI(TAG, "%s erkannt → Streaming. VAD thr=%.4f (noise_ema=%.4f)",
-                         by_wakeword ? "Wake-Word" : "PTT", adaptive_thr, s_noise_floor_ema);
                 state = AUDIO_STATE_STREAMING;
             }
-            break;
-        }
-
-        case AUDIO_STATE_STREAMING: {
-            static int s_rms_log_ctr = 0;
-            hannah_net_send_audio((uint8_t *)mono, mono_samples * 2);
-            s_stream_frames++;
-            if (++s_rms_log_ctr >= 50) {
-                s_rms_log_ctr = 0;
-                ESP_LOGI(TAG, "VAD RMS=%.4f thr=%.4f silence=%d/%d",
-                         hannah_rms(mono, (int)mono_samples),
-                         s_vad.threshold, s_vad.offset_count, s_vad.offset_windows);
+            if (state == AUDIO_STATE_STREAMING && ptt) {
+                hannah_net_send_audio((uint8_t *)mono, mono_samples * 2);
             }
-            bool ptt_end   = (was_ptt && !s_ptt_active);
-            bool vad_end   = (!ptt_end &&
-                              hannah_vad_feed(&s_vad, mono, (int)mono_samples) == HANNAH_VAD_OFFSET);
-            bool timed_out = (s_stream_frames >= 1000);  /* 10s Hard-Limit */
-            if (ptt_end || vad_end || timed_out) {
+            if (was_ptt && !ptt && state == AUDIO_STATE_STREAMING) {
                 hannah_net_send_audio_end();
                 hannah_led_set_state(LED_STATE_IDLE);
                 state = AUDIO_STATE_IDLE;
-                s_rms_log_ctr = 0;
-                if (ptt_end)       ESP_LOGI(TAG, "PTT losgelassen → audio_end.");
-                else if (vad_end)  ESP_LOGI(TAG, "VAD: Stille erkannt → audio_end.");
-                else               ESP_LOGI(TAG, "Stream-Timeout (10s) → audio_end.");
             }
-            break;
-        }
         }
         was_ptt = s_ptt_active;
 
-/* -- PTT-Modus (Fallback) ------------------------------------------- */
+/* -- PTT-Modus (Wakeword nicht kompiliert) -------------------------- */
 #else
         bool ptt = s_ptt_active;
 
         if (!was_ptt && ptt) {
-            /* Taste gedrückt → Streaming starten */
             hannah_led_set_state(LED_STATE_STREAM);
             state = AUDIO_STATE_STREAMING;
         }
@@ -348,7 +389,6 @@ static void mic_task(void *arg)
         }
 
         if (was_ptt && !ptt && state == AUDIO_STATE_STREAMING) {
-            /* Taste losgelassen → audio_end */
             hannah_net_send_audio_end();
             hannah_led_set_state(LED_STATE_IDLE);
             state = AUDIO_STATE_IDLE;
@@ -376,6 +416,7 @@ static void speaker_task(void *arg)
             /* Timeout — keine neuen Chunks seit 1s → TTS abgeschlossen */
             if (was_speaking) {
                 was_speaking = false;
+                s_speaking_active = false;
                 hannah_led_set_state(LED_STATE_IDLE);
             }
             continue;
@@ -386,11 +427,14 @@ static void speaker_task(void *arg)
             size_t written;
             i2s_channel_write(s_tx_chan, silence, sizeof(silence),
                               &written, pdMS_TO_TICKS(100));
+            was_speaking = false;
+            s_speaking_active = false;
             hannah_led_set_state(LED_STATE_IDLE);
             continue;
         }
         if (!chunk.data) continue;
         was_speaking = true;
+        s_speaking_active = true;
         /* Lautstärke-Skalierung */
         int vol = s_volume;
         if (vol < 100) {
@@ -426,8 +470,10 @@ static void on_status(const char *state)
     if      (strcmp(state, "listening")  == 0) hannah_led_set_state(LED_STATE_STREAM);
     else if (strcmp(state, "processing") == 0) hannah_led_set_state(LED_STATE_WAKE);
     else if (strcmp(state, "speaking")   == 0) hannah_led_set_state(LED_STATE_SPEAK);
-    else if (strcmp(state, "idle")       == 0)
-        hannah_led_set_state(hannah_net_is_muted() ? LED_STATE_MUTE : LED_STATE_IDLE);
+    else if (strcmp(state, "idle")       == 0) {
+        if (!s_speaking_active)
+            hannah_led_set_state(hannah_net_is_muted() ? LED_STATE_MUTE : LED_STATE_IDLE);
+    }
 }
 
 static void on_playback_cmd(const char *cmd)
@@ -527,7 +573,7 @@ void hannah_audio_init(void)
 
     ESP_LOGI(TAG, "hannah_audio initialisiert (%s-Modus).",
 #if CONFIG_HANNAH_WAKEWORD_ENABLED
-             "Wakeword"
+             hannah_config_get()->wakeword_enabled ? "Wakeword" : "PTT (Wakeword deaktiviert)"
 #else
              "PTT"
 #endif
@@ -541,7 +587,7 @@ void hannah_audio_play(const uint8_t *pcm, size_t len, int sample_rate)
     if (!copy) { ESP_LOGW(TAG, "play: kein Speicher"); return; }
     memcpy(copy, pcm, len);
     spk_chunk_t chunk = {.data = copy, .len = len, .is_end = false};
-    if (xQueueSend(s_spk_queue, &chunk, 0) != pdTRUE) {
+    if (xQueueSend(s_spk_queue, &chunk, pdMS_TO_TICKS(2000)) != pdTRUE) {
         ESP_LOGW(TAG, "Speaker-Queue voll — Chunk verworfen.");
         free(copy);
     }

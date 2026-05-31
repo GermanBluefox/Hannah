@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import sqlite3
 import threading
 import uuid as _uuid
 from typing import Callable, Optional
@@ -149,3 +150,70 @@ class AlarmManager:
                 json.dump(self._alarms, f, ensure_ascii=False, indent=2)
         except Exception as e:
             log.warning(f"[alarm] Speichern fehlgeschlagen: {e}")
+
+
+class HannahTimerStore:
+    """SQLite-backed store for timers managed by the external Hannah Timer Service.
+
+    Hannah owns the metadata (label, room, roomie_id); the Timer Service only
+    stores timer_id + fire_at. On TimerFired, Hannah looks up by timer_id here.
+    """
+
+    def __init__(self, db_path: str = "timers.db"):
+        self._db_path = db_path
+        self._lock = threading.Lock()
+        self._init_db()
+
+    def _init_db(self) -> None:
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS timers (
+                    timer_id  TEXT PRIMARY KEY,
+                    label     TEXT NOT NULL,
+                    fire_at   INTEGER NOT NULL,
+                    room      TEXT NOT NULL,
+                    roomie_id TEXT
+                )
+            """)
+            conn.commit()
+
+    def set(self, timer_id: str, label: str, fire_at: int,
+            room: str, roomie_id: Optional[str] = None) -> None:
+        with self._lock:
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO timers"
+                    " (timer_id, label, fire_at, room, roomie_id) VALUES (?, ?, ?, ?, ?)",
+                    (timer_id, label, fire_at, room, roomie_id),
+                )
+                conn.commit()
+
+    def get(self, timer_id: str) -> Optional[dict]:
+        with self._lock:
+            with sqlite3.connect(self._db_path) as conn:
+                row = conn.execute(
+                    "SELECT timer_id, label, fire_at, room, roomie_id"
+                    " FROM timers WHERE timer_id = ?",
+                    (timer_id,),
+                ).fetchone()
+        if not row:
+            return None
+        return {"timer_id": row[0], "label": row[1], "fire_at": row[2],
+                "room": row[3], "roomie_id": row[4]}
+
+    def remove(self, timer_id: str) -> bool:
+        with self._lock:
+            with sqlite3.connect(self._db_path) as conn:
+                cur = conn.execute("DELETE FROM timers WHERE timer_id = ?", (timer_id,))
+                conn.commit()
+                return cur.rowcount > 0
+
+    def get_all(self) -> list[dict]:
+        with self._lock:
+            with sqlite3.connect(self._db_path) as conn:
+                rows = conn.execute(
+                    "SELECT timer_id, label, fire_at, room, roomie_id"
+                    " FROM timers ORDER BY fire_at"
+                ).fetchall()
+        return [{"timer_id": r[0], "label": r[1], "fire_at": r[2],
+                 "room": r[3], "roomie_id": r[4]} for r in rows]

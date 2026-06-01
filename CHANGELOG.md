@@ -5,6 +5,50 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.20.0
+### Hannah Core
+* Fixed: Notifications played back at wrong pitch — Azure TTS output (24 kHz) was not resampled before sending to satellite, causing 2/3-speed playback and a noticeably deeper voice; use `_resample_to_16k()` helper
+* Added: `TriggerPlink` gRPC RPC — Hannah plays an 880 Hz plink tone on the satellite and holds virtual PTT for `record_duration` seconds so the collector can trigger guided Hey-Hannah recordings remotely
+* Added: `plink.py` — generates 880 Hz sine plink PCM (200 ms, 16 kHz, 16-bit mono) or loads from a WAV file
+* Added: `_on_trigger_plink` in `main.py` — plays plink audio on satellite, then holds virtual PTT for the requested duration
+* Added: `SatelliteCaptureRequest.sample_type` field (`"noise"` or `"hey_hannah"`) — collector signals which training mode to use
+* Changed: `mqtt_handler.publish_sampling_mode` now sends JSON payload `{"enabled": …, "type": …}` instead of plain boolean; added `publish_virtual_ptt` to toggle `hannah/satellite/{device}/ptt`
+* Changed: `grpc_server.RequestSatelliteCapture` forwards `sample_type` to the capture callback
+
+### Hardware (PCB Rev. 4)
+* Added: SD card slot (SPI)
+* Changed: LED data pin moved from GPIO 5 to GPIO 3; `sdkconfig.defaults.rev4` updated accordingly
+
+### Satellite Firmware
+* Added: `sdkconfig.defaults.rev4` — build target for PCB Rev. 4 with updated GPIO assignments
+* Added: Virtual PTT via MQTT `hannah/satellite/{device}/ptt` — `"true"`/`"1"` activates PTT, `"false"`/`"0"` releases; allows Hannah Core to trigger recordings without a physical button press
+* Added: `hey_hannah` capture sub-mode — in this mode the mic streams only while PTT is active (physical or virtual) and sends `audio_end` on PTT release; pre-flush clears any buffered noise before each recording; speaker output is allowed so the plink tone is audible
+* Changed: `noise` capture sub-mode behaviour unchanged — continuous auto-flush every 5 s, pre-flush on PTT press; speaker is muted in this mode
+* Changed: `hannah/satellite/{device}/sampling` payload is now JSON with `enabled`/`type` fields
+* Changed: capture LED animation is now more distinctly purple (higher blue component relative to red)
+* Added: LED state transition logging — each state change is logged (`LED X → Y`)
+
+## 0.19.0
+### Hannah Core
+* Added: Wakeword Collector integration — satellites can be put in capture mode via gRPC; Hannah relays raw PCM to the collector instead of STT pipeline; DND is set automatically; MQTT `hannah/satellite/{device}/sampling` notifies satellite firmware (firmware-side pending)
+* Added: `RequestSatelliteCapture`, `ReleaseSatelliteCapture`, `StreamSatelliteAudio` gRPC RPCs for wakeword training data capture
+* Added: `SatelliteCaptureRequest`, `SatelliteCaptureResponse`, `SatelliteAudioChunk` gRPC messages
+
+### Satellite Firmware
+* Added: Sampling mode via MQTT `hannah/satellite/{device}/sampling` — when `{"enabled":true}` is received, speaker output is blocked, any running TTS queue is cleared, and LED shows `LED_STATE_CAPTURE` (purple pulsing); restored to normal on `{"enabled":false}` or auto-release
+
+## 0.18.6
+### Hannah Core
+* Fixed: NLU timer trigger now recognizes Whisper-truncated "erinner" (prefix match instead of exact set match)
+* Fixed: Announcements (proactive / timer / trigger) played back at wrong pitch — Azure TTS output (24 kHz) was not resampled before sending to satellite, causing 2/3-speed playback and a noticeably deeper voice; extracted `_resample_to_16k()` helper used by both announcement and satellite audio paths
+
+## 0.18.5
+### Hannah Core
+* Fixed: `SetTimer` intent not handled in gRPC/satellite audio path (`_handle_text`) — fell through to `iobroker.execute()` causing "Kein Raum erkannt" warning and no timer being set; timer is now created correctly from all input paths
+
+### Proto
+* Added: `TimerNotReady` message — Hannah can signal a temporary degraded state (e.g. ioBroker disconnected) over the `TimerConnect` stream; Timer Service should hold `TimerFired` events until a subsequent `TimerReady` is received; Hannah Core does not yet send this message
+
 ## 0.18.4
 ### Hannah Core
 * Fixed: NLU responses no longer contain raw internal category names (e.g. "light") — mapped to German labels: Lichter, Steckdosen, Klimageräte, Rollläden, Sensoren

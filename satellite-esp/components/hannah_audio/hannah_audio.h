@@ -37,3 +37,7 @@ void hannah_audio_play_end(void);
 void hannah_audio_stop(void);    /* Speaker-Queue leeren, Streaming stoppen. */
 void hannah_audio_pause(void);   /* Mic-Streaming pausieren. */
 void hannah_audio_resume(void);  /* Mic-Streaming fortsetzen. */
+
+/* Wakeword-Capture-Modus: Speaker-Ausgabe blockieren, LED auf CAPTURE setzen.
+ * Wird von hannah_net bei hannah/satellite/<device>/sampling aufgerufen. */
+void hannah_audio_set_sampling_mode(bool enabled);

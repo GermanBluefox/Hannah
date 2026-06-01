@@ -83,6 +83,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_trigger_firmware_update: Optional[Callable[[str], None]] = None,  # (device)
         on_timer_fired: Optional[Callable[[str, str], None]] = None,          # (timer_id, label)
         on_timer_connected: Optional[Callable[[], None]] = None,
+        on_set_capture: Optional[Callable[[str, bool, str], None]] = None,     # (device_id, enabled, sample_type) — set DND + satellite MQTT
+        on_trigger_plink: Optional[Callable[[str, float], None]] = None,       # (device_id, record_duration_s)
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -111,6 +113,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_trigger_firmware_update  = on_trigger_firmware_update or (lambda _: None)
         self._on_timer_fired    = on_timer_fired
         self._on_timer_connected = on_timer_connected
+        self._on_set_capture    = on_set_capture or (lambda *_: None)
+        self._on_trigger_plink  = on_trigger_plink or (lambda *_: None)
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -131,6 +135,10 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         # Single queue for the connected Timer Service (at most one at a time)
         self._timer_queue: Optional[queue.Queue] = None
         self._timer_lock = threading.Lock()
+
+        # Captured satellites: device_id → audio queue (SatelliteAudioChunk)
+        self._captured_satellites: dict[str, queue.Queue] = {}
+        self._capture_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public: proxy helpers (called from main.py)
@@ -447,6 +455,14 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 threading.Thread(
                     target=self._on_satellite_change, args=(snapshot,), daemon=True
                 ).start()
+        if self.is_captured(request.device_id):
+            self.push_capture_audio(
+                request.device_id, request.audio_pcm,
+                request.sample_rate or 16000, end_of_utterance=True,
+            )
+            log.debug(f"[grpc/capture] Audio von '{request.device_id}' weitergeleitet ({len(request.audio_pcm)} Bytes)")
+            return pb.SubmitSatelliteAudioResponse()
+
         transcript, answer, intent_name, tts_pcm, sample_rate = self._handle_satellite_audio(
             request.device_id,
             request.audio_pcm,
@@ -759,6 +775,83 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 if self._timer_queue is q:
                     self._timer_queue = None
             log.info("[grpc] Timer Service disconnected")
+
+    # ------------------------------------------------------------------
+    # Wakeword Capture
+
+    def is_captured(self, device_id: str) -> bool:
+        with self._capture_lock:
+            return device_id in self._captured_satellites
+
+    def push_capture_audio(self, device_id: str, pcm: bytes, sample_rate: int,
+                           end_of_utterance: bool = False):
+        """Route raw PCM from a captured satellite into its StreamSatelliteAudio queue."""
+        with self._capture_lock:
+            q = self._captured_satellites.get(device_id)
+        if q is not None:
+            q.put(pb.SatelliteAudioChunk(
+                pcm=pcm,
+                sample_rate=sample_rate,
+                end_of_utterance=end_of_utterance,
+            ))
+
+    def RequestSatelliteCapture(self, request, _context):
+        device_id = request.device_id
+        all_sats = self._get_satellites()
+        if device_id not in all_sats:
+            return pb.SatelliteCaptureResponse(ok=False, error=f"Satellit '{device_id}' nicht gefunden")
+        with self._capture_lock:
+            if device_id in self._captured_satellites:
+                return pb.SatelliteCaptureResponse(ok=False, error=f"'{device_id}' bereits belegt")
+            self._captured_satellites[device_id] = queue.Queue()
+        sample_type = request.sample_type or "noise"
+        log.info(f"[grpc/capture] Satellit '{device_id}' in Capture-Modus versetzt (type={sample_type})")
+        self._on_set_capture(device_id, True, sample_type)
+        return pb.SatelliteCaptureResponse(ok=True)
+
+    def ReleaseSatelliteCapture(self, request, _context):
+        device_id = request.device_id
+        with self._capture_lock:
+            q = self._captured_satellites.pop(device_id, None)
+        if q is not None:
+            q.put(None)  # EOF für laufenden StreamSatelliteAudio
+            log.info(f"[grpc/capture] Satellit '{device_id}' aus Capture-Modus entlassen")
+            self._on_set_capture(device_id, False)
+        return pb.StatusResponse(ok=True, message="released")
+
+    def TriggerPlink(self, request, _context):
+        device_id = request.device_id
+        duration  = request.record_duration if request.record_duration > 0 else 3.0
+        self._on_trigger_plink(device_id, duration)
+        return pb.StatusResponse(ok=True)
+
+
+    def StreamSatelliteAudio(self, request, context):
+        device_id = request.device_id
+        with self._capture_lock:
+            q = self._captured_satellites.get(device_id)
+        if q is None:
+            context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+            context.set_details(f"'{device_id}' ist nicht im Capture-Modus — RequestSatelliteCapture zuerst aufrufen")
+            return
+
+        log.info(f"[grpc/capture] StreamSatelliteAudio gestartet für '{device_id}'")
+        try:
+            while context.is_active():
+                try:
+                    chunk = q.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+                if chunk is None:
+                    break  # ReleaseSatelliteCapture wurde aufgerufen
+                yield chunk
+        finally:
+            # Cleanup falls Client trennt ohne ReleaseSatelliteCapture
+            with self._capture_lock:
+                if self._captured_satellites.get(device_id) is q:
+                    self._captured_satellites.pop(device_id, None)
+                    self._on_set_capture(device_id, False)
+                    log.info(f"[grpc/capture] '{device_id}' auto-released nach Stream-Disconnect")
 
     def EnrollVoiceprint(self, request, _context):
         if self._enroll_voiceprint is None:

@@ -395,6 +395,17 @@ def main():
             active = intent.value == "on"
             _apply_global_mute(active)
             answer = "Mikrofone stumm." if active else "Mikrofone wieder aktiv."
+        elif intent.name == "SetTimer":
+            seconds = int(intent.value)
+            label = intent.label or format_duration(seconds)
+            timer_id = str(uuid.uuid4())
+            fire_at = int(time.time()) + seconds
+            room_id = intent.room_id or "all"
+            timer_store.set(timer_id, label, fire_at, room_id)
+            grpc_servicer.timer_create(timer_id, label, fire_at, room_id)
+            answer = f"Timer für {format_duration(seconds)} gesetzt."
+            if intent.label:
+                answer = f"Timer für {format_duration(seconds)} gesetzt: {intent.label}."
         elif intent.name == "SetAlarm":
             alarm_cfg = cfg.get("alarm", {})
             target = alarm_cfg.get("satellite") or _source
@@ -526,7 +537,7 @@ def main():
         result = tts.synthesize_ssml(text) if ssml else tts.synthesize(text)
         if not result:
             return
-        pcm, rate = result
+        pcm, rate = _resample_to_16k(*result)
         targets = _resolve_targets(device)
         for target in targets:
             if _device_dnd.get(target):
@@ -686,6 +697,18 @@ def main():
 
         return transcript, answer, intent_name, audio_ogg_out
 
+    def _resample_to_16k(pcm: bytes, rate: int) -> tuple[bytes, int]:
+        if rate == 16000:
+            return pcm, rate
+        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        new_len = int(len(samples) * 16000 / rate)
+        resampled = np.interp(
+            np.linspace(0, len(samples) - 1, new_len),
+            np.arange(len(samples)),
+            samples,
+        ).astype(np.int16)
+        return resampled.tobytes(), 16000
+
     def _handle_satellite_audio(device: str, pcm_bytes: bytes, speaker_roomie_id: str = "") -> tuple[str, str, str, bytes, int]:
         """
         Verarbeitet eine vollständige Satellit-Aufnahme via Go-Proxy:
@@ -718,16 +741,7 @@ def main():
             result = tts.synthesize(answer)
             if result:
                 tts_pcm, sample_rate = result
-                if sample_rate != 16000:
-                    samples = np.frombuffer(tts_pcm, dtype=np.int16).astype(np.float32)
-                    new_len = int(len(samples) * 16000 / sample_rate)
-                    resampled = np.interp(
-                        np.linspace(0, len(samples) - 1, new_len),
-                        np.arange(len(samples)),
-                        samples,
-                    ).astype(np.int16)
-                    tts_pcm = resampled.tobytes()
-                    sample_rate = 16000
+                tts_pcm, sample_rate = _resample_to_16k(tts_pcm, sample_rate)
 
         return transcript, answer, intent_name, tts_pcm, sample_rate
 
@@ -820,6 +834,24 @@ def main():
         if _iobroker_ready:
             grpc_servicer.timer_send_ready()
 
+    def _on_set_capture(device_id: str, enabled: bool, sample_type: str = "noise"):
+        _device_dnd[device_id] = enabled
+        mqtt_handler.publish_sampling_mode(device_id, enabled, sample_type)
+        log.info(f"[capture] Satellit '{device_id}' Capture-Modus: {'an' if enabled else 'aus'} type={sample_type} (DND={'an' if enabled else 'aus'})")
+
+    def _on_trigger_plink(device_id: str, record_duration: float):
+        import time
+        from hannah.plink import get_plink_pcm
+        plink_wav = cfg.get("plink_wav_path", "")
+        pcm, plink_duration = get_plink_pcm(plink_wav)
+        _send_audio(device_id, pcm, 16000, label="[plink] ")
+        time.sleep(plink_duration + 0.1)
+        mqtt_handler.publish_virtual_ptt(device_id, True)
+        log.info(f"[plink] Virtual PTT AN für {record_duration}s → {device_id}")
+        time.sleep(record_duration)
+        mqtt_handler.publish_virtual_ptt(device_id, False)
+        log.info(f"[plink] Virtual PTT AUS → {device_id}")
+
     def _on_agent_device_snapshot(devices):
         nonlocal _iobroker_ready
         iobroker.handle_device_snapshot(devices)
@@ -867,6 +899,8 @@ def main():
         on_trigger_firmware_update=lambda device: mqtt_handler.publish_ota_ok(device),
         on_timer_fired=_on_timer_fired,
         on_timer_connected=_on_timer_connected,
+        on_set_capture=_on_set_capture,
+        on_trigger_plink=_on_trigger_plink,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)
@@ -963,7 +997,7 @@ def main():
             if tts.enabled:
                 result = tts.synthesize(raw_text)
                 if result:
-                    pcm, rate = result
+                    pcm, rate = _resample_to_16k(*result)
                     for target in _resolve_targets("all"):
                         if not _device_dnd.get(target):
                             _send_audio(target, pcm, rate)

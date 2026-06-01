@@ -218,7 +218,7 @@ class NLU:
         norm_tokens         = {_normalize(t) for t in tokens}
         climate_mode        = self._find_climate_mode(norm_tokens)
         fan_speed           = self._find_fan_speed(norm_tokens)
-        _timer_trigger = bool({"timer", "erinnere", "erinnern", "erinnerung"} & norm_tokens)
+        _timer_trigger = bool({"timer"} & norm_tokens) or any(t.startswith("erinner") for t in norm_tokens)
         timer_seconds       = self._find_timer_seconds(raw) if _timer_trigger else None
         timer_label         = self._find_timer_label(raw) if timer_seconds is not None else None
         alarm_time          = self._find_alarm_time(raw) if bool({"wecker", "alarm"} & norm_tokens) else None

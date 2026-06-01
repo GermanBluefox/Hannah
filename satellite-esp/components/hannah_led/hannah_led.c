@@ -108,6 +108,14 @@ static void render_mute(void)
     set_all(12, 0, 0);  /* Dunkles Rot — dauerhaft sichtbar aber nicht blendend */
 }
 
+static void render_capture(uint32_t frame)
+{
+    /* Lila Atemeffekt: mehr Blau als Rot → auch bei Minimum eindeutig lila */
+    uint8_t r = (uint8_t)(5.0f  + 25.0f * pulse(frame, 75));
+    uint8_t b = (uint8_t)(25.0f + 35.0f * pulse(frame, 75));
+    set_all(r, 0, b);
+}
+
 static void render_error(uint32_t frame)
 {
     /* Schnelles Blinken: 10 Frames an, 10 Frames aus = 0.4s Periode */
@@ -137,8 +145,9 @@ static void led_task(void *arg)
             case LED_STATE_WAKE:   render_wake(frame);   break;
             case LED_STATE_STREAM: render_stream(frame); break;
             case LED_STATE_SPEAK:  render_speak(frame);  break;
-            case LED_STATE_MUTE:   render_mute();        break;
-            case LED_STATE_ERROR:  render_error(frame);  break;
+            case LED_STATE_MUTE:    render_mute();         break;
+            case LED_STATE_ERROR:   render_error(frame);   break;
+            case LED_STATE_CAPTURE: render_capture(frame); break;
         }
 
         led_strip_refresh(s_strip);
@@ -167,5 +176,12 @@ void hannah_led_init(void)
 
 void hannah_led_set_state(led_state_t state)
 {
+    if (state != s_current_state) {
+        static const char *names[] = {
+            "BOOT","IDLE","WAKE","STREAM","SPEAK","MUTE","ERROR","CAPTURE"
+        };
+        ESP_LOGI(TAG, "LED %s → %s",
+                 names[(int)s_current_state], names[(int)state]);
+    }
     s_current_state = state;
 }

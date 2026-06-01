@@ -68,6 +68,8 @@ static hannah_net_playback_cb_t s_playback_cb = NULL;
 static hannah_net_ota_ok_cb_t          s_ota_ok_cb          = NULL;
 static hannah_net_ble_watchlist_cb_t   s_ble_watchlist_cb   = NULL;
 static hannah_net_volume_cb_t          s_volume_cb          = NULL;
+static hannah_net_sampling_cb_t        s_sampling_cb        = NULL;
+static hannah_net_virtual_ptt_cb_t     s_virtual_ptt_cb     = NULL;
 
 /* ── Hilfsfunktionen ─────────────────────────────────────────────────────── */
 
@@ -244,6 +246,12 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
         snprintf(topic, sizeof(topic), "hannah/satellite/%s/ble/watchlist",
                  hannah_config_get()->device_id);
         esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/sampling",
+                 hannah_config_get()->device_id);
+        esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/ptt",
+                 hannah_config_get()->device_id);
+        esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
         break;
     }
 
@@ -308,6 +316,39 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
                          hannah_config_get()->device_id);
                 if (strcmp(topic, ble_topic) == 0 && s_ble_watchlist_cb) {
                     s_ble_watchlist_cb(event->data, event->data_len);
+                } else {
+                    char sampling_topic[128];
+                    snprintf(sampling_topic, sizeof(sampling_topic),
+                             "hannah/satellite/%s/sampling",
+                             hannah_config_get()->device_id);
+                    if (strcmp(topic, sampling_topic) == 0 && s_sampling_cb) {
+                        /* Payload: {"enabled":true,"type":"noise"|"hey_hannah"} */
+                        bool enabled = false;
+                        char sample_type[32] = "noise";
+                        cJSON *sroot = cJSON_ParseWithLength(event->data, event->data_len);
+                        if (sroot) {
+                            const cJSON *jen = cJSON_GetObjectItemCaseSensitive(sroot, "enabled");
+                            const cJSON *jty = cJSON_GetObjectItemCaseSensitive(sroot, "type");
+                            if (cJSON_IsBool(jen))   enabled = cJSON_IsTrue(jen);
+                            if (cJSON_IsString(jty)) strncpy(sample_type, jty->valuestring, sizeof(sample_type) - 1);
+                            cJSON_Delete(sroot);
+                        } else {
+                            enabled = (strstr(event->data, "\"enabled\":true") != NULL ||
+                                       strstr(event->data, "\"enabled\": true") != NULL);
+                        }
+                        ESP_LOGI(TAG, "Sampling-Modus: %s (type=%s)", enabled ? "an" : "aus", sample_type);
+                        s_sampling_cb(enabled, sample_type);
+                    } else {
+                        char ptt_topic[128];
+                        snprintf(ptt_topic, sizeof(ptt_topic),
+                                 "hannah/satellite/%s/ptt",
+                                 hannah_config_get()->device_id);
+                        if (strcmp(topic, ptt_topic) == 0 && s_virtual_ptt_cb) {
+                            bool active = (strncmp(data, "true", 4) == 0 || data[0] == '1');
+                            ESP_LOGI(TAG, "Virtual PTT: %s", active ? "AN" : "AUS");
+                            s_virtual_ptt_cb(active);
+                        }
+                    }
                 }
             }
         }
@@ -482,9 +523,9 @@ void hannah_net_init(void)
     ESP_LOGI(TAG, "hannah_net initialisiert.");
 }
 
-void hannah_net_send_audio(const uint8_t *pcm, size_t len)
+static void send_audio_raw(const uint8_t *pcm, size_t len)
 {
-    if (s_muted || s_udp_sock < 0 || !s_proxy_ready) return;
+    if (s_udp_sock < 0 || !s_proxy_ready) return;
     size_t offset = 0;
     while (offset < len) {
         size_t chunk = len - offset;
@@ -498,6 +539,18 @@ void hannah_net_send_audio(const uint8_t *pcm, size_t len)
         free(pkt);
         offset += chunk;
     }
+}
+
+void hannah_net_send_audio(const uint8_t *pcm, size_t len)
+{
+    if (s_muted) return;
+    send_audio_raw(pcm, len);
+}
+
+/* Wie hannah_net_send_audio, ignoriert aber Mute-Status (für Sampling-Mode). */
+void hannah_net_send_audio_sampling(const uint8_t *pcm, size_t len)
+{
+    send_audio_raw(pcm, len);
 }
 
 void hannah_net_send_audio_end(void)
@@ -543,6 +596,8 @@ void hannah_net_get_ip_str(char *buf, size_t len)
 void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb)        { s_ota_ok_cb        = cb; }
 void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb) { s_ble_watchlist_cb = cb; }
 void hannah_net_set_volume_callback(hannah_net_volume_cb_t cb)        { s_volume_cb        = cb; }
+void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb)    { s_sampling_cb      = cb; }
+void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb) { s_virtual_ptt_cb  = cb; }
 
 void hannah_net_publish_volume(int vol)
 {

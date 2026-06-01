@@ -65,6 +65,18 @@ service HannahService {
   // Trigger an immediate OTA update for a satellite (bypasses residents check).
   rpc TriggerFirmwareUpdate (TriggerFirmwareUpdateRequest) returns (StatusResponse);
 
+  // --- Wakeword Capture ---
+  // Put a satellite in audio-capture mode for wakeword training data collection.
+  // While captured: wakeword detection is suspended, speaker is muted, DND is active.
+  // Hannah relays raw PCM chunks from the satellite to the collector via StreamSatelliteAudio.
+  // The stream stays open until the collector disconnects; Hannah then auto-releases the satellite.
+  rpc RequestSatelliteCapture (SatelliteCaptureRequest) returns (SatelliteCaptureResponse);
+  rpc ReleaseSatelliteCapture (SatelliteCaptureRequest) returns (StatusResponse);
+  rpc StreamSatelliteAudio    (SatelliteCaptureRequest) returns (stream SatelliteAudioChunk);
+  // Play a plink sound on the satellite, then hold virtual PTT for record_duration seconds.
+  // Returns after PTT is released — Collector calls this in a loop for guided hey-hannah collection.
+  rpc TriggerPlink (TriggerPlinkRequest) returns (StatusResponse);
+
   // --- Satellite Proxy (Go gRPC proxy) ---
   // Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
   // audio commands back (for announcements). While this stream is open, Hannah
@@ -579,16 +591,49 @@ message AgentSensorUpdate {
 }
 
 // ============================================================
+//  Wakeword Capture messages (Wakeword Collector ↔ Hannah Core)
+// ============================================================
+
+message SatelliteCaptureRequest {
+  string device_id   = 1;
+  // "noise" (default) or "hey_hannah" — controls ESP streaming behaviour.
+  // noise: continuous auto-flush every 5 s.
+  // hey_hannah: stream only while PTT is held, flush on PTT release.
+  string sample_type = 2;
+}
+
+message TriggerPlinkRequest {
+  string device_id       = 1;
+  float  record_duration = 2;  // seconds to hold virtual PTT after plink (default 3.0)
+}
+
+// ok=false when the satellite is unknown or already captured by another client.
+message SatelliteCaptureResponse {
+  bool   ok    = 1;
+  string error = 2;
+}
+
+// A single audio chunk streamed from a captured satellite to the collector.
+// end_of_utterance=true marks a PTT-release boundary — the collector should
+// finalise and save the accumulated audio as a labelled sample at that point.
+message SatelliteAudioChunk {
+  bytes pcm              = 1;  // raw PCM, 16-bit signed mono
+  int32 sample_rate      = 2;  // Hz, typically 16000
+  bool  end_of_utterance = 3;  // true = PTT released, utterance boundary
+}
+
+// ============================================================
 //  Timer Service messages (Hannah Timer Service ↔ Hannah Core)
 // ============================================================
 
 // Sent by Hannah Core over the TimerConnect stream.
 message TimerCommand {
   oneof command {
-    TimerCreate      create = 1;  // create a new timer
-    TimerCancel      cancel = 2;  // cancel an existing timer
-    TimerListRequest list   = 3;  // request current timer list
-    TimerReady       ready  = 4;  // Hannah is ready to receive pending fired events
+    TimerCreate      create    = 1;  // create a new timer
+    TimerCancel      cancel    = 2;  // cancel an existing timer
+    TimerListRequest list      = 3;  // request current timer list
+    TimerReady       ready     = 4;  // Hannah is ready to receive pending fired events
+    TimerNotReady    not_ready = 5;  // Hannah is temporarily unable to process timer firings
   }
 }
 
@@ -596,6 +641,13 @@ message TimerCommand {
 // Sent after startup once ioBroker states are loaded. The service flushes
 // any TimerFired events that occurred while Hannah was offline, in order.
 message TimerReady {}
+
+// Hannah signals a temporary degraded state — the Timer Service should hold
+// any TimerFired events in its queue until a subsequent TimerReady is received.
+// Hannah sends this when core subsystems are unavailable (e.g. ioBroker disconnected).
+message TimerNotReady {
+  optional string reason = 1;  // human-readable reason, e.g. "ioBroker disconnected"
+}
 
 // Hannah instructs the timer service to create a new timer.
 message TimerCreate {

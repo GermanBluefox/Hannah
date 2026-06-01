@@ -118,6 +118,20 @@ class MQTTHandler:
         self._client.publish(f"hannah/satellite/{device}/ota/ok", "", qos=1)
         log.info(f"OTA-OK → hannah/satellite/{device}/ota/ok")
 
+    def publish_virtual_ptt(self, device: str, active: bool):
+        self._client.publish(
+            f"hannah/satellite/{device}/ptt",
+            "true" if active else "false",
+            qos=1,
+        )
+        log.debug(f"Virtual PTT {'AN' if active else 'AUS'} → {device}")
+
+    def publish_sampling_mode(self, device: str, enabled: bool, sample_type: str = "noise"):
+        import json as _json
+        payload = _json.dumps({"enabled": enabled, "type": sample_type})
+        self._client.publish(f"hannah/satellite/{device}/sampling", payload, qos=1, retain=True)
+        log.info(f"Sampling-Mode {'an' if enabled else 'aus'} (type={sample_type}) → hannah/satellite/{device}/sampling")
+
     # ------------------------------------------------------------------
     # Discovery / raw
 

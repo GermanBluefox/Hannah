@@ -47,6 +47,9 @@ void hannah_net_set_playback_callback(hannah_net_playback_cb_t cb);
 /* PCM-Bytes über UDP zum Proxy senden (TYPE_AUDIO = 0x02). */
 void hannah_net_send_audio(const uint8_t *pcm, size_t len);
 
+/* Wie hannah_net_send_audio, ignoriert aber Mute-Status (für Sampling-Mode). */
+void hannah_net_send_audio_sampling(const uint8_t *pcm, size_t len);
+
 /* audio_end-Kontrollnachricht senden — Aufnahme abgeschlossen. */
 void hannah_net_send_audio_end(void);
 
@@ -84,3 +87,15 @@ void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb);
  * json/len zeigen direkt auf den MQTT-Payload-Puffer (nur während des Callbacks gültig). */
 typedef void (*hannah_net_ble_watchlist_cb_t)(const char *json, int len);
 void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb);
+
+/* Virtual-PTT-Callback: wird aufgerufen wenn hannah/satellite/<device>/ptt empfangen.
+ * active=true: PTT gedrückt (Aufnahme starten), active=false: PTT losgelassen. */
+typedef void (*hannah_net_virtual_ptt_cb_t)(bool active);
+void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb);
+
+/* Sampling-Callback: wird aufgerufen wenn hannah/satellite/<device>/sampling empfangen.
+ * enabled=true: Wakeword-Capture-Modus an (Speaker muten, LED_STATE_CAPTURE).
+ * enabled=false: normaler Betrieb wiederhergestellt.
+ * sample_type: "noise" (Dauerstrom) oder "hey_hannah" (nur bei PTT streamen). */
+typedef void (*hannah_net_sampling_cb_t)(bool enabled, const char *sample_type);
+void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb);

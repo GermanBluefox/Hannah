@@ -1,0 +1,17 @@
+menu "Hannah Asset Server"
+
+    config HANNAH_ASSET_SERVER_URL
+        string "Asset Server URL"
+        default ""
+        help
+            URL des Asset-Servers ohne abschließenden Slash.
+            Beispiel: https://assets.sgessinger.de
+
+    config HANNAH_ASSET_SERVER_TOKEN
+        string "Asset Server Bearer Token"
+        default ""
+        help
+            Bearer-Token für den Asset-Server.
+            Wird als CI-Variable gesetzt und in sdkconfig.defaults.ci geschrieben.
+
+endmenu

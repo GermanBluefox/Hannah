@@ -72,6 +72,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.SetTrustLevelRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.SetSystemMessages = channel.unary_unary(
+                '/hannah.HannahService/SetSystemMessages',
+                request_serializer=hannah__pb2.SetSystemMessagesRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.GetDevices = channel.unary_unary(
                 '/hannah.HannahService/GetDevices',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
@@ -97,6 +102,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.AnnounceRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.Notify = channel.unary_unary(
+                '/hannah.HannahService/Notify',
+                request_serializer=hannah__pb2.AgentNotification.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.GetSatellites = channel.unary_unary(
                 '/hannah.HannahService/GetSatellites',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
@@ -117,6 +127,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.EventFilter.SerializeToString,
                 response_deserializer=hannah__pb2.HannahEvent.FromString,
                 _registered_method=True)
+        self.TriggerFirmwareUpdate = channel.unary_unary(
+                '/hannah.HannahService/TriggerFirmwareUpdate',
+                request_serializer=hannah__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.RegisterProxy = channel.stream_stream(
                 '/hannah.HannahService/RegisterProxy',
                 request_serializer=hannah__pb2.ProxyHeartbeat.SerializeToString,
@@ -127,10 +142,25 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.SubmitSatelliteAudioRequest.SerializeToString,
                 response_deserializer=hannah__pb2.SubmitSatelliteAudioResponse.FromString,
                 _registered_method=True)
+        self.NotifySatelliteRegistered = channel.unary_unary(
+                '/hannah.HannahService/NotifySatelliteRegistered',
+                request_serializer=hannah__pb2.SatelliteRegistration.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.NotifySatelliteGone = channel.unary_unary(
+                '/hannah.HannahService/NotifySatelliteGone',
+                request_serializer=hannah__pb2.SatelliteRegistration.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.EnrollVoiceprint = channel.unary_unary(
                 '/hannah.HannahService/EnrollVoiceprint',
                 request_serializer=hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.AgentConnect = channel.stream_stream(
+                '/hannah.HannahService/AgentConnect',
+                request_serializer=hannah__pb2.AgentMessage.SerializeToString,
+                response_deserializer=hannah__pb2.AgentCommand.FromString,
                 _registered_method=True)
 
 
@@ -181,6 +211,12 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SetSystemMessages(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetDevices(self, request, context):
         """--- Device Control Menu ---
         Returns all rooms and devices with current state — for building control menus.
@@ -218,6 +254,14 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Notify(self, request, context):
+        """Send a notification from ioBroker to Hannah. Returns ok=true when queued.
+        direct=true: skip LLM reformulation. severity: "alert"|"notify"|"info".
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetSatellites(self, request, context):
         """List all currently registered UDP satellites.
         """
@@ -234,7 +278,8 @@ class HannahServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetAllCarStates(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Returns all tracked car states (one per configured car).
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -243,7 +288,15 @@ class HannahServiceServicer(object):
         """--- Event stream ---
         Opens a server-side stream; Hannah pushes events as they occur.
         Pass event_types to filter (empty = all events).
-        Known event types: "car.parked", "resident.arrived", "resident.departed"
+        Known event types: "car.parked", "resident.arrived", "resident.departed", "satellite.firmware"
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def TriggerFirmwareUpdate(self, request, context):
+        """--- Firmware Manager ---
+        Trigger an immediate OTA update for a satellite (bypasses residents check).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -268,12 +321,33 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def NotifySatelliteRegistered(self, request, context):
+        """Notify Hannah that a satellite registered or disconnected via the proxy.
+        Hannah updates its room registry (hannah/rooms MQTT) immediately.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def NotifySatelliteGone(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def EnrollVoiceprint(self, request, context):
         """--- Speaker Enrollment ---
-        Register a voice sample for a roomie so a Voice-ID service can identify
-        them later. Requires trust_level >= 10 to enroll others; own voiceprint
-        can be enrolled at trust_level >= 5.
-        Returns ok=false with a message if no Voice-ID backend is configured.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AgentConnect(self, request_iterator, context):
+        """--- ioBroker Agent ---
+        Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
+        The adapter pushes state updates (device states, presence, text commands);
+        Hannah pushes device-control commands and on-demand state-subscription requests back.
+        The adapter initiates the connection; if Hannah restarts, the adapter reconnects.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -307,6 +381,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.SetTrustLevelRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
+            'SetSystemMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSystemMessages,
+                    request_deserializer=hannah__pb2.SetSystemMessagesRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
             'GetDevices': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDevices,
                     request_deserializer=hannah__pb2.Empty.FromString,
@@ -332,6 +411,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.AnnounceRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
+            'Notify': grpc.unary_unary_rpc_method_handler(
+                    servicer.Notify,
+                    request_deserializer=hannah__pb2.AgentNotification.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
             'GetSatellites': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSatellites,
                     request_deserializer=hannah__pb2.Empty.FromString,
@@ -352,6 +436,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.EventFilter.FromString,
                     response_serializer=hannah__pb2.HannahEvent.SerializeToString,
             ),
+            'TriggerFirmwareUpdate': grpc.unary_unary_rpc_method_handler(
+                    servicer.TriggerFirmwareUpdate,
+                    request_deserializer=hannah__pb2.TriggerFirmwareUpdateRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
             'RegisterProxy': grpc.stream_stream_rpc_method_handler(
                     servicer.RegisterProxy,
                     request_deserializer=hannah__pb2.ProxyHeartbeat.FromString,
@@ -362,10 +451,25 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.SubmitSatelliteAudioRequest.FromString,
                     response_serializer=hannah__pb2.SubmitSatelliteAudioResponse.SerializeToString,
             ),
+            'NotifySatelliteRegistered': grpc.unary_unary_rpc_method_handler(
+                    servicer.NotifySatelliteRegistered,
+                    request_deserializer=hannah__pb2.SatelliteRegistration.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'NotifySatelliteGone': grpc.unary_unary_rpc_method_handler(
+                    servicer.NotifySatelliteGone,
+                    request_deserializer=hannah__pb2.SatelliteRegistration.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
             'EnrollVoiceprint': grpc.unary_unary_rpc_method_handler(
                     servicer.EnrollVoiceprint,
                     request_deserializer=hannah__pb2.EnrollVoiceprintRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'AgentConnect': grpc.stream_stream_rpc_method_handler(
+                    servicer.AgentConnect,
+                    request_deserializer=hannah__pb2.AgentMessage.FromString,
+                    response_serializer=hannah__pb2.AgentCommand.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -527,6 +631,33 @@ class HannahService(object):
             _registered_method=True)
 
     @staticmethod
+    def SetSystemMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/SetSystemMessages',
+            hannah__pb2.SetSystemMessagesRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def GetDevices(request,
             target,
             options=(),
@@ -662,6 +793,33 @@ class HannahService(object):
             _registered_method=True)
 
     @staticmethod
+    def Notify(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/Notify',
+            hannah__pb2.AgentNotification.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def GetSatellites(request,
             target,
             options=(),
@@ -770,6 +928,33 @@ class HannahService(object):
             _registered_method=True)
 
     @staticmethod
+    def TriggerFirmwareUpdate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/TriggerFirmwareUpdate',
+            hannah__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def RegisterProxy(request_iterator,
             target,
             options=(),
@@ -824,6 +1009,60 @@ class HannahService(object):
             _registered_method=True)
 
     @staticmethod
+    def NotifySatelliteRegistered(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/NotifySatelliteRegistered',
+            hannah__pb2.SatelliteRegistration.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def NotifySatelliteGone(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/NotifySatelliteGone',
+            hannah__pb2.SatelliteRegistration.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def EnrollVoiceprint(request,
             target,
             options=(),
@@ -840,6 +1079,33 @@ class HannahService(object):
             '/hannah.HannahService/EnrollVoiceprint',
             hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AgentConnect(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            '/hannah.HannahService/AgentConnect',
+            hannah__pb2.AgentMessage.SerializeToString,
+            hannah__pb2.AgentCommand.FromString,
             options,
             channel_credentials,
             insecure,

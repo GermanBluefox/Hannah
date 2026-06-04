@@ -70,6 +70,7 @@ static hannah_net_ble_watchlist_cb_t   s_ble_watchlist_cb   = NULL;
 static hannah_net_volume_cb_t          s_volume_cb          = NULL;
 static hannah_net_sampling_cb_t        s_sampling_cb        = NULL;
 static hannah_net_virtual_ptt_cb_t     s_virtual_ptt_cb     = NULL;
+static hannah_net_play_asset_cb_t      s_play_asset_cb      = NULL;
 
 /* ── Hilfsfunktionen ─────────────────────────────────────────────────────── */
 
@@ -252,6 +253,9 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
         snprintf(topic, sizeof(topic), "hannah/satellite/%s/ptt",
                  hannah_config_get()->device_id);
         esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/play_asset",
+                 hannah_config_get()->device_id);
+        esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
         break;
     }
 
@@ -347,6 +351,25 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
                             bool active = (strncmp(data, "true", 4) == 0 || data[0] == '1');
                             ESP_LOGI(TAG, "Virtual PTT: %s", active ? "AN" : "AUS");
                             s_virtual_ptt_cb(active);
+                        } else {
+                            char play_asset_topic[128];
+                            snprintf(play_asset_topic, sizeof(play_asset_topic),
+                                     "hannah/satellite/%s/play_asset",
+                                     hannah_config_get()->device_id);
+                            if (strcmp(topic, play_asset_topic) == 0 && s_play_asset_cb) {
+                                char asset_id[64] = {0};
+                                cJSON *proot = cJSON_ParseWithLength(event->data, event->data_len);
+                                if (proot) {
+                                    const cJSON *jid = cJSON_GetObjectItemCaseSensitive(proot, "asset_id");
+                                    if (cJSON_IsString(jid))
+                                        strncpy(asset_id, jid->valuestring, sizeof(asset_id) - 1);
+                                    cJSON_Delete(proot);
+                                }
+                                if (asset_id[0]) {
+                                    ESP_LOGI(TAG, "PlayAsset: %s", asset_id);
+                                    s_play_asset_cb(asset_id);
+                                }
+                            }
                         }
                     }
                 }
@@ -596,8 +619,9 @@ void hannah_net_get_ip_str(char *buf, size_t len)
 void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb)        { s_ota_ok_cb        = cb; }
 void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb) { s_ble_watchlist_cb = cb; }
 void hannah_net_set_volume_callback(hannah_net_volume_cb_t cb)        { s_volume_cb        = cb; }
-void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb)    { s_sampling_cb      = cb; }
-void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb) { s_virtual_ptt_cb  = cb; }
+void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb)       { s_sampling_cb      = cb; }
+void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb) { s_virtual_ptt_cb   = cb; }
+void hannah_net_set_play_asset_callback(hannah_net_play_asset_cb_t cb)   { s_play_asset_cb    = cb; }
 
 void hannah_net_publish_volume(int vol)
 {

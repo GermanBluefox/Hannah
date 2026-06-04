@@ -1,20 +1,14 @@
 import argparse
 import os
 import shutil
+from contextlib import asynccontextmanager
 
 import torch
 import numpy as np
 import yaml
-from fastapi import FastAPI, Request, Header
+from fastapi import APIRouter, FastAPI, Request, Header
 import uvicorn
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
-parser = argparse.ArgumentParser(description="Hannah Voice-ID Service")
-parser.add_argument("--config", default="", help="Pfad zur config.yaml")
-args, _ = parser.parse_known_args()
-
-# ── Config ────────────────────────────────────────────────────────────────────
 
 def _load_config(path: str) -> dict:
     if path and os.path.exists(path):
@@ -22,63 +16,67 @@ def _load_config(path: str) -> dict:
             return yaml.safe_load(f) or {}
     return {}
 
-_cfg = _load_config(args.config)
-_server  = _cfg.get("server", {})
-_recog   = _cfg.get("recognition", {})
 
-HOST                = _server.get("host", "0.0.0.0")
-PORT                = int(_server.get("port", 8080))
-UNKNOWN_THRESHOLD   = float(_recog.get("unknown_threshold",   0.25))
-UNCERTAIN_THRESHOLD = float(_recog.get("uncertain_threshold", 0.40))
-
-# ── Pfade (Deployment-Konstanten, nicht per Config änderbar) ──────────────────
-
-MEM_PATH  = os.environ.get("VOICEID_MEM_PATH",  "/mnt/hannah_mem")
-DISK_PATH = os.environ.get("VOICEID_DISK_PATH", os.path.expanduser("~/hannah/voice_profiles"))
-os.makedirs(DISK_PATH, exist_ok=True)
-
-# ── Modell ────────────────────────────────────────────────────────────────────
-
-print("Lade Sprach-Modell (ECAPA-TDNN) auf CPU ...")
-from speechbrain.inference.speaker import EncoderClassifier
-classifier = EncoderClassifier.from_hparams(
-    source="speechbrain/spkrec-ecapa-voxceleb",
-    run_opts={"device": "cpu"},
-)
-torch.set_num_threads(4)
-print("✅ Modell bereit.")
-
-# ── App ───────────────────────────────────────────────────────────────────────
-
-app = FastAPI()
+def _load_model():
+    print("Lade Sprach-Modell (ECAPA-TDNN) auf CPU ...")
+    from speechbrain.inference.speaker import EncoderClassifier
+    model = EncoderClassifier.from_hparams(
+        source="speechbrain/spkrec-ecapa-voxceleb",
+        run_opts={"device": "cpu"},
+    )
+    torch.set_num_threads(4)
+    print("✅ Modell bereit.")
+    return model
 
 
-@app.on_event("startup")
-async def load_profiles_to_ram():
-    """Beim Start: Profile von SD-Karte in RAM-Disk laden."""
-    os.makedirs(MEM_PATH, exist_ok=True)
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    cfg    = _load_config(getattr(app.state, "config_path", ""))
+    _recog = cfg.get("recognition", {})
+
+    if "unknown_threshold" in _recog:
+        app.state.unknown_threshold = float(_recog["unknown_threshold"])
+    if "uncertain_threshold" in _recog:
+        app.state.uncertain_threshold = float(_recog["uncertain_threshold"])
+
+    disk_path = app.state.disk_path
+    mem_path  = app.state.mem_path
+    os.makedirs(disk_path, exist_ok=True)
+    os.makedirs(mem_path,  exist_ok=True)
+
+    if app.state.classifier is None:
+        app.state.classifier = _load_model()
+
     loaded = 0
-    for file in os.listdir(DISK_PATH):
+    for file in os.listdir(disk_path):
         if file.endswith(".pt"):
-            shutil.copy2(os.path.join(DISK_PATH, file), os.path.join(MEM_PATH, file))
+            shutil.copy2(os.path.join(disk_path, file), os.path.join(mem_path, file))
             loaded += 1
-    print(f"✅ {loaded} Stimmprofil(e) in RAM-Disk geladen ({MEM_PATH}).")
+    print(f"✅ {loaded} Stimmprofil(e) in RAM-Disk geladen ({mem_path}).")
+
+    yield
 
 
-def get_embedding(audio_bytes: bytes) -> torch.Tensor:
-    signal = torch.from_numpy(np.frombuffer(audio_bytes, dtype=np.int16)).float()
+router = APIRouter()
+
+
+def get_embedding(classifier, audio_bytes: bytes) -> torch.Tensor:
+    signal = torch.from_numpy(np.frombuffer(audio_bytes, dtype=np.int16).copy()).float()
     return classifier.encode_batch(signal).squeeze()
 
 
-@app.post("/enroll")
+@router.post("/enroll")
 async def enroll(request: Request, x_roomie_id: str = Header(...)):
-    audio_data = await request.body()
-    print(f"Enrollment-Probe empfangen für: {x_roomie_id}")
+    audio_data  = await request.body()
+    classifier  = request.app.state.classifier
+    disk_path   = request.app.state.disk_path
+    mem_path    = request.app.state.mem_path
 
-    new_emb   = get_embedding(audio_data)
+    print(f"Enrollment-Probe empfangen für: {x_roomie_id}")
+    new_emb   = get_embedding(classifier, audio_data)
     filename  = f"{x_roomie_id}.pt"
-    disk_file = os.path.join(DISK_PATH, filename)
-    ram_file  = os.path.join(MEM_PATH,  filename)
+    disk_file = os.path.join(disk_path, filename)
+    ram_file  = os.path.join(mem_path,  filename)
 
     if os.path.exists(disk_file):
         old_emb      = torch.load(disk_file, map_location="cpu").squeeze()
@@ -93,30 +91,72 @@ async def enroll(request: Request, x_roomie_id: str = Header(...)):
     return {"ok": True, "message": f"Profil für {x_roomie_id} gespeichert."}
 
 
-@app.post("/identify")
+@router.post("/identify")
 async def identify(request: Request):
     audio_data  = await request.body()
-    current_emb = get_embedding(audio_data)
+    classifier  = request.app.state.classifier
+    mem_path    = request.app.state.mem_path
+    unknown_threshold   = request.app.state.unknown_threshold
+    uncertain_threshold = request.app.state.uncertain_threshold
 
-    best_match = "unknown"
-    max_score  = 0.0
+    current_emb = get_embedding(classifier, audio_data)
+    best_match  = "unknown"
+    max_score   = 0.0
 
-    for file in os.listdir(MEM_PATH):
+    for file in os.listdir(mem_path):
         if file.endswith(".pt"):
-            stored_emb = torch.load(os.path.join(MEM_PATH, file), map_location="cpu").squeeze()
+            stored_emb = torch.load(os.path.join(mem_path, file), map_location="cpu").squeeze()
             score = torch.nn.functional.cosine_similarity(current_emb, stored_emb, dim=0).item()
             if score > max_score:
                 max_score  = score
                 best_match = file.replace(".pt", "")
 
-    if max_score < UNKNOWN_THRESHOLD:
+    if max_score < unknown_threshold:
         best_match = "unknown"
-    elif max_score < UNCERTAIN_THRESHOLD:
+    elif max_score < uncertain_threshold:
         print(f"⚠️  Unsichere Erkennung: {best_match} ({max_score:.4f})")
 
     print(f"Ergebnis: {best_match} (Score: {max_score:.4f})")
     return {"roomie_id": best_match, "confidence": max_score}
 
 
+def create_app(
+    *,
+    config_path: str = "",
+    classifier=None,
+    disk_path: str | None = None,
+    mem_path: str | None = None,
+    unknown_threshold: float = 0.25,
+    uncertain_threshold: float = 0.40,
+) -> FastAPI:
+    """Factory — pass classifier=<mock> in tests to skip model loading."""
+    _app = FastAPI(lifespan=_lifespan)
+    _app.state.config_path          = config_path
+    _app.state.classifier           = classifier
+    _app.state.disk_path            = disk_path or os.environ.get(
+        "VOICEID_DISK_PATH", os.path.expanduser("~/hannah/voice_profiles")
+    )
+    _app.state.mem_path             = mem_path or os.environ.get(
+        "VOICEID_MEM_PATH", "/mnt/hannah_mem"
+    )
+    _app.state.unknown_threshold    = unknown_threshold
+    _app.state.uncertain_threshold  = uncertain_threshold
+    _app.include_router(router)
+    return _app
+
+
+app = create_app(config_path=os.environ.get("VOICEID_CONFIG", ""))
+
+
 if __name__ == "__main__":
-    uvicorn.run(app, host=HOST, port=PORT)
+    _parser = argparse.ArgumentParser(description="Hannah Voice-ID Service")
+    _parser.add_argument("--config", default="", help="Pfad zur config.yaml")
+    _args = _parser.parse_args()
+
+    _cfg    = _load_config(_args.config)
+    _server = _cfg.get("server", {})
+    _host   = _server.get("host", "0.0.0.0")
+    _port   = int(_server.get("port", 8080))
+
+    _app = create_app(config_path=_args.config)
+    uvicorn.run(_app, host=_host, port=_port)

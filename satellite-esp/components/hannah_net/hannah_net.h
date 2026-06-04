@@ -99,3 +99,9 @@ void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb);
  * sample_type: "noise" (Dauerstrom) oder "hey_hannah" (nur bei PTT streamen). */
 typedef void (*hannah_net_sampling_cb_t)(bool enabled, const char *sample_type);
 void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb);
+
+/* Play-Asset-Callback: wird aufgerufen wenn hannah/satellite/<device>/play_asset empfangen.
+ * Payload: {"asset_id":"timer_jingle"}
+ * asset_id ist nur während des Callbacks gültig — bei asynchroner Nutzung kopieren. */
+typedef void (*hannah_net_play_asset_cb_t)(const char *asset_id);
+void hannah_net_set_play_asset_callback(hannah_net_play_asset_cb_t cb);

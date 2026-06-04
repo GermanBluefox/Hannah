@@ -435,11 +435,12 @@ message AgentSatelliteControl {
   string room      = 1;
   string device_id = 7;  // optional: target a specific satellite instead of the whole room
   oneof control {
-    bool   dnd               = 2;  // set do-not-disturb
-    bool   mute              = 3;  // mute/unmute microphone
-    int32  volume            = 4;  // set volume (0–100)
-    string announcement      = 5;  // speak plain-text announcement
-    string announcement_ssml = 6;  // speak SSML announcement
+    bool   dnd                    = 2;  // set do-not-disturb
+    bool   mute                   = 3;  // mute/unmute microphone
+    int32  volume                 = 4;  // set volume (0–100)
+    string announcement           = 5;  // speak plain-text announcement (verbatim)
+    string announcement_ssml      = 6;  // speak SSML announcement
+    string announcement_rephrase  = 8;  // speak announcement, text rephrased by LLM first
   }
 }
 

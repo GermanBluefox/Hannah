@@ -8,6 +8,7 @@ Konfiguration in triggers.yaml:
         when:
           time: "23:00"
         say: "Leonie, denk an die Außentüren."
+        rephrase: true   # optional: LLM formuliert 'say' vor der Ausgabe um
         room: all
 
       - id: fenster_kalt
@@ -35,13 +36,20 @@ log = logging.getLogger(__name__)
 
 
 class TriggerEngine:
-    def __init__(self, path: str, announce_fn: Callable[[str, str], None]):
+    def __init__(
+        self,
+        path: str,
+        announce_fn: Callable[[str, str], None],
+        rephrase_fn: Callable[[str], str] | None = None,
+    ):
         """
         path:        Pfad zur triggers.yaml
         announce_fn: fn(room, text) — ruft process_announcement() auf
+        rephrase_fn: fn(text) → text — LLM-Umformulierung; None = Feature deaktiviert
         """
         self._path = path
         self._announce = announce_fn
+        self._rephrase_fn = rephrase_fn
         self._triggers: list[dict] = []
         self._mtime: float = -1.0
 
@@ -172,9 +180,16 @@ class TriggerEngine:
             log.warning(f"Trigger '{tid}': kein 'say' definiert.")
             return
 
-        log.info(f"Trigger '{tid}' ausgelöst → [{room}] \"{say}\"")
+        text = say
+        if trigger.get("rephrase") and self._rephrase_fn:
+            try:
+                text = self._rephrase_fn(say) or say
+            except Exception as e:
+                log.warning(f"Trigger '{tid}': LLM-Rephrase fehlgeschlagen, nutze Original: {e}")
+
+        log.info(f"Trigger '{tid}' ausgelöst → [{room}] \"{text}\"")
         try:
-            self._announce(room, say)
+            self._announce(room, text)
         except Exception as e:
             log.error(f"Trigger '{tid}': Announcement fehlgeschlagen: {e}")
 

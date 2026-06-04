@@ -74,6 +74,28 @@ def main():
     # Statische Raum-Zuordnung aus Config (Fallback für MQTT-Satelliten ohne Registrierung)
     device_rooms: dict[str, str] = cfg.get("device_rooms", {})
 
+    # Asset-Manifest (einmalig beim Start abrufen — enthält u.a. duration_s für Jingles)
+    def _load_asset_manifest() -> dict:
+        import urllib.request as _urlreq
+        asset_cfg = cfg.get("asset_server", {})
+        url   = asset_cfg.get("url", "").rstrip("/")
+        token = asset_cfg.get("token", "")
+        if not url or not token:
+            return {}
+        try:
+            req = _urlreq.Request(
+                f"{url}/manifest",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with _urlreq.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+                return data.get("assets", {})
+        except Exception as exc:
+            log.warning(f"[asset] Manifest nicht abrufbar: {exc}")
+        return {}
+
+    _asset_manifest: dict = _load_asset_manifest()
+
     # ioBroker
     iobroker = IoBrokerClient(cfg.get("iobroker", {}))
 
@@ -621,9 +643,29 @@ def main():
             grpc_servicer.agent_satellite_update(device, _prev_satellite_map.get(device, ""), "", False)
         _known_satellites = current
         _prev_satellite_map = dict(satellite_map)
+    def _rephrase_text(text: str) -> str:
+        """Lässt Hannah (LLM) einen Announcement-Text frei umformulieren.
+        Gibt den Originaltext zurück wenn kein LLM verfügbar oder ein Fehler auftritt."""
+        if llm is None:
+            return text
+        try:
+            prompt = (
+                "Du bist Hannah, eine 24-jährige Mitbewohnerin. "
+                "Formuliere den folgenden Satz kurz und natürlich um — "
+                "du redest mit deiner Mitbewohnerin, nicht mit einem Kunden. "
+                "Behalte alle konkreten Details bei. "
+                "Antworte nur mit dem umformulierten Satz, ohne Erklärung."
+            )
+            result = llm.chat(text, system_prompt=prompt)
+            return result.strip() if result and result.strip() else text
+        except Exception as e:
+            log.warning(f"LLM-Rephrase fehlgeschlagen, nutze Original: {e}")
+            return text
+
     trigger_engine = TriggerEngine(
         path=cfg.get("triggers_file", "triggers.yaml"),
         announce_fn=process_announcement,
+        rephrase_fn=_rephrase_text,
     )
 
     def _on_state_update(state_id: str, raw: str) -> None:
@@ -808,14 +850,17 @@ def main():
             for d in targets:
                 _device_volume[d] = int(value)
                 mqtt_handler.publish_volume_set(d, int(value))
-        elif key in ("announcement", "announcement_ssml"):
+        elif key in ("announcement", "announcement_ssml", "announcement_rephrase"):
             if tts.enabled:
-                result = (tts.synthesize_ssml(str(value)) if key == "announcement_ssml"
-                          else tts.synthesize(str(value)))
+                text = str(value)
+                if key == "announcement_rephrase":
+                    text = _rephrase_text(text)
+                result = (tts.synthesize_ssml(text) if key == "announcement_ssml"
+                          else tts.synthesize(text))
                 if result:
-                    pcm, rate = result
+                    pcm, rate = _resample_to_16k(*result)
                     for d in targets:
-                        udp_server.send_tts(d, pcm, rate)
+                        _send_audio(d, pcm, rate, label="[satellite_control] ")
         log.info(f"[satellite_control] room={room!r} {key}={value!r} → {len(targets)} Satelliten")
 
     _iobroker_ready: bool = False
@@ -828,7 +873,24 @@ def main():
         room = entry.get("room", "all")
         announce_label = entry.get("label") or label
         timer_store.remove(timer_id)
-        process_announcement(room, f"Dein Timer ist abgelaufen: {announce_label}.")
+        targets = [d for d in _resolve_targets(room) if not _device_dnd.get(d)]
+
+        # TTS vorab synthetisieren damit Jingle + TTS nahtlos aufeinanderfolgen
+        tts_pcm: Optional[tuple] = None
+        if tts.enabled:
+            result = tts.synthesize(f"Dein Timer ist abgelaufen: {announce_label}.")
+            if result:
+                tts_pcm = _resample_to_16k(*result)
+
+        jingle_duration = _asset_manifest.get("timer_jingle", {}).get("meta", {}).get("duration_s", 1.0)
+        for device in targets:
+            mqtt_handler.publish_play_asset(device, "timer_jingle")
+        time.sleep(jingle_duration + 0.1)
+
+        if tts_pcm:
+            pcm, rate = tts_pcm
+            for device in targets:
+                _send_audio(device, pcm, rate)
 
     def _on_timer_connected():
         if _iobroker_ready:
@@ -1039,7 +1101,7 @@ def main():
         if tts.enabled:
             result = tts.synthesize(text)
             if result:
-                pcm, rate = result
+                pcm, rate = _resample_to_16k(*result)
                 for target in _resolve_targets("all"):
                     if not _device_dnd.get(target):
                         _send_audio(target, pcm, rate)

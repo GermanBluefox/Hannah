@@ -20,8 +20,14 @@
 #include "hannah_webserver.h"
 #include "hannah_ota.h"
 #include "hannah_ble.h"
+#include "hannah_asset.h"
 
 static const char *TAG = "main";
+
+static void on_play_asset(const char *asset_id)
+{
+    hannah_asset_play_async(asset_id);
+}
 
 /* Mute beim Start gedrückt halten → WiFi-Einstellungen löschen → AP-Modus */
 static void check_factory_reset(void)
@@ -85,6 +91,10 @@ void app_main(void)
 
     /* OTA-Update-Check (Poll im Hintergrund, kein Flash-Vorgang) */
     hannah_ota_init();
+
+    /* Asset-Cache (WAV-Sounds) */
+    hannah_net_set_play_asset_callback(on_play_asset);
+    hannah_asset_init();
 
     /* BLE-Scanner für Indoor-Lokalisierung */
     hannah_ble_init();

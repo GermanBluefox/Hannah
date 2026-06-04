@@ -132,6 +132,12 @@ class MQTTHandler:
         self._client.publish(f"hannah/satellite/{device}/sampling", payload, qos=1, retain=True)
         log.info(f"Sampling-Mode {'an' if enabled else 'aus'} (type={sample_type}) → hannah/satellite/{device}/sampling")
 
+    def publish_play_asset(self, device: str, asset_id: str):
+        import json as _json
+        payload = _json.dumps({"asset_id": asset_id})
+        self._client.publish(f"hannah/satellite/{device}/play_asset", payload, qos=1)
+        log.info(f"PlayAsset '{asset_id}' → hannah/satellite/{device}/play_asset")
+
     # ------------------------------------------------------------------
     # Discovery / raw
 

@@ -5,6 +5,48 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.22.1
+### Hannah Core
+* Fixed: `process_notification` (notify/alert severity) was sending raw Azure TTS (24kHz) to satellites without resampling — audio played at 67% speed with noticeably lower pitch; now resampled to 16kHz via `_resample_to_16k` before `_send_audio`
+* Fixed: `_on_agent_satellite_control` (ioBroker announcements) had the same missing resample, and called `udp_server.send_tts` directly instead of `_send_audio` — breaking proxy-connected satellites
+
+## 0.22.0
+### Hannah Core
+* Added: LLM rephrase for announcements — `_rephrase_text()` helper shared by trigger engine and satellite control handler; falls back to original text when LLM is unavailable or fails
+* Added: `rephrase: true` field in `triggers.yaml` — TriggerEngine passes `say` text through LLM before TTS when set
+* Added: `AgentSatelliteControl.announcement_rephrase` gRPC field — adapter can request LLM reformulation per announcement
+
+### Proto
+* Added: `announcement_rephrase` (field 8) to `AgentSatelliteControl.oneof control` — speak announcement with LLM rephrase applied before TTS
+
+## 0.21.3
+### Telegram
+* Added: Automated test suite for the Telegram bot (`telegram/tests/test_app.py`, 28 tests) — covers private-chat guard, trust-level checks, link/unlink flow, `/start` welcome message, free-text command dispatch, and car-state formatting; integrated as `test:telegram` CI job
+
+### VoiceID
+* Refactored: `voiceid/app.py` — moved all module-level side effects (model loading, argparse, `os.makedirs`) out of import scope into a `create_app()` factory and FastAPI lifespan handler; routes extracted to `APIRouter`; `get_embedding()` now accepts classifier as parameter instead of using a global
+* Added: Automated test suite for the VoiceID service (`voiceid/tests/test_app.py`, 16 tests) — covers embedding extraction, profile enrollment (new + blending), identification with threshold logic, startup profile sync from disk to RAM, and config-file threshold overrides; integrated as `test:voiceid` CI job (Python 3.11, torch CPU-only, no speechbrain install required)
+
+## 0.21.2
+### Hannah Core
+* Changed: Asset manifest is now fetched without namespace filter (`GET /manifest`) so asset metadata can be queried generically across all namespaces
+
+## 0.21.1
+### Satellite Firmware
+* Fixed: `hannah_asset` — asset server HTTPS requests failed due to missing CA certificate; added Thawte TLS RSA CA G1 cert to `fetch_manifest()` and `download_asset()` (same CA as OTA)
+
+## 0.21.0
+### Hannah Core
+* Added: Asset manifest fetch at startup — reads `duration_s`, `sample_rate`, `channels`, `bits_per_sample` from asset server manifest (`asset_server.url` + `asset_server.token` in `config.yaml`)
+* Changed: Timer alert now plays `timer_jingle` asset on all target satellites before TTS; TTS is pre-synthesized so jingle and announcement are sequenced precisely (`play_asset` → sleep `duration_s + 0.1 s` → TTS PCM)
+* Added: `mqtt_handler.publish_play_asset(device, asset_id)` — publishes `{"asset_id": …}` to `hannah/satellite/{device}/play_asset`
+
+### Satellite Firmware
+* Added: `hannah_asset` component — fetches asset manifest at boot, downloads/caches WAV files in SPIFFS (sha256-based cache validation via NVS), plays WAV assets on demand with proper WAV chunk scanning
+* Added: MQTT topic `hannah/satellite/{device}/play_asset` — payload `{"asset_id": …}` triggers async WAV playback via `hannah_audio_play()`
+* Added: `HANNAH_ASSET_SERVER_URL` + `HANNAH_ASSET_SERVER_TOKEN` Kconfig options (set via CI as `sdkconfig.defaults.ci`)
+* Changed: SPIFFS partition expanded from 1.9 MB to 9 MB
+
 ## 0.20.0
 ### Hannah Core
 * Fixed: Notifications played back at wrong pitch — Azure TTS output (24 kHz) was not resampled before sending to satellite, causing 2/3-speed playback and a noticeably deeper voice; use `_resample_to_16k()` helper

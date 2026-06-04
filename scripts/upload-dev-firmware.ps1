@@ -20,7 +20,7 @@
 #>
 
 param(
-    [string]$Channel = "dev",
+    [string]$Channel = "sateelite-esp-rev2",
     [switch]$NoBuild,
     [switch]$List,
     [string]$Delete = "",
@@ -91,10 +91,10 @@ if (-not $NoBuild) {
         Write-Host "sdkconfig deleted - rebuilding from defaults." -ForegroundColor Cyan
     }
 
-    Write-Host "Building firmware (devkit config)..." -ForegroundColor Cyan
+    Write-Host "Building firmware rev2 config)..." -ForegroundColor Cyan
     Push-Location (Join-Path $RepoRoot "satellite-esp")
     try {
-        idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.devkit;sdkconfig.ci" build
+        idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.rev2;sdkconfig.ci" build
         if ($LASTEXITCODE -ne 0) { Write-Error "idf.py build failed."; exit 1 }
     } finally {
         Pop-Location

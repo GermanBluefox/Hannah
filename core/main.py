@@ -784,6 +784,11 @@ def main():
             if result:
                 tts_pcm, sample_rate = result
                 tts_pcm, sample_rate = _resample_to_16k(tts_pcm, sample_rate)
+                log.info(f"[{device}] TTS: {len(tts_pcm)} Bytes @ {sample_rate} Hz")
+            else:
+                log.warning(f"[{device}] TTS: synthesize() lieferte kein Ergebnis für Antwort: {answer!r}")
+        else:
+            log.debug(f"[{device}] TTS deaktiviert — keine Audio-Antwort")
 
         return transcript, answer, intent_name, tts_pcm, sample_rate
 

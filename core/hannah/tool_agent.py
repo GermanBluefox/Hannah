@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_MAX_ITERATIONS = 3
+_MAX_ITERATIONS = 5
 
 _TOOLS: list[dict] = [
     {
@@ -231,13 +231,18 @@ class ToolAgent:
                 log.info("[tool_agent] %s(%s) → %d chars", func_name, args, result_chars)
                 log.debug("[tool_agent] %s result: %s", func_name, result)
 
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "content": result if isinstance(result, str) else json.dumps(result, ensure_ascii=False),
-                    }
-                )
+                if func_name != "speak":
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": result if isinstance(result, str) else json.dumps(result, ensure_ascii=False),
+                        }
+                    )
+
+            # Terminal — after processing all tool calls in this batch, return if speak was used
+            if spoken:
+                return "\n".join(spoken)
 
         log.warning("[tool_agent] Max Iterationen (%d) erreicht ohne finale Antwort", _MAX_ITERATIONS)
         return "\n".join(spoken) if spoken else ""

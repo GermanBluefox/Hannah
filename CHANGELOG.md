@@ -5,6 +5,12 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.22.2
+### Hannah Core
+* Fixed: `tool_agent` — `speak()` is now a terminal tool; the loop returns immediately after dispatching `speak` without waiting for a further LLM round-trip; previously the loop could exhaust `_MAX_ITERATIONS` before `speak` was ever called, causing the fallback "Das habe ich leider nicht verstanden." instead of the generated answer
+* Changed: `_MAX_ITERATIONS` raised from 3 to 5 — allows more complex tool-use flows (e.g. multi-device commands, intermediate queries) without hitting the limit prematurely
+* Added: TTS result logging in `_handle_satellite_audio` — logs byte count and sample rate on success, or a warning when `synthesize()` returns nothing
+
 ## 0.22.1
 ### Hannah Core
 * Fixed: `process_notification` (notify/alert severity) was sending raw Azure TTS (24kHz) to satellites without resampling — audio played at 67% speed with noticeably lower pitch; now resampled to 16kHz via `_resample_to_16k` before `_send_audio`

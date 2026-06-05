@@ -48,7 +48,7 @@ hannah/                          ← Mono-Repo (Branch: DanielDuesentrieb)
 │   │   ├── hannah_net/          ← WiFi, MQTT-Discovery, UDP-Streaming
 │   │   ├── hannah_audio/        ← I2S Mic (INMP441×2), Speaker (MAX98357A)
 │   │   ├── hannah_led/          ← WS2812B LED-Ring State-Machine
-│   │   ├── hannah_sensors/      ← BMP280, AHT20 (I2C)
+│   │   ├── hannah_sensors/      ← BME680 (Temp, Feuchte, Luftdruck, Gas, I2C)
 │   │   ├── hannah_wakeword/     ← microWakeWord / ESP-SR (in Arbeit)
 │   │   └── microfrontend/       ← Audio-Frontend (Spektrogramm für WW)
 │   └── hardware/
@@ -104,7 +104,7 @@ ESP-IDF (C), FreeRTOS, **ESP32-S3** (AI-Beschleuniger + mehr RAM benötigt).
 | `hannah_net` | WiFi STA, MQTT-Discovery via `hannah/server` (retained), UDP-Registrierung + Heartbeat (30s) |
 | `hannah_audio` | I2S0 (INMP441 Mono), I2S1 (MAX98357A). PTT: halten → streamen, loslassen → audio_end |
 | `hannah_led` | WS2812B, 7 Zustände: BOOT / IDLE / WAKE / STREAM / SPEAK / MUTE / ERROR |
-| `hannah_sensors` | BMP280 (Temp + Druck), AHT20 (Feuchte), I2C |
+| `hannah_sensors` | BME680 (Temp, Feuchte, Luftdruck, Gas-Widerstand), I2C |
 | `hannah_wakeword` | microWakeWord / ESP-SR — **6 offene Kompilierfehler** (IDF 6.0 API-Änderungen) |
 
 **ESP-IDF Umgebung aktivieren:**
@@ -212,7 +212,7 @@ Hannah bekommt die Geräte über gRPC von dem Adapter über gRPC gemeldet. Sämt
 | Rev. 3 | Geliefert, enthält Bugs | 88mm rund | Zieldesign; nicht nutzbar |
 | Rev. 4 | Bestellt (JLCBCB, 01.06.2026) | 88mm rund | Zieldesign |
 
-### PCB Rev. 3 (`satellite-esp/hardware/Phase2/`)
+### PCB Rev. 4 (`satellite-esp/hardware/Phase2/`)
 
 **Abmessungen:** 88mm Durchmesser, eine Seite leicht abgeflacht (USB-C). 4-lagig: F.Cu / In1.Cu (GND) / In2.Cu (3.3V) / B.Cu. ENIG.
 
@@ -220,7 +220,7 @@ Hannah bekommt die Geräte über gRPC von dem Adapter über gRPC gemeldet. Sämt
 - 4× ALPS ALPINE SKRPABE010 SMD-Taster (Mute, Vol+, Vol−, PTT) — brauchen Membran im Deckel
 - ~24× WS2812B LED-Ring
 - MAX98357A (I2S-Verstärker)
-- BMP280 (Temp + Druck, I2C)
+- BME680 (Temp, Feuchte, Luftdruck, Gas-Widerstand, I2C)
 
 **Unterseite:**
 - ESP32-S3-WROOM-1-N16R8

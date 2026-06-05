@@ -1,7 +1,7 @@
 # Hannah Satellite — GPIO Map
 
 **Chip:** ESP32-S3-WROOM-1-N16R8  
-**Board:** Rev.3 PCB, 88 mm rund
+**Board:** Rev.4 PCB, 88 mm rund
 
 ---
 
@@ -12,11 +12,11 @@
 |  0   | Boot-Strapping    | —        | Tied to 3,3 V → immer Normal-Boot |
 |  1   | NC                | —        | — |
 |  2   | NC                | —        | — |
-|  3   | NC                | —        | — |
-|  4   | NC                | —        | — |
-|  5   | LED_DATA          | Out      | SK6812MINI-E Ring (24 LEDs) via SN74AHCT125 Level-Shifter (5 V) |
-|  6   | NC                | —        | — |
-|  7   | NC                | —        | — |
+|  3   | LED_DATA          | Out      | SK6812MINI-E Ring (24 LEDs) via SN74AHCT125 Level-Shifter (5 V) |
+|  4   | SD_CS             | Out      | Micro-SD SPI |
+|  5   | SD_MOSI           | Out      | Micro-SD SPI |
+|  6   | SD_CLK            | Out      | Micro-SD SPI |
+|  7   | SD_MISO           | In       | Micro-SD SPI |
 |  8   | I2C_SDA           | I/O      | BME680 (Temperatur, Feuchte, Luftdruck) |
 |  9   | I2C_SCL           | Out      | BME680 |
 | 10   | MIC_MUTE          | Out      | NPN-Transistor: HIGH = Mics aktiv, LOW = Hardware-Stumm |
@@ -88,7 +88,7 @@
 ### LEDs
 | Signal           | GPIO | Hinweis |
 |------------------|-----:|---------|
-| SK6812-Ring      |  5   | Via SN74AHCT125 Level-Shifter (3,3 V → 5 V) |
+| SK6812-Ring      |  3   | Via SN74AHCT125 Level-Shifter (3,3 V → 5 V) |
 | Status-LED       | 18   | Einzel-LED, via R470 |
 
 ### Debug / Flashing

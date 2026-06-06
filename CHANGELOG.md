@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.2
+### Hannah Core
+* Fixed: `tool_agent` — LLM had no access to current date/time; now injected into system prompt on every run (weekday, date, time); prevents wrong guesses for questions like "Welcher Tag ist heute?"
+
 ## 0.23.1
 ### Hannah Core
 * Fixed: startup crash — `main.py` log statement referenced removed `topic_prefix_write` attribute on `ResidentsClient`; replaced with `topic_prefix_read`

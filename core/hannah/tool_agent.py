@@ -6,6 +6,7 @@ und gibt niemals direkt an ioBroker weiter — alles läuft über Hannah.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -176,7 +177,10 @@ class ToolAgent:
         spoken: list[str] = []
         called: set[tuple[str, str]] = set()
 
+        _now = datetime.datetime.now()
+        _WEEKDAYS_DE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
         _TOOL_RULES = (
+            f"\n\nAktuelles Datum/Uhrzeit: {_WEEKDAYS_DE[_now.weekday()]}, {_now.strftime('%d.%m.%Y')}, {_now.strftime('%H:%M')} Uhr"
             "\n\nRegeln für Tool-Nutzung:"
             "\n- Nutze das speak-Tool um deine Antwort auszugeben."
             "\n- Rufe nie dasselbe Tool zweimal hintereinander auf."

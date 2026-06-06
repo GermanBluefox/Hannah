@@ -1,4 +1,9 @@
 routines_file: "routines.yaml"  # Pfad zur Routinen-Datei (hot-reload bei Änderung)
+triggers_file: "triggers.yaml"  # Pfad zur Trigger-Datei (hot-reload bei Änderung)
+
+# Extra ioBroker State-Prefixes (zusätzlich zu den enum-basierten Geräten des Adapters)
+# extra_state_prefixes:
+#   - "0_userdata.0"
 
 device_rooms:
   rpi-test: "Wohnzimmer"  # Fallback für MQTT-Satelliten ohne UDP-Registrierung
@@ -23,6 +28,8 @@ mqtt:
   port: 1883
   username: "mqtt"
   password: "IHR_MQTT_PASSWORT"
+  # Eingehende Audio-Streams: {device} wird automatisch aus dem Topic extrahiert
+  topic_audio_in: "hannah/+/audio"
   # Ausgehende Topics: {device} wird durch den Gerätenamen ersetzt
   topic_intent_out: "hannah/{device}/intent"
   topic_text_out: "hannah/{device}/text"        # STT-Ergebnis (optional)
@@ -54,23 +61,24 @@ grpc:
   host: "0.0.0.0"   # Bind-Adresse des gRPC-Servers
   port: 50051        # Standard gRPC-Port
 
+asset_server:
+  url: "https://hannah-asset.example.com"
+  token: "IHR_ASSET_TOKEN"
+
 user_registry:
   db_path: "hannah_users.db"   # SQLite-Datei (relativ zum Arbeitsverzeichnis)
   sync_interval: 60            # Sekunden zwischen ioBroker-Abfragen
 
 residents:
   topic_prefix_read:  "residents/0/roomie"          # ioBroker → Hannah (subscribe)
-  topic_prefix_write: "hannah/set/residents/roomie" # Hannah → ioBroker (publish, kein /0/)
   state_key: "presence/state"   # Datenpunkt-Suffix unterhalb von /{name}/
   hannah_roomie: "hannah"
-  user_roomies:                 # Roomie-IDs aller Bewohner (außer Hannah)
+  user_roomie:                  # Roomie-IDs aller Bewohner (außer Hannah)
     - "bewohner1"
   state_home: 1   # 🏠 zu Hause
   state_away: 0   # ⏸️ Abwesend
 
 iobroker:
-  host: "192.168.1.1"   # IP-Adresse des ioBroker-Servers
-  port: 8093
   # Pfad-Prefix der virtualDevice-Geräte in ioBroker
   virtual_device_prefix: "javascript.0.virtualDevice"
   feedback_timeout: 3.0   # Sekunden bis "Gerät antwortet nicht"
@@ -135,6 +143,10 @@ stt:
   # remote_url: "http://192.168.1.2:8000"
   # remote_model: "Systran/faster-whisper-large-v3"
   # remote_timeout: 15.0   # Sekunden (beim ersten Request wird das Modell geladen)
+
+  # Azure Speech-to-Text (alternativ zu faster-whisper)
+  # azure_key: "..."
+  # azure_region: germanywestcentral
 
 audio:
   sample_rate: 16000
@@ -201,10 +213,12 @@ nlu:
 
 llm:
   enabled: false          # true = LLM aktiv (Smalltalk, Notification-Reformulierung)
-  provider: ollama        # ollama | openai | groq | mistral
-  base_url: "http://localhost:11434"   # Ollama lokal; für OpenAI: https://api.openai.com/v1
+  provider: ollama        # ollama | openai_compat | openai | groq | mistral
+  base_url: "http://localhost:11434"   # Ollama lokal; openai_compat: http://host:port/v1
   # api_key: ""           # Nur für Cloud-Anbieter (OpenAI, Groq, Mistral)
   model: "llama3.2"       # Ollama-Modell, Cloud-Modell-ID, oder custom Modelfile-Name
+  timeout: 60             # Sekunden bis LLM-Timeout
+  max_tokens: 2048
 
   # Persönlichkeit (optional) — weglassen wenn die Persönlichkeit im Modell eingebaut ist.
   #

@@ -21,6 +21,7 @@
 #include "hannah_ota.h"
 #include "hannah_ble.h"
 #include "hannah_asset.h"
+#include "hannah_sd.h"
 
 static const char *TAG = "main";
 
@@ -88,6 +89,9 @@ void app_main(void)
 
     /* Sensoren */
     hannah_sensors_init();
+
+    /* SD-Karte */
+    hannah_sd_init();
 
     /* OTA-Update-Check (Poll im Hintergrund, kein Flash-Vorgang) */
     hannah_ota_init();

@@ -1,0 +1,29 @@
+menu "Hannah SD-Karte"
+
+    config HANNAH_SD_ENABLED
+        bool "SD-Karten-Support aktivieren"
+        default n
+        help
+            SPI-basierter Micro-SD-Karten-Slot. Nur auf PCBs mit SD-Hardware aktivieren.
+
+    config HANNAH_SD_CS_GPIO
+        int "SPI Chip-Select GPIO"
+        default 4
+        depends on HANNAH_SD_ENABLED
+
+    config HANNAH_SD_MOSI_GPIO
+        int "SPI MOSI GPIO"
+        default 5
+        depends on HANNAH_SD_ENABLED
+
+    config HANNAH_SD_CLK_GPIO
+        int "SPI CLK GPIO"
+        default 6
+        depends on HANNAH_SD_ENABLED
+
+    config HANNAH_SD_MISO_GPIO
+        int "SPI MISO GPIO"
+        default 7
+        depends on HANNAH_SD_ENABLED
+
+endmenu

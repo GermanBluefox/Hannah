@@ -38,7 +38,6 @@ class ResidentsClient:
         self._cache: dict[str, dict[str, object]] = {}
 
         self.topic_prefix_read  = cfg.get("topic_prefix_read",  "residents/0/roomie")
-        self.topic_prefix_write = cfg.get("topic_prefix_write", "hannah/set/residents/0/roomie")
 
         # Guest-Topic wird aus dem Roomie-Prefix abgeleitet
         _base = self.topic_prefix_read.rsplit("/", 1)[0]

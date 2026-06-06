@@ -1188,7 +1188,7 @@ def main():
     log.info(f"Satelliten finden Hannah über MQTT-Topic: {_discovery_topic}")
 
     residents.announce_online()
-    log.info(f"Residents: Hannah online ({residents.topic_prefix_write}/{residents.hannah_name}/state)")
+    log.info(f"Residents: Hannah online ({residents.topic_prefix_read}/{residents.hannah_name}/state)")
 
     # ------------------------------------------------------------------
     # gRPC-Server starten

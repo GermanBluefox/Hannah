@@ -1,5 +1,4 @@
 .env
-core/config.yaml
 forum_post.md
 __pycache__/
 venv/
@@ -72,3 +71,4 @@ satellite-esp/sdkconfig.old
 hardware/Phase2/*.step
 /hardware/.history
 /hardware/Phase2/.history
+/core/config.yaml

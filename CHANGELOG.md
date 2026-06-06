@@ -5,6 +5,19 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.1
+### Hannah Core
+* Fixed: startup crash — `main.py` log statement referenced removed `topic_prefix_write` attribute on `ResidentsClient`; replaced with `topic_prefix_read`
+
+## 0.23.0
+### Satellite Firmware
+* Added: `hannah_sd` component — SPI Micro-SD card support via `esp_vfs_fat`; mounts at `/sdcard`; enabled per Kconfig (`CONFIG_HANNAH_SD_ENABLED`); no-op stubs when disabled
+* Added: `sdkconfig.defaults.rev4` enables SD card (GPIO 4/5/6/7) and BME680
+
+### CI
+* Added: `build:esp32:rev4` — builds firmware with `sdkconfig.defaults.rev4`
+* Added: `upload:esp32:rev4` — uploads Rev4 firmware to channel `satellite-esp-stable`
+
 ## 0.22.2
 ### Hannah Core
 * Fixed: `tool_agent` — `speak()` is now a terminal tool; the loop returns immediately after dispatching `speak` without waiting for a further LLM round-trip; previously the loop could exhaust `_MAX_ITERATIONS` before `speak` was ever called, causing the fallback "Das habe ich leider nicht verstanden." instead of the generated answer

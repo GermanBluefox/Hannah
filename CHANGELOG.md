@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.5
+### Satellite Firmware
+* Fixed: `hannah_audio` — `mic_task` and `speaker_task` both ran unpinned on CPU 0; TFLite inference starved the speaker task causing `i2s_channel_write` silence drain to time out, resulting in TTS audio cutoff at end; `mic_task` now pinned to CPU 0, `speaker_task` to CPU 1; silence drain timeout changed to `portMAX_DELAY`
+
 ## 0.23.4
 ### Satellite Firmware
 * Fixed: `mic_task` — added `taskYIELD()` at end of each loop iteration; TFLite wakeword inference was monopolizing CPU 0 and starving IDLE0, causing repeated task watchdog triggers (especially during concurrent OTA download)

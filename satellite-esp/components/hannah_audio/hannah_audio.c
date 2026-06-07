@@ -508,7 +508,7 @@ static void speaker_task(void *arg)
             static const uint8_t silence[8 * STEP_SAMPLES * 4 * 2] = {0};
             size_t written;
             i2s_channel_write(s_tx_chan, silence, sizeof(silence),
-                              &written, pdMS_TO_TICKS(500));
+                              &written, portMAX_DELAY);
             was_speaking = false;
             s_speaking_active = false;
             if (!s_sampling_mode)
@@ -680,8 +680,8 @@ void hannah_audio_init(void)
     hannah_net_set_sampling_callback(on_sampling_mode);
     hannah_net_set_virtual_ptt_callback(on_virtual_ptt);
 
-    xTaskCreate(mic_task,     "mic",     8192, NULL, 5, NULL);
-    xTaskCreate(speaker_task, "speaker", 4096, NULL, 5, NULL);
+    xTaskCreatePinnedToCore(mic_task,     "mic",     8192, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(speaker_task, "speaker", 4096, NULL, 5, NULL, 1);
 
     ESP_LOGI(TAG, "hannah_audio initialisiert (%s-Modus).",
 #if CONFIG_HANNAH_WAKEWORD_ENABLED

@@ -476,6 +476,7 @@ static void mic_task(void *arg)
 
         was_ptt = ptt;
 #endif
+        taskYIELD();
     }
 
     free(raw);

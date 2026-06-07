@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.4
+### Satellite Firmware
+* Fixed: `mic_task` — added `taskYIELD()` at end of each loop iteration; TFLite wakeword inference was monopolizing CPU 0 and starving IDLE0, causing repeated task watchdog triggers (especially during concurrent OTA download)
+
 ## 0.23.3
 ### Hannah Core
 * Fixed: BLE tag locations were not delivered to ioBroker adapter after reconnect — `_on_agent_connect` now pushes all current locations via `ble_engine.get_current_locations()` as a resync on every adapter connect

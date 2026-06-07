@@ -67,6 +67,8 @@ static hannah_net_tts_end_cb_t  s_tts_end_cb  = NULL;
 static hannah_net_playback_cb_t s_playback_cb = NULL;
 static hannah_net_ota_ok_cb_t          s_ota_ok_cb          = NULL;
 static hannah_net_ble_watchlist_cb_t   s_ble_watchlist_cb   = NULL;
+static char s_ble_watchlist_cache[512];
+static int  s_ble_watchlist_cache_len = 0;
 static hannah_net_volume_cb_t          s_volume_cb          = NULL;
 static hannah_net_sampling_cb_t        s_sampling_cb        = NULL;
 static hannah_net_virtual_ptt_cb_t     s_virtual_ptt_cb     = NULL;
@@ -318,8 +320,16 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
                 char ble_topic[128];
                 snprintf(ble_topic, sizeof(ble_topic), "hannah/satellite/%s/ble/watchlist",
                          hannah_config_get()->device_id);
-                if (strcmp(topic, ble_topic) == 0 && s_ble_watchlist_cb) {
-                    s_ble_watchlist_cb(event->data, event->data_len);
+                if (strcmp(topic, ble_topic) == 0) {
+                    if (s_ble_watchlist_cb) {
+                        s_ble_watchlist_cb(event->data, event->data_len);
+                    } else {
+                        int len = event->data_len < (int)sizeof(s_ble_watchlist_cache)
+                                  ? event->data_len : (int)sizeof(s_ble_watchlist_cache);
+                        memcpy(s_ble_watchlist_cache, event->data, len);
+                        s_ble_watchlist_cache_len = len;
+                        ESP_LOGD(TAG, "BLE-Watchlist zwischengespeichert (%d Bytes).", len);
+                    }
                 } else {
                     char sampling_topic[128];
                     snprintf(sampling_topic, sizeof(sampling_topic),
@@ -617,7 +627,14 @@ void hannah_net_get_ip_str(char *buf, size_t len)
 }
 
 void hannah_net_set_ota_ok_callback(hannah_net_ota_ok_cb_t cb)        { s_ota_ok_cb        = cb; }
-void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb) { s_ble_watchlist_cb = cb; }
+void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb)
+{
+    s_ble_watchlist_cb = cb;
+    if (cb && s_ble_watchlist_cache_len > 0) {
+        cb(s_ble_watchlist_cache, s_ble_watchlist_cache_len);
+        s_ble_watchlist_cache_len = 0;
+    }
+}
 void hannah_net_set_volume_callback(hannah_net_volume_cb_t cb)        { s_volume_cb        = cb; }
 void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb)       { s_sampling_cb      = cb; }
 void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb) { s_virtual_ptt_cb   = cb; }

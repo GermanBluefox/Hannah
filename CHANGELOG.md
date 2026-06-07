@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.9
+### Satellite Firmware
+* Fixed: BLE watchlist retained MQTT message was dropped on boot because `hannah_ble_init()` registers the callback after MQTT has already connected and received the retained payload; `hannah_net` now caches the payload and delivers it immediately when the callback is registered
+
 ## 0.23.8
 ### Hannah Core
 * Changed: `udp_server` — added 300 ms delay before sending `tts_end` to satellite; prevents hard audio cutoff caused by `tts_end` arriving before the last PCM UDP packets are received and queued on the satellite

@@ -4,6 +4,7 @@ idf_component_register(
     REQUIRES
         hannah_config
         hannah_net
+        hannah_audio
         esp_http_client
         esp_https_ota
         esp_app_format

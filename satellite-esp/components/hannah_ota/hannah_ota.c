@@ -13,6 +13,7 @@
 #include "hannah_ota.h"
 #include "hannah_net.h"
 #include "hannah_config.h"
+#include "hannah_audio.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -293,6 +294,7 @@ static void ota_update_task(void *arg)
         }
 
         ESP_LOGI(TAG, "Starte OTA von %s", s_pending_url);
+        hannah_audio_pause_wakeword();
 
         esp_http_client_config_t http_cfg = {
             .url               = s_pending_url,

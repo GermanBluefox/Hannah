@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.6
+### Satellite Firmware
+* Fixed: `hannah_ota` / `hannah_audio` — TFLite wakeword inference in `mic_task` (CPU 0) prevented `IDLE0` from running during OTA download, triggering repeated task watchdog warnings and potentially stalling HTTPS reads; `ota_update_task` now calls `hannah_audio_pause_wakeword()` before starting the download, causing `mic_task` to sleep 50 ms per iteration instead of running inference
+
 ## 0.23.5
 ### Satellite Firmware
 * Fixed: `hannah_audio` — `mic_task` and `speaker_task` both ran unpinned on CPU 0; TFLite inference starved the speaker task causing `i2s_channel_write` silence drain to time out, resulting in TTS audio cutoff at end; `mic_task` now pinned to CPU 0, `speaker_task` to CPU 1; silence drain timeout changed to `portMAX_DELAY`

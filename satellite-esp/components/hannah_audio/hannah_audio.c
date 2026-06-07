@@ -77,6 +77,7 @@ static i2s_chan_handle_t s_tx_chan    = NULL;
 static QueueHandle_t     s_spk_queue = NULL;
 static volatile bool     s_ptt_active        = false;
 static volatile bool     s_streaming_paused  = false;
+static volatile bool     s_wakeword_paused   = false;
 static volatile bool     s_vol_up_req        = false;
 static volatile bool     s_vol_down_req      = false;
 static volatile bool     s_speaking_active   = false;
@@ -299,6 +300,12 @@ static void mic_task(void *arg)
 
         if (s_streaming_paused) {
             vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+
+        if (s_wakeword_paused) {
+            /* OTA läuft — Inference pausieren damit IDLE0 den WDT zurücksetzen kann */
+            vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
 
@@ -736,4 +743,10 @@ void hannah_audio_pause(void)
 void hannah_audio_resume(void)
 {
     s_streaming_paused = false;
+}
+
+void hannah_audio_pause_wakeword(void)
+{
+    s_wakeword_paused = true;
+    ESP_LOGI(TAG, "Wakeword-Inference pausiert (OTA aktiv).");
 }

@@ -41,3 +41,8 @@ void hannah_audio_resume(void);  /* Mic-Streaming fortsetzen. */
 /* Wakeword-Capture-Modus: Speaker-Ausgabe blockieren, LED auf CAPTURE setzen.
  * Wird von hannah_net bei hannah/satellite/<device>/sampling aufgerufen. */
 void hannah_audio_set_sampling_mode(bool enabled);
+
+/* Wakeword-Inference pausieren — mic_task schläft statt TFLite auszuführen.
+ * Wird von OTA aufgerufen um IDLE0-Starvation während des Downloads zu vermeiden.
+ * Nicht reversibel — OTA startet danach einen Neustart. */
+void hannah_audio_pause_wakeword(void);

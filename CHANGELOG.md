@@ -5,6 +5,16 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.8
+### Hannah Core
+* Changed: `udp_server` — added 300 ms delay before sending `tts_end` to satellite; prevents hard audio cutoff caused by `tts_end` arriving before the last PCM UDP packets are received and queued on the satellite
+
+### Proxy
+* Changed: `udp.SendTTS` — added 300 ms delay before sending `tts_end`; same reason as above (proxy is the primary TTS path for ESP32 satellites)
+
+### Satellite Firmware
+* Fixed: `hannah_audio` warmup loop — `taskYIELD()` (0.23.7) does not yield to `IDLE0` (priority 0) when higher-priority tasks are runnable during boot; replaced with `vTaskDelay(1 ms)` so the loop actually blocks and lets `IDLE0` reset the task watchdog
+
 ## 0.23.7
 ### Satellite Firmware
 * Fixed: `hannah_audio` warmup loop — `continue` bypassed the `taskYIELD()` at the end of `mic_task`'s main loop, starving `IDLE0` for the full 5-second warmup period and causing a task watchdog warning at boot; added `taskYIELD()` inside the warmup block before `continue`

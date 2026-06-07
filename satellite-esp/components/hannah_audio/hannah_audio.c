@@ -286,7 +286,7 @@ static void mic_task(void *arg)
                 hannah_led_set_state(LED_STATE_IDLE);
                 ESP_LOGI(TAG, "Mic-Warmup abgeschlossen.");
             }
-            taskYIELD();  /* continue überspringt das taskYIELD am Loop-Ende */
+            vTaskDelay(pdMS_TO_TICKS(1));  /* taskYIELD reicht nicht — IDLE hat prio 0 und kommt bei vielen laufenden Boot-Tasks nie dran */
             continue;
         }
 

@@ -176,6 +176,7 @@ class UDPServer:
             return
         tts_addr = sat.get("tts_addr", sat["addr"])
         self._send_pcm(TYPE_TTS, pcm_bytes, tts_addr)
+        time.sleep(0.3)
         self._send_control({"type": "tts_end", "sample_rate": sample_rate}, tts_addr)
         log.info(f"TTS → {device} ({tts_addr[0]}:{tts_addr[1]}): {len(pcm_bytes)} Bytes @ {sample_rate}Hz gesendet.")
 

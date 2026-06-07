@@ -185,6 +185,7 @@ func (s *Server) SendTTS(device string, pcm []byte, sampleRate int) {
 		pkt := append([]byte{typeTTS}, pcm[offset:end]...)
 		conn.WriteToUDP(pkt, sat.ttsAddr) //nolint:errcheck
 	}
+	time.Sleep(300 * time.Millisecond)
 	s.sendControl(map[string]any{"type": "tts_end", "sample_rate": sampleRate}, sat.ttsAddr)
 	slog.Info("TTS sent", "device", device, "bytes", len(pcm), "sample_rate", sampleRate)
 }

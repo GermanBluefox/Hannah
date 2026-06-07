@@ -5,6 +5,14 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.3
+### Hannah Core
+* Fixed: BLE tag locations were not delivered to ioBroker adapter after reconnect — `_on_agent_connect` now pushes all current locations via `ble_engine.get_current_locations()` as a resync on every adapter connect
+* Added: `BleLocationEngine.get_current_locations()` — returns last known location for all configured tags
+
+### Satellite Firmware
+* Fixed: `hannah_audio` speaker task — TTS playback was cut off at the end; on `audio_end` only 320 bytes of silence were written which was insufficient to drain the I2S DMA pipeline (8 × 640 frames × 2 bytes = 10240 bytes); now writes full DMA-sized silence buffer to ensure all buffered audio is clocked out
+
 ## 0.23.2
 ### Hannah Core
 * Fixed: `tool_agent` — LLM had no access to current date/time; now injected into system prompt on every run (weekday, date, time); prevents wrong guesses for questions like "Welcher Tag ist heute?"

@@ -503,11 +503,11 @@ static void speaker_task(void *arg)
             continue;
         }
         if (chunk.is_end) {
-            /* Kurze Stille nach TTS damit letzter Chunk abklingt */
-            uint8_t silence[STEP_BYTES_MONO] = {0};
+            /* DMA-Buffer drainieren: 8 Descriptors × 640 Frames × 2 Bytes = 10240 Bytes Stille */
+            static const uint8_t silence[8 * STEP_SAMPLES * 4 * 2] = {0};
             size_t written;
             i2s_channel_write(s_tx_chan, silence, sizeof(silence),
-                              &written, pdMS_TO_TICKS(100));
+                              &written, pdMS_TO_TICKS(500));
             was_speaking = false;
             s_speaking_active = false;
             if (!s_sampling_mode)

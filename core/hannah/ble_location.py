@@ -64,6 +64,24 @@ class BleLocationEngine:
     def get_all_macs(self) -> list[str]:
         return list(self._tags.keys())
 
+    def get_current_locations(self) -> list[tuple["BleTag", Optional[str], Optional[str], int]]:
+        """Gibt den zuletzt bekannten Standort aller Tags zurück: (tag, room, satellite, rssi)."""
+        now = time.monotonic()
+        result = []
+        with self._lock:
+            for mac, tag in self._tags.items():
+                best_sat = self._last_sat.get(mac)
+                fresh = {
+                    s: r for s, r in self._reports.get(mac, {}).items()
+                    if now - r.ts < self._stale
+                }
+                if best_sat and best_sat not in fresh:
+                    best_sat = None
+                rssi = fresh[best_sat].rssi if best_sat else 0
+                room = self._get_room(best_sat) if best_sat else None
+                result.append((tag, room, best_sat, rssi))
+        return result
+
     def set_location_change_handler(
         self, fn: Callable[["BleTag", Optional[str], Optional[str], int], None]
     ):

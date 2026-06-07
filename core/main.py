@@ -932,6 +932,8 @@ def main():
         if state_ids:
             log.info(f"[grpc] ioBroker-Adapter connected — WatchMore: {len(state_ids)} trigger states")
             grpc_servicer.agent_watch_more(list(state_ids))
+        for tag, room, satellite, rssi in ble_engine.get_current_locations():
+            grpc_servicer.agent_ble_update(tag.label, tag.mac, room or "", satellite or "", rssi)
 
     # gRPC-Servicer wird hier erstellt damit _on_arrival/_on_departure Events pushen können.
     # get_satellites und get_car_state sind Lambdas (late binding) — udp_server ist

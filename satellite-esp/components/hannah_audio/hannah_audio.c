@@ -286,6 +286,7 @@ static void mic_task(void *arg)
                 hannah_led_set_state(LED_STATE_IDLE);
                 ESP_LOGI(TAG, "Mic-Warmup abgeschlossen.");
             }
+            taskYIELD();  /* continue überspringt das taskYIELD am Loop-Ende */
             continue;
         }
 

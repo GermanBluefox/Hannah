@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.7
+### Satellite Firmware
+* Fixed: `hannah_audio` warmup loop — `continue` bypassed the `taskYIELD()` at the end of `mic_task`'s main loop, starving `IDLE0` for the full 5-second warmup period and causing a task watchdog warning at boot; added `taskYIELD()` inside the warmup block before `continue`
+
 ## 0.23.6
 ### Satellite Firmware
 * Fixed: `hannah_ota` / `hannah_audio` — TFLite wakeword inference in `mic_task` (CPU 0) prevented `IDLE0` from running during OTA download, triggering repeated task watchdog warnings and potentially stalling HTTPS reads; `ota_update_task` now calls `hannah_audio_pause_wakeword()` before starting the download, causing `mic_task` to sleep 50 ms per iteration instead of running inference

@@ -455,7 +455,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 known = self._proxy_satellites.get(request.device_id)
                 if known is None or known.get("room") != request.room:
                     self._proxy_satellites[request.device_id] = {"room": request.room, "addr": known.get("addr", "") if known else ""}
-                    snapshot = dict(self._proxy_satellites)
+                    snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
             if known is None or known.get("room") != request.room:
                 threading.Thread(
                     target=self._on_satellite_change, args=(snapshot,), daemon=True
@@ -486,7 +486,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         device, room, address = request.device_id, request.room, request.address
         with self._proxy_sat_lock:
             self._proxy_satellites[device] = {"room": room, "addr": address}
-            snapshot = dict(self._proxy_satellites)
+            snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
         log.info(f"[grpc] Satellit registriert via Proxy: '{device}' (Raum: '{room}')")
         if self._on_satellite_change:
             threading.Thread(
@@ -500,7 +500,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         device = request.device_id
         with self._proxy_sat_lock:
             self._proxy_satellites.pop(device, None)
-            snapshot = dict(self._proxy_satellites)
+            snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
         log.info(f"[grpc] Satellit abgemeldet via Proxy: '{device}'")
         if self._on_satellite_change:
             threading.Thread(

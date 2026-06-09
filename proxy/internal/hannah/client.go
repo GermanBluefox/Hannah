@@ -54,10 +54,11 @@ func (c *Client) SubmitSatelliteAudio(ctx context.Context, deviceID, room string
 }
 
 // NotifySatelliteRegistered tells Hannah Core that a satellite has connected via the proxy.
-func (c *Client) NotifySatelliteRegistered(ctx context.Context, deviceID, room string) error {
+func (c *Client) NotifySatelliteRegistered(ctx context.Context, deviceID, room, address string) error {
 	_, err := c.stub.NotifySatelliteRegistered(ctx, &pb.SatelliteRegistration{
 		DeviceId: deviceID,
 		Room:     room,
+		Address:  address,
 	})
 	return err
 }

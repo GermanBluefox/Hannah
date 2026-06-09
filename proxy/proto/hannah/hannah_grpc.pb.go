@@ -36,11 +36,16 @@ const (
 	HannahService_GetAllCarStates_FullMethodName           = "/hannah.HannahService/GetAllCarStates"
 	HannahService_SubscribeEvents_FullMethodName           = "/hannah.HannahService/SubscribeEvents"
 	HannahService_TriggerFirmwareUpdate_FullMethodName     = "/hannah.HannahService/TriggerFirmwareUpdate"
+	HannahService_RequestSatelliteCapture_FullMethodName   = "/hannah.HannahService/RequestSatelliteCapture"
+	HannahService_ReleaseSatelliteCapture_FullMethodName   = "/hannah.HannahService/ReleaseSatelliteCapture"
+	HannahService_StreamSatelliteAudio_FullMethodName      = "/hannah.HannahService/StreamSatelliteAudio"
+	HannahService_TriggerPlink_FullMethodName              = "/hannah.HannahService/TriggerPlink"
 	HannahService_RegisterProxy_FullMethodName             = "/hannah.HannahService/RegisterProxy"
 	HannahService_SubmitSatelliteAudio_FullMethodName      = "/hannah.HannahService/SubmitSatelliteAudio"
 	HannahService_NotifySatelliteRegistered_FullMethodName = "/hannah.HannahService/NotifySatelliteRegistered"
 	HannahService_NotifySatelliteGone_FullMethodName       = "/hannah.HannahService/NotifySatelliteGone"
 	HannahService_EnrollVoiceprint_FullMethodName          = "/hannah.HannahService/EnrollVoiceprint"
+	HannahService_TimerConnect_FullMethodName              = "/hannah.HannahService/TimerConnect"
 	HannahService_AgentConnect_FullMethodName              = "/hannah.HannahService/AgentConnect"
 )
 
@@ -85,6 +90,17 @@ type HannahServiceClient interface {
 	// --- Firmware Manager ---
 	// Trigger an immediate OTA update for a satellite (bypasses residents check).
 	TriggerFirmwareUpdate(ctx context.Context, in *TriggerFirmwareUpdateRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// --- Wakeword Capture ---
+	// Put a satellite in audio-capture mode for wakeword training data collection.
+	// While captured: wakeword detection is suspended, speaker is muted, DND is active.
+	// Hannah relays raw PCM chunks from the satellite to the collector via StreamSatelliteAudio.
+	// The stream stays open until the collector disconnects; Hannah then auto-releases the satellite.
+	RequestSatelliteCapture(ctx context.Context, in *SatelliteCaptureRequest, opts ...grpc.CallOption) (*SatelliteCaptureResponse, error)
+	ReleaseSatelliteCapture(ctx context.Context, in *SatelliteCaptureRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	StreamSatelliteAudio(ctx context.Context, in *SatelliteCaptureRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SatelliteAudioChunk], error)
+	// Play a plink sound on the satellite, then hold virtual PTT for record_duration seconds.
+	// Returns after PTT is released — Collector calls this in a loop for guided hey-hannah collection.
+	TriggerPlink(ctx context.Context, in *TriggerPlinkRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	// --- Satellite Proxy (Go gRPC proxy) ---
 	// Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
 	// audio commands back (for announcements). While this stream is open, Hannah
@@ -100,6 +116,11 @@ type HannahServiceClient interface {
 	NotifySatelliteGone(ctx context.Context, in *SatelliteRegistration, opts ...grpc.CallOption) (*StatusResponse, error)
 	// --- Speaker Enrollment ---
 	EnrollVoiceprint(ctx context.Context, in *EnrollVoiceprintRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// --- Timer Service ---
+	// Bidirectional stream between the Hannah Timer Service and Hannah Core.
+	// The Timer Service initiates the connection; if Hannah restarts, the service reconnects.
+	// Hannah sends timer commands (create, cancel, list); the service fires events when timers expire.
+	TimerConnect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TimerMessage, TimerCommand], error)
 	// --- ioBroker Agent ---
 	// Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
 	// The adapter pushes state updates (device states, presence, text commands);
@@ -295,9 +316,58 @@ func (c *hannahServiceClient) TriggerFirmwareUpdate(ctx context.Context, in *Tri
 	return out, nil
 }
 
+func (c *hannahServiceClient) RequestSatelliteCapture(ctx context.Context, in *SatelliteCaptureRequest, opts ...grpc.CallOption) (*SatelliteCaptureResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SatelliteCaptureResponse)
+	err := c.cc.Invoke(ctx, HannahService_RequestSatelliteCapture_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hannahServiceClient) ReleaseSatelliteCapture(ctx context.Context, in *SatelliteCaptureRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, HannahService_ReleaseSatelliteCapture_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hannahServiceClient) StreamSatelliteAudio(ctx context.Context, in *SatelliteCaptureRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SatelliteAudioChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HannahService_ServiceDesc.Streams[1], HannahService_StreamSatelliteAudio_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SatelliteCaptureRequest, SatelliteAudioChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HannahService_StreamSatelliteAudioClient = grpc.ServerStreamingClient[SatelliteAudioChunk]
+
+func (c *hannahServiceClient) TriggerPlink(ctx context.Context, in *TriggerPlinkRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, HannahService_TriggerPlink_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *hannahServiceClient) RegisterProxy(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ProxyHeartbeat, ProxyCommand], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HannahService_ServiceDesc.Streams[1], HannahService_RegisterProxy_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HannahService_ServiceDesc.Streams[2], HannahService_RegisterProxy_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -348,9 +418,22 @@ func (c *hannahServiceClient) EnrollVoiceprint(ctx context.Context, in *EnrollVo
 	return out, nil
 }
 
+func (c *hannahServiceClient) TimerConnect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TimerMessage, TimerCommand], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HannahService_ServiceDesc.Streams[3], HannahService_TimerConnect_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TimerMessage, TimerCommand]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HannahService_TimerConnectClient = grpc.BidiStreamingClient[TimerMessage, TimerCommand]
+
 func (c *hannahServiceClient) AgentConnect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentMessage, AgentCommand], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HannahService_ServiceDesc.Streams[2], HannahService_AgentConnect_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HannahService_ServiceDesc.Streams[4], HannahService_AgentConnect_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -402,6 +485,17 @@ type HannahServiceServer interface {
 	// --- Firmware Manager ---
 	// Trigger an immediate OTA update for a satellite (bypasses residents check).
 	TriggerFirmwareUpdate(context.Context, *TriggerFirmwareUpdateRequest) (*StatusResponse, error)
+	// --- Wakeword Capture ---
+	// Put a satellite in audio-capture mode for wakeword training data collection.
+	// While captured: wakeword detection is suspended, speaker is muted, DND is active.
+	// Hannah relays raw PCM chunks from the satellite to the collector via StreamSatelliteAudio.
+	// The stream stays open until the collector disconnects; Hannah then auto-releases the satellite.
+	RequestSatelliteCapture(context.Context, *SatelliteCaptureRequest) (*SatelliteCaptureResponse, error)
+	ReleaseSatelliteCapture(context.Context, *SatelliteCaptureRequest) (*StatusResponse, error)
+	StreamSatelliteAudio(*SatelliteCaptureRequest, grpc.ServerStreamingServer[SatelliteAudioChunk]) error
+	// Play a plink sound on the satellite, then hold virtual PTT for record_duration seconds.
+	// Returns after PTT is released — Collector calls this in a loop for guided hey-hannah collection.
+	TriggerPlink(context.Context, *TriggerPlinkRequest) (*StatusResponse, error)
 	// --- Satellite Proxy (Go gRPC proxy) ---
 	// Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
 	// audio commands back (for announcements). While this stream is open, Hannah
@@ -417,6 +511,11 @@ type HannahServiceServer interface {
 	NotifySatelliteGone(context.Context, *SatelliteRegistration) (*StatusResponse, error)
 	// --- Speaker Enrollment ---
 	EnrollVoiceprint(context.Context, *EnrollVoiceprintRequest) (*StatusResponse, error)
+	// --- Timer Service ---
+	// Bidirectional stream between the Hannah Timer Service and Hannah Core.
+	// The Timer Service initiates the connection; if Hannah restarts, the service reconnects.
+	// Hannah sends timer commands (create, cancel, list); the service fires events when timers expire.
+	TimerConnect(grpc.BidiStreamingServer[TimerMessage, TimerCommand]) error
 	// --- ioBroker Agent ---
 	// Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
 	// The adapter pushes state updates (device states, presence, text commands);
@@ -484,6 +583,18 @@ func (UnimplementedHannahServiceServer) SubscribeEvents(*EventFilter, grpc.Serve
 func (UnimplementedHannahServiceServer) TriggerFirmwareUpdate(context.Context, *TriggerFirmwareUpdateRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TriggerFirmwareUpdate not implemented")
 }
+func (UnimplementedHannahServiceServer) RequestSatelliteCapture(context.Context, *SatelliteCaptureRequest) (*SatelliteCaptureResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestSatelliteCapture not implemented")
+}
+func (UnimplementedHannahServiceServer) ReleaseSatelliteCapture(context.Context, *SatelliteCaptureRequest) (*StatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReleaseSatelliteCapture not implemented")
+}
+func (UnimplementedHannahServiceServer) StreamSatelliteAudio(*SatelliteCaptureRequest, grpc.ServerStreamingServer[SatelliteAudioChunk]) error {
+	return status.Error(codes.Unimplemented, "method StreamSatelliteAudio not implemented")
+}
+func (UnimplementedHannahServiceServer) TriggerPlink(context.Context, *TriggerPlinkRequest) (*StatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TriggerPlink not implemented")
+}
 func (UnimplementedHannahServiceServer) RegisterProxy(grpc.BidiStreamingServer[ProxyHeartbeat, ProxyCommand]) error {
 	return status.Error(codes.Unimplemented, "method RegisterProxy not implemented")
 }
@@ -498,6 +609,9 @@ func (UnimplementedHannahServiceServer) NotifySatelliteGone(context.Context, *Sa
 }
 func (UnimplementedHannahServiceServer) EnrollVoiceprint(context.Context, *EnrollVoiceprintRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnrollVoiceprint not implemented")
+}
+func (UnimplementedHannahServiceServer) TimerConnect(grpc.BidiStreamingServer[TimerMessage, TimerCommand]) error {
+	return status.Error(codes.Unimplemented, "method TimerConnect not implemented")
 }
 func (UnimplementedHannahServiceServer) AgentConnect(grpc.BidiStreamingServer[AgentMessage, AgentCommand]) error {
 	return status.Error(codes.Unimplemented, "method AgentConnect not implemented")
@@ -822,6 +936,71 @@ func _HannahService_TriggerFirmwareUpdate_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HannahService_RequestSatelliteCapture_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SatelliteCaptureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).RequestSatelliteCapture(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_RequestSatelliteCapture_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).RequestSatelliteCapture(ctx, req.(*SatelliteCaptureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HannahService_ReleaseSatelliteCapture_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SatelliteCaptureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).ReleaseSatelliteCapture(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_ReleaseSatelliteCapture_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).ReleaseSatelliteCapture(ctx, req.(*SatelliteCaptureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HannahService_StreamSatelliteAudio_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SatelliteCaptureRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HannahServiceServer).StreamSatelliteAudio(m, &grpc.GenericServerStream[SatelliteCaptureRequest, SatelliteAudioChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HannahService_StreamSatelliteAudioServer = grpc.ServerStreamingServer[SatelliteAudioChunk]
+
+func _HannahService_TriggerPlink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TriggerPlinkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).TriggerPlink(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_TriggerPlink_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).TriggerPlink(ctx, req.(*TriggerPlinkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HannahService_RegisterProxy_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(HannahServiceServer).RegisterProxy(&grpc.GenericServerStream[ProxyHeartbeat, ProxyCommand]{ServerStream: stream})
 }
@@ -900,6 +1079,13 @@ func _HannahService_EnrollVoiceprint_Handler(srv interface{}, ctx context.Contex
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _HannahService_TimerConnect_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HannahServiceServer).TimerConnect(&grpc.GenericServerStream[TimerMessage, TimerCommand]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HannahService_TimerConnectServer = grpc.BidiStreamingServer[TimerMessage, TimerCommand]
 
 func _HannahService_AgentConnect_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(HannahServiceServer).AgentConnect(&grpc.GenericServerStream[AgentMessage, AgentCommand]{ServerStream: stream})
@@ -980,6 +1166,18 @@ var HannahService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HannahService_TriggerFirmwareUpdate_Handler,
 		},
 		{
+			MethodName: "RequestSatelliteCapture",
+			Handler:    _HannahService_RequestSatelliteCapture_Handler,
+		},
+		{
+			MethodName: "ReleaseSatelliteCapture",
+			Handler:    _HannahService_ReleaseSatelliteCapture_Handler,
+		},
+		{
+			MethodName: "TriggerPlink",
+			Handler:    _HannahService_TriggerPlink_Handler,
+		},
+		{
 			MethodName: "SubmitSatelliteAudio",
 			Handler:    _HannahService_SubmitSatelliteAudio_Handler,
 		},
@@ -1003,8 +1201,19 @@ var HannahService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
+			StreamName:    "StreamSatelliteAudio",
+			Handler:       _HannahService_StreamSatelliteAudio_Handler,
+			ServerStreams: true,
+		},
+		{
 			StreamName:    "RegisterProxy",
 			Handler:       _HannahService_RegisterProxy_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "TimerConnect",
+			Handler:       _HannahService_TimerConnect_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

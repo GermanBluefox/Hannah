@@ -946,7 +946,7 @@ def main():
         notificate=lambda text, severity: process_notification(text, severity),
         get_satellites=lambda: {
             **udp_server.registered_devices_full(),
-            **{dev: {"room": room, "addr": ""} for dev, room in grpc_servicer.proxy_satellites().items()},
+            **{dev: {"room": info["room"], "addr": info["addr"]} for dev, info in grpc_servicer.proxy_satellites_full().items()},
         },
         get_car_state=lambda: car_manager.first_state,
         get_all_cars=lambda: [(t.state, t.home_address) for t in car_manager],

@@ -48,8 +48,8 @@ type AudioCallback func(device, room string, pcm []byte)
 type SessionStartCallback func(device string)
 
 // SatelliteChangeCallback is called when a satellite registers or disconnects.
-// registered=true on connect, false on disconnect.
-type SatelliteChangeCallback func(device, room string, registered bool)
+// registered=true on connect (address is the satellite's IP), false on disconnect (address is "").
+type SatelliteChangeCallback func(device, room, address string, registered bool)
 
 const heartbeatTimeout = 30 * time.Second // 3 × 10s heartbeat interval
 
@@ -201,6 +201,23 @@ func (s *Server) RegisteredDevices() map[string]string {
 	return out
 }
 
+// SatelliteInfo holds room and address for a registered satellite.
+type SatelliteInfo struct {
+	Room    string
+	Address string
+}
+
+// RegisteredDevicesFull returns a snapshot of {device: SatelliteInfo} for all registered satellites.
+func (s *Server) RegisteredDevicesFull() map[string]SatelliteInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]SatelliteInfo, len(s.satellites))
+	for d, sat := range s.satellites {
+		out[d] = SatelliteInfo{Room: sat.room, Address: sat.audioAddr.IP.String()}
+	}
+	return out
+}
+
 // ------------------------------------------------------------------
 // Internal
 
@@ -263,7 +280,7 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 			"audio_from", addr, "tts_to_port", listenPort)
 		s.sendControl(map[string]any{"type": "registered", "ok": true}, addr)
 		if s.onSatelliteChange != nil {
-			go s.onSatelliteChange(device, room, true)
+			go s.onSatelliteChange(device, room, addr.IP.String(), true)
 		}
 
 	case "audio_end":
@@ -354,7 +371,7 @@ func (s *Server) checkTimeouts() {
 	for _, t := range timedOut {
 		slog.Warn("satellite heartbeat timeout — marking offline", "device", t.device, "room", t.room)
 		if s.onSatelliteChange != nil {
-			s.onSatelliteChange(t.device, t.room, false)
+			s.onSatelliteChange(t.device, t.room, "", false)
 		}
 	}
 }

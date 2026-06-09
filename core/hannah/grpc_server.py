@@ -120,8 +120,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._subs_lock = threading.Lock()
 
 
-        # Satelliten die der Proxy gemeldet hat: {device: room}
-        self._proxy_satellites: dict[str, str] = {}
+        # Satelliten die der Proxy gemeldet hat: {device: {"room": str, "addr": str}}
+        self._proxy_satellites: dict[str, dict] = {}
         self._proxy_sat_lock = threading.Lock()
 
         # Per-connection command queues for active proxy streams
@@ -150,6 +150,11 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def proxy_satellites(self) -> dict[str, str]:
         """Aktuell vom Proxy gemeldete Satelliten: {device: room}."""
+        with self._proxy_sat_lock:
+            return {dev: info["room"] for dev, info in self._proxy_satellites.items()}
+
+    def proxy_satellites_full(self) -> dict[str, dict]:
+        """Aktuell vom Proxy gemeldete Satelliten: {device: {"room": str, "addr": str}}."""
         with self._proxy_sat_lock:
             return dict(self._proxy_satellites)
 
@@ -448,10 +453,10 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         if self._on_satellite_change and request.device_id:
             with self._proxy_sat_lock:
                 known = self._proxy_satellites.get(request.device_id)
-                if known != request.room:
-                    self._proxy_satellites[request.device_id] = request.room
+                if known is None or known.get("room") != request.room:
+                    self._proxy_satellites[request.device_id] = {"room": request.room, "addr": known.get("addr", "") if known else ""}
                     snapshot = dict(self._proxy_satellites)
-            if known != request.room:
+            if known is None or known.get("room") != request.room:
                 threading.Thread(
                     target=self._on_satellite_change, args=(snapshot,), daemon=True
                 ).start()
@@ -478,9 +483,9 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def NotifySatelliteRegistered(self, request, _context):
         """Proxy meldet: Satellit hat sich via UDP registriert."""
-        device, room = request.device_id, request.room
+        device, room, address = request.device_id, request.room, request.address
         with self._proxy_sat_lock:
-            self._proxy_satellites[device] = room
+            self._proxy_satellites[device] = {"room": room, "addr": address}
             snapshot = dict(self._proxy_satellites)
         log.info(f"[grpc] Satellit registriert via Proxy: '{device}' (Raum: '{room}')")
         if self._on_satellite_change:

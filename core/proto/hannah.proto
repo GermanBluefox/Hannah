@@ -409,6 +409,7 @@ message EnrollVoiceprintRequest {
 message SatelliteRegistration {
   string device_id = 1;  // satellite device name, e.g. "sat-wohnzimmer"
   string room      = 2;  // room name as reported by satellite, e.g. "Wohnzimmer"
+  string address   = 3;  // IP of the UDP satellite as seen by the proxy, e.g. "192.168.8.42"
 }
 
 // ============================================================

@@ -945,8 +945,8 @@ def main():
         announce=process_announcement,
         notificate=lambda text, severity: process_notification(text, severity),
         get_satellites=lambda: {
-            dev: {"room": room, "addr": ""}
-            for dev, room in {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}.items()
+            **udp_server.registered_devices_full(),
+            **{dev: {"room": room, "addr": ""} for dev, room in grpc_servicer.proxy_satellites().items()},
         },
         get_car_state=lambda: car_manager.first_state,
         get_all_cars=lambda: [(t.state, t.home_address) for t in car_manager],

@@ -194,6 +194,15 @@ class UDPServer:
         with self._lock:
             return {d: s["room"] for d, s in self._satellites.items()}
 
+    def registered_devices_full(self) -> dict[str, dict]:
+        """Gibt {device_name: {"room": room, "addr": "ip:port"}} zurück."""
+        with self._lock:
+            result = {}
+            for d, s in self._satellites.items():
+                ip, port = s.get("addr", ("", 0))
+                result[d] = {"room": s["room"], "addr": f"{ip}:{port}"}
+            return result
+
     # ------------------------------------------------------------------
     # Empfangs-Loop
 

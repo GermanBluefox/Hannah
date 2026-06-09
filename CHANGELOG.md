@@ -5,6 +5,19 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.11
+### CI
+* Fixed: upload jobs failed with SSL certificate error — `alpine` container has no internal CA; added `echo insecure >> ~/.curlrc` in `.upload.before_script` so all curl calls skip TLS verification for the self-signed Update-Server
+
+## 0.23.10
+### Hannah Core
+* Fixed: `GetSatellites` response always returned empty `address` field — `get_satellites` lambda now uses new `udp_server.registered_devices_full()` which includes the actual `ip:port` address
+* Added: `UdpServer.registered_devices_full()` — returns `{device: {room, addr}}` with address as `ip:port` string
+
+### Satellite Firmware
+* Added: `HANNAH_MIC_TYPE_NONE` Kconfig option — disables microphone input (mic_init, mic_task, sampling/PTT callbacks skipped); LED set to IDLE directly at init
+* Added: `HANNAH_SPEAKER_ENABLED` Kconfig bool (default y) — disables I2S speaker output and TTS callbacks when set to n; allows building pure sensor-node firmware
+
 ## 0.23.9
 ### Satellite Firmware
 * Fixed: BLE watchlist retained MQTT message was dropped on boot because `hannah_ble_init()` registers the callback after MQTT has already connected and received the retained payload; `hannah_net` now caches the payload and delivers it immediately when the callback is registered

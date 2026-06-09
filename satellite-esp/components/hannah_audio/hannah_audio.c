@@ -41,10 +41,12 @@ static const char *TAG = "hannah_audio";
 #define SAMPLE_RATE       CONFIG_HANNAH_AUDIO_SAMPLE_RATE
 #define STEP_SAMPLES      WAKEWORD_STEP_SAMPLES          /* 160 (10ms)  */
 #define STEP_BYTES_MONO (STEP_SAMPLES * 2)
-#if CONFIG_HANNAH_MIC_TYPE_PDM
-#define STEP_BYTES_RAW  (STEP_SAMPLES * 4)   /* 16-bit stereo PDM */
-#else
-#define STEP_BYTES_RAW  (STEP_SAMPLES * 8)   /* 32-bit slots I2S  */
+#if !CONFIG_HANNAH_MIC_TYPE_NONE
+#  if CONFIG_HANNAH_MIC_TYPE_PDM
+#  define STEP_BYTES_RAW  (STEP_SAMPLES * 4)   /* 16-bit stereo PDM */
+#  else
+#  define STEP_BYTES_RAW  (STEP_SAMPLES * 8)   /* 32-bit slots I2S  */
+#  endif
 #endif
 
 /* VAD_SILENCE_FRAMES wird zur Laufzeit aus hannah_config_get()->vad_silence_ms berechnet */
@@ -119,6 +121,7 @@ static void IRAM_ATTR vol_down_isr_handler(void *arg)
 /* ------------------------------------------------------------------ */
 /* I2S Mic initialisieren (I2S0, RX, stereo, INMP441)                   */
 
+#if !CONFIG_HANNAH_MIC_TYPE_NONE
 static esp_err_t mic_init(void)
 {
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(
@@ -165,10 +168,12 @@ static esp_err_t mic_init(void)
     ESP_ERROR_CHECK(i2s_channel_enable(s_rx_chan));
     return ESP_OK;
 }
+#endif /* !CONFIG_HANNAH_MIC_TYPE_NONE */
 
 /* ------------------------------------------------------------------ */
 /* I2S Speaker initialisieren (I2S1, TX, mono, MAX98357A)               */
 
+#if CONFIG_HANNAH_SPEAKER_ENABLED
 static esp_err_t speaker_init(void)
 {
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(
@@ -197,10 +202,12 @@ static esp_err_t speaker_init(void)
     ESP_LOGI(TAG, "Speaker I2S%d: %dHz mono", CONFIG_HANNAH_SPK_I2S_PORT, SAMPLE_RATE);
     return ESP_OK;
 }
+#endif /* CONFIG_HANNAH_SPEAKER_ENABLED */
 
 /* ------------------------------------------------------------------ */
 /* Mic-Task                                                              */
 
+#if !CONFIG_HANNAH_MIC_TYPE_NONE
 static inline void mic_led(led_state_t state)
 {
     if (!s_sampling_mode)
@@ -491,10 +498,12 @@ static void mic_task(void *arg)
     free(mono);
     vTaskDelete(NULL);
 }
+#endif /* !CONFIG_HANNAH_MIC_TYPE_NONE */
 
 /* ------------------------------------------------------------------ */
 /* Speaker-Task                                                          */
 
+#if CONFIG_HANNAH_SPEAKER_ENABLED
 static void speaker_task(void *arg)
 {
     spk_chunk_t chunk;
@@ -540,6 +549,7 @@ static void speaker_task(void *arg)
         free(chunk.data);
     }
 }
+#endif /* CONFIG_HANNAH_SPEAKER_ENABLED */
 
 /* ------------------------------------------------------------------ */
 /* hannah_net Callbacks                                                  */
@@ -619,10 +629,13 @@ static void on_volume_set(int vol)
 
 void hannah_audio_init(void)
 {
+#if CONFIG_HANNAH_SPEAKER_ENABLED
     s_spk_queue = xQueueCreate(SPK_QUEUE_DEPTH, sizeof(spk_chunk_t));
-
-    mic_init();
     speaker_init();
+#endif
+#if !CONFIG_HANNAH_MIC_TYPE_NONE
+    mic_init();
+#endif
 
     /* Mute-Button: Input mit Pull-up, Interrupt auf fallende Flanke */
     gpio_config_t io_cfg = {
@@ -679,23 +692,37 @@ void hannah_audio_init(void)
     hannah_wakeword_init();
 #endif
 
+#if CONFIG_HANNAH_SPEAKER_ENABLED
     hannah_net_set_tts_callback(on_tts_data);
     hannah_net_set_tts_end_callback(on_tts_end);
-    hannah_net_set_status_callback(on_status);
     hannah_net_set_playback_callback(on_playback_cmd);
+#endif
+    hannah_net_set_status_callback(on_status);
     hannah_net_set_hw_mute_callback(on_hw_mute);
     hannah_net_set_volume_callback(on_volume_set);
+#if !CONFIG_HANNAH_MIC_TYPE_NONE
     hannah_net_set_sampling_callback(on_sampling_mode);
     hannah_net_set_virtual_ptt_callback(on_virtual_ptt);
-
-    xTaskCreatePinnedToCore(mic_task,     "mic",     8192, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(speaker_task, "speaker", 4096, NULL, 5, NULL, 1);
-
-    ESP_LOGI(TAG, "hannah_audio initialisiert (%s-Modus).",
-#if CONFIG_HANNAH_WAKEWORD_ENABLED
-             hannah_config_get()->wakeword_enabled ? "Wakeword" : "PTT (Wakeword deaktiviert)"
+    xTaskCreatePinnedToCore(mic_task, "mic", 8192, NULL, 5, NULL, 0);
 #else
-             "PTT"
+    hannah_led_set_state(LED_STATE_IDLE);
+#endif
+#if CONFIG_HANNAH_SPEAKER_ENABLED
+    xTaskCreatePinnedToCore(speaker_task, "speaker", 4096, NULL, 5, NULL, 1);
+#endif
+
+    ESP_LOGI(TAG, "hannah_audio initialisiert (Mic=%s, Speaker=%s).",
+#if CONFIG_HANNAH_MIC_TYPE_NONE
+             "none",
+#elif CONFIG_HANNAH_MIC_TYPE_PDM
+             "PDM",
+#else
+             "I2S",
+#endif
+#if CONFIG_HANNAH_SPEAKER_ENABLED
+             "an"
+#else
+             "aus"
 #endif
     );
 }

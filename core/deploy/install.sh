@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # install.sh — Hannah Core installer / updater
 #
-# Clones the hannah repo, sets up a Python venv, and installs a systemd service.
+# Downloads Hannah Core from the Update Server and installs it as a systemd service.
 #
 # Usage:
 #   ./install.sh              # install or update
 #   ./install.sh --uninstall  # remove service (keeps config)
 #
 # Env vars:
-#   REPO_URL     Full Git clone URL (default: public GitHub repo)
-#   REPO_TOKEN   Optional token for private forks (injected into URL)
+#   UPDATE_SERVER_URL    Base URL of the Hannah Update Server
+#   UPDATE_SERVER_TOKEN  Bearer token for the Update Server
+#   CORE_CHANNEL         Channel to install from (default: core-stable)
 #
 set -euo pipefail
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-REPO_URL="${REPO_URL:-https://github.com/OWNER/hannah.git}"   # public default
-REPO_TOKEN="${REPO_TOKEN:-}"
+UPDATE_SERVER_URL="${UPDATE_SERVER_URL:-https://hannah-update.sgessinger.de}"
+UPDATE_SERVER_TOKEN="${UPDATE_SERVER_TOKEN:-}"
+CORE_CHANNEL="${CORE_CHANNEL:-core-stable}"
 INSTALL_DIR="/opt/hannah-core"
 CONFIG_DIR="/etc/hannah"
 SERVICE_NAME="hannah"
@@ -28,14 +30,9 @@ ok()    { echo "[OK]    $*"; }
 err()   { echo "[ERROR] $*" >&2; exit 1; }
 
 need() { command -v "$1" &>/dev/null || err "Required tool not found: $1"; }
-need git
 need python3
+need curl
 need systemctl
-
-# Inject token into URL if provided (works for GitHub, GitLab, Gitea, …)
-if [[ -n "$REPO_TOKEN" ]]; then
-    REPO_URL="${REPO_URL/https:\/\//https://oauth2:${REPO_TOKEN}@}"
-fi
 
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 uninstall() {
@@ -50,15 +47,31 @@ uninstall() {
 
 [[ "${1:-}" == "--uninstall" ]] && { uninstall; exit 0; }
 
-# ── Repo: clone or update ─────────────────────────────────────────────────────
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
-    info "Updating repository in ${INSTALL_DIR} ..."
-    git config --global --add safe.directory "${INSTALL_DIR}"
-    git -C "${INSTALL_DIR}" pull --ff-only
-else
-    info "Cloning repository into ${INSTALL_DIR} ..."
-    git clone --depth=1 "${REPO_URL}" "${INSTALL_DIR}"
+# ── Download latest release from Update Server ────────────────────────────────
+if [[ -z "$UPDATE_SERVER_TOKEN" ]]; then
+    err "UPDATE_SERVER_TOKEN is not set."
 fi
+
+info "Fetching latest core release from ${UPDATE_SERVER_URL} (channel: ${CORE_CHANNEL}) ..."
+LATEST_JSON=$(curl -sf \
+    -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
+    "${UPDATE_SERVER_URL}/latest?channel=${CORE_CHANNEL}")
+LATEST_VERSION=$(echo "$LATEST_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+info "Latest version: ${LATEST_VERSION}"
+
+TMPFILE=$(mktemp /tmp/hannah-core-XXXXXX.tar.gz)
+trap 'rm -f "$TMPFILE"' EXIT
+
+curl -sf \
+    -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
+    -o "$TMPFILE" \
+    "${UPDATE_SERVER_URL}/releases/${LATEST_VERSION}?channel=${CORE_CHANNEL}"
+ok "Downloaded ${LATEST_VERSION}."
+
+# ── Extract to install dir ────────────────────────────────────────────────────
+mkdir -p "${INSTALL_DIR}"
+tar -xzf "$TMPFILE" -C "${INSTALL_DIR}"
+ok "Extracted to ${INSTALL_DIR}."
 
 # ── Python venv ───────────────────────────────────────────────────────────────
 VENV="${INSTALL_DIR}/venv"
@@ -69,7 +82,7 @@ fi
 
 info "Installing Python dependencies ..."
 "${VENV}/bin/pip" install --upgrade pip --quiet
-"${VENV}/bin/pip" install --quiet -r "${INSTALL_DIR}/core/requirements.txt"
+"${VENV}/bin/pip" install --quiet -r "${INSTALL_DIR}/requirements.txt"
 ok "Python dependencies installed."
 
 # ── Service user ──────────────────────────────────────────────────────────────
@@ -84,23 +97,17 @@ if [[ ! -d "$CONFIG_DIR" ]]; then
     mkdir -p "$CONFIG_DIR"
     chown "${SERVICE_USER}:${SERVICE_USER}" "$CONFIG_DIR"
     info "Created ${CONFIG_DIR} — place your config.yaml there."
-    info "Example: ${INSTALL_DIR}/core/config.yaml (if it exists)"
 fi
 
 # ── systemd unit ──────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/hannah.service" ]]; then
-    install -m 644 "${SCRIPT_DIR}/hannah.service" "$SERVICE_FILE"
-else
-    install -m 644 "${INSTALL_DIR}/core/deploy/hannah.service" "$SERVICE_FILE"
-fi
+install -m 644 "${INSTALL_DIR}/deploy/hannah.service" "$SERVICE_FILE"
 ok "Service unit installed."
 
 systemctl daemon-reload
 
 # ── Start / Restart ───────────────────────────────────────────────────────────
 if [[ ! -f "${CONFIG_DIR}/config.yaml" ]]; then
-    ok "Installed. Place config.yaml in ${CONFIG_DIR} and run:"
+    ok "Installed ${LATEST_VERSION}. Place config.yaml in ${CONFIG_DIR} and run:"
     ok "  systemctl enable --now ${SERVICE_NAME}"
     exit 0
 fi
@@ -113,5 +120,5 @@ else
     systemctl enable --now "${SERVICE_NAME}"
 fi
 
-ok "${SERVICE_NAME} is running."
+ok "${SERVICE_NAME} is running (${LATEST_VERSION})."
 systemctl status "${SERVICE_NAME}" --no-pager -l || true

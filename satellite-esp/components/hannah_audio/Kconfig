@@ -19,13 +19,24 @@ menu "Hannah Audio"
         help
             I2S Standard für Breadboard (INMP441).
             PDM für PCB-Bestückung (zwei Mics teilen CLK+DATA, SEL bestimmt L/R).
+            None für reine Announcement-Empfänger oder Sensor-Nodes.
 
         config HANNAH_MIC_TYPE_I2S
             bool "I2S Standard (INMP441, Breadboard)"
 
         config HANNAH_MIC_TYPE_PDM
             bool "PDM (PCB)"
+
+        config HANNAH_MIC_TYPE_NONE
+            bool "Kein Mikrofon"
     endchoice
+
+    config HANNAH_SPEAKER_ENABLED
+        bool "Speaker aktivieren (MAX98357A / I2S-Verstärker)"
+        default y
+        help
+            Deaktivieren für reine Sensor-Nodes ohne Lautsprecher.
+            TTS-Announcements werden dann nicht abgespielt.
 
     config HANNAH_MIC_I2S_PORT
         int "Mikrofon I2S Port"

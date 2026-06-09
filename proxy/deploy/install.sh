@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
 # install.sh — Hannah Proxy installer / updater
 #
-# Downloads the matching binary from the GitLab Package Registry and
+# Downloads the matching binary from the Update Server and
 # installs it as a systemd service.
 #
 # Usage:
 #   ./install.sh              # install or update to latest release
-#   ./install.sh v1.2.3       # install specific tag
 #   ./install.sh --uninstall  # remove service + binary
 #
-# Required env vars:
-#   GITLAB_URL     GitLab instance hosting the Package Registry
-#   PROJECT_ID     Numeric project ID (Settings → General → Project ID)
-#   GITLAB_TOKEN   Token with "read_package_registry" scope (optional for public projects)
-#
-# Note: This script downloads a pre-built binary from a Package Registry.
-# If you're building from source: cd proxy && go build ./cmd/proxy
-# Then copy the binary to /usr/local/bin/hannah-proxy manually.
+# Env vars:
+#   UPDATE_SERVER_URL    Base URL of the Hannah Update Server
+#   UPDATE_SERVER_TOKEN  Bearer token for the Update Server
+#   PROXY_CHANNEL        Channel prefix to install from (default: proxy-stable)
+#                        Architecture suffix (-amd64 / -arm64) is appended automatically.
 #
 set -euo pipefail
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-GITLAB_URL="${GITLAB_URL:-}"           # required: GitLab instance URL
-PROJECT_ID="${PROJECT_ID:-}"          # required: numeric project ID (Settings → General)
-PACKAGE_NAME="hannah-proxy"
+UPDATE_SERVER_URL="${UPDATE_SERVER_URL:-https://hannah-update.sgessinger.de}"
+UPDATE_SERVER_TOKEN="${UPDATE_SERVER_TOKEN:-}"
+PROXY_CHANNEL_BASE="${PROXY_CHANNEL:-proxy-stable}"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/hannah-proxy"
 SERVICE_NAME="hannah-proxy"
@@ -31,7 +27,6 @@ SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 SERVICE_USER="hannah-proxy"
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 info()  { echo "[INFO]  $*"; }
 ok()    { echo "[OK]    $*"; }
 err()   { echo "[ERROR] $*" >&2; exit 1; }
@@ -39,26 +34,6 @@ err()   { echo "[ERROR] $*" >&2; exit 1; }
 need() { command -v "$1" &>/dev/null || err "Required tool not found: $1"; }
 need curl
 need systemctl
-
-# ── Validate required config ──────────────────────────────────────────────────
-[[ -z "$GITLAB_URL"  ]] && err "GITLAB_URL is required (e.g. https://gitlab.example.com)"
-[[ -z "$PROJECT_ID"  ]] && err "PROJECT_ID is required (numeric GitLab project ID)"
-
-# ── Auth ──────────────────────────────────────────────────────────────────────
-GITLAB_TOKEN="${GITLAB_TOKEN:-}"
-AUTH_HEADER=""
-if [[ -n "$GITLAB_TOKEN" ]]; then
-    AUTH_HEADER="PRIVATE-TOKEN: ${GITLAB_TOKEN}"
-fi
-
-api_get() {
-    local url="$1"
-    if [[ -n "$AUTH_HEADER" ]]; then
-        curl -fsSL --header "$AUTH_HEADER" "$url"
-    else
-        curl -fsSL "$url"
-    fi
-}
 
 # ── Architecture detection ─────────────────────────────────────────────────────
 detect_arch() {
@@ -69,20 +44,10 @@ detect_arch() {
     esac
 }
 
-# ── Latest version lookup ──────────────────────────────────────────────────────
-latest_version() {
-    [[ -z "$PROJECT_ID" ]] && err "PROJECT_ID is not set. Edit install.sh or export PROJECT_ID=<id>."
-    local url="${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/packages?package_name=${PACKAGE_NAME}&order_by=created_at&sort=desc&per_page=1"
-    local version
-    version=$(api_get "$url" | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4)
-    [[ -z "$version" ]] && err "Could not determine latest version. Check PROJECT_ID and GITLAB_TOKEN."
-    echo "$version"
-}
-
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 uninstall() {
     info "Stopping and disabling ${SERVICE_NAME} ..."
-    systemctl stop  "${SERVICE_NAME}" 2>/dev/null || true
+    systemctl stop    "${SERVICE_NAME}" 2>/dev/null || true
     systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
     rm -f "${SERVICE_FILE}"
     systemctl daemon-reload
@@ -90,33 +55,41 @@ uninstall() {
     ok "Uninstalled. Config in ${CONFIG_DIR} was kept."
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 [[ "${1:-}" == "--uninstall" ]] && { uninstall; exit 0; }
 
-ARCH=$(detect_arch)
-VERSION="${1:-$(latest_version)}"
-BINARY_NAME="${PACKAGE_NAME}-linux-${ARCH}"
-DOWNLOAD_URL="${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}/${BINARY_NAME}"
-
-info "Installing ${PACKAGE_NAME} ${VERSION} (${ARCH}) ..."
-
-# ── Download ──────────────────────────────────────────────────────────────────
-TMP=$(mktemp)
-trap 'rm -f "$TMP"' EXIT
-
-info "Downloading ${DOWNLOAD_URL} ..."
-if [[ -n "$AUTH_HEADER" ]]; then
-    curl -fSL --header "$AUTH_HEADER" "$DOWNLOAD_URL" -o "$TMP"
-else
-    curl -fSL "$DOWNLOAD_URL" -o "$TMP"
+# ── Resolve channel ───────────────────────────────────────────────────────────
+if [[ -z "$UPDATE_SERVER_TOKEN" ]]; then
+    err "UPDATE_SERVER_TOKEN is not set."
 fi
-chmod +x "$TMP"
 
-# Sanity-check: must be an ELF binary
-file "$TMP" | grep -q ELF || err "Downloaded file is not a valid ELF binary."
+ARCH=$(detect_arch)
+PROXY_CHANNEL="${PROXY_CHANNEL_BASE}-${ARCH}"
+
+info "Fetching latest proxy release from ${UPDATE_SERVER_URL} (channel: ${PROXY_CHANNEL}) ..."
+LATEST_JSON=$(curl -sf \
+    -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
+    "${UPDATE_SERVER_URL}/latest?channel=${PROXY_CHANNEL}")
+LATEST_VERSION=$(echo "$LATEST_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+info "Latest version: ${LATEST_VERSION} (${ARCH})"
+
+# ── Download + extract binary ─────────────────────────────────────────────────
+TMPTAR=$(mktemp /tmp/hannah-proxy-XXXXXX.tar.gz)
+TMPDIR=$(mktemp -d /tmp/hannah-proxy-XXXXXX)
+trap 'rm -f "$TMPTAR"; rm -rf "$TMPDIR"' EXIT
+
+curl -sf \
+    -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
+    -o "$TMPTAR" \
+    "${UPDATE_SERVER_URL}/releases/${LATEST_VERSION}?channel=${PROXY_CHANNEL}"
+
+tar -xzf "$TMPTAR" -C "$TMPDIR"
+BINARY="${TMPDIR}/hannah-proxy"
+[[ -f "$BINARY" ]] || err "hannah-proxy not found in downloaded archive."
+file "$BINARY" | grep -q ELF || err "Extracted file is not a valid ELF binary."
+chmod +x "$BINARY"
 
 # ── Install binary ────────────────────────────────────────────────────────────
-install -m 755 "$TMP" "${INSTALL_DIR}/${SERVICE_NAME}"
+install -m 755 "$BINARY" "${INSTALL_DIR}/${SERVICE_NAME}"
 ok "Binary installed to ${INSTALL_DIR}/${SERVICE_NAME}"
 
 # ── Service user ──────────────────────────────────────────────────────────────
@@ -153,5 +126,5 @@ else
     systemctl enable --now "${SERVICE_NAME}"
 fi
 
-ok "${SERVICE_NAME} ${VERSION} is running."
+ok "${SERVICE_NAME} ${LATEST_VERSION} is running."
 systemctl status "${SERVICE_NAME}" --no-pager -l || true

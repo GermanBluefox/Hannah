@@ -41,6 +41,36 @@ Konzept: offline, kein Cloud-Zwang, kein API-Key — wie Alexa, aber für dein e
 
 ---
 
+## Deployment
+
+Alle Install-Scripte werden direkt aus dem Repo bezogen und ausgeführt. Einmalig in der Shell konfigurieren:
+
+```bash
+# Update-Server-Token (immer nötig):
+export UPDATE_SERVER_TOKEN="dein-update-server-token"
+
+# Repo-Basis-URL für die Install-Scripte (Standard: öffentliches GitHub-Mirror):
+export HANNAH_SCRIPT_URL="${HANNAH_SCRIPT_URL:-https://raw.githubusercontent.com/NurPech/hannah/master}"
+
+# Für private Repos — Deploy Token aus Settings → Repository → Deploy tokens:
+# export HANNAH_SCRIPT_TOKEN="dein-deploy-token"
+
+# Helper-Funktion (in der aktuellen Shell definieren):
+hannah_install() {
+  local args=(-sf)
+  [ -n "${HANNAH_SCRIPT_TOKEN:-}" ] && args+=(-H "PRIVATE-TOKEN: ${HANNAH_SCRIPT_TOKEN}")
+  bash <(curl "${args[@]}" "${HANNAH_SCRIPT_URL}/$1")
+}
+```
+
+Für ein privates GitLab-Repo statt des GitHub-Mirrors:
+```bash
+export HANNAH_SCRIPT_URL="https://dev.kernstock.net/gessinger/voice/hannah/-/raw/master"
+export HANNAH_SCRIPT_TOKEN="dein-deploy-token"
+```
+
+---
+
 ## Hannah-Server
 
 ### Voraussetzungen
@@ -113,20 +143,10 @@ python main.py -c config.yaml --log-level DEBUG
 ### Deployment
 
 ```bash
-export REPO_URL="https://github.com/OWNER/hannah.git"
-# Für private Forks mit Token:
-# export REPO_TOKEN="dein-token"
-
-git clone --depth=1 "$REPO_URL" /tmp/hannah
-sudo -E bash /tmp/hannah/core/deploy/install.sh
+hannah_install core/deploy/install.sh
 ```
 
-Das Script klont das Repo nach `/opt/hannah-core/`, legt einen System-User `hannah` an und installiert den systemd-Service. Startet erst wenn `/etc/hannah/config.yaml` vorhanden ist.
-
-**Update (aus vorhandenem Clone):**
-```bash
-sudo -E bash /tmp/hannah/core/deploy/install.sh   # git pull + pip install + Service-Restart
-```
+Lädt Hannah Core vom Update-Server (Channel `core-stable`), legt System-User `hannah` an, installiert den systemd-Service. Startet erst wenn `/etc/hannah/config.yaml` vorhanden ist. Erneuter Aufruf aktualisiert auf die neueste Version.
 
 ---
 
@@ -306,23 +326,11 @@ Solange der Proxy verbunden ist, deaktiviert Hannah automatisch ihren eigenen UD
 
 ### Deployment
 
-Das Binary muss aus dem Quellcode kompiliert werden (Go 1.21+):
-
 ```bash
-cd proxy
-go build ./cmd/proxy
-sudo cp hannah-proxy /usr/local/bin/
+hannah_install proxy/deploy/install.sh
 ```
 
-Danach Service und Config einrichten:
-```bash
-# Config-Verzeichnis und Service-File anlegen
-sudo mkdir -p /etc/hannah-proxy
-sudo cp proxy/deploy/hannah-proxy.service /etc/systemd/system/
-sudo systemctl daemon-reload
-```
-
-Das `proxy/deploy/install.sh` setzt eine Binary-Distribution voraus (Package Registry) und ist für Selbst-Compiler nicht direkt nutzbar — einfach das Binary manuell ablegen wie oben beschrieben.
+Erkennt die Architektur automatisch (`amd64` / `arm64`), lädt das passende Binary vom Update-Server (Channel `proxy-stable-amd64` / `proxy-stable-arm64`) und installiert den systemd-Service.
 
 **Deinstallieren:**
 ```bash
@@ -352,14 +360,10 @@ Telegram-Bot der Hannah über gRPC steuert. Unterstützt Text- und Sprachnachric
 ### Deployment
 
 ```bash
-export REPO_URL="https://github.com/OWNER/hannah.git"
-# export REPO_TOKEN="dein-token"   # nur für private Forks
-
-git clone --depth=1 "$REPO_URL" /tmp/hannah
-sudo -E bash /tmp/hannah/telegram/deploy/install.sh
+hannah_install telegram/deploy/install.sh
 ```
 
-Klont nach `/opt/hannah-telegram/`, System-User `hannah-telegram`. Startet erst wenn `/etc/hannah-telegram/config.yaml` vorhanden ist.
+Lädt den Telegram-Bot vom Update-Server (Channel `telegram-stable`), System-User `hannah-telegram`. Startet erst wenn `/etc/hannah-telegram/config.yaml` vorhanden ist.
 
 ### Konfiguration (`/etc/hannah-telegram/config.yaml`)
 
@@ -387,20 +391,17 @@ Profile werden auf einer RAM-Disk (`/mnt/hannah_mem`) gehalten und beim Start vo
 ### Deployment
 
 ```bash
-export REPO_URL="https://github.com/OWNER/hannah.git"
-# export REPO_TOKEN="dein-token"   # nur für private Forks
-
-git clone --depth=1 "$REPO_URL" /tmp/hannah
-sudo -E bash /tmp/hannah/voiceid/deploy/install.sh
+export UPDATE_SERVER_TOKEN="dein-token"
+hannah_install voiceid/deploy/install.sh
 ```
 
-Klont nach `/opt/hannah-voiceid/`, legt RAM-Disk (`/mnt/hannah_mem`, 128 MB) via `/etc/fstab` dauerhaft an, System-User `hannah-voiceid`. Keine separate Konfigurationsdatei nötig — Service läuft sofort auf Port `8080`.
+Lädt Voice-ID vom Update-Server (Channel `voiceid-stable`), legt RAM-Disk (`/mnt/hannah_mem`, 128 MB) via `/etc/fstab` dauerhaft an, System-User `hannah-voiceid`. Keine separate Konfigurationsdatei nötig — Service läuft sofort auf Port `8080`.
 
 ### Sprecher enrollen
 
 ```bash
 # Aufnahme und Enrollment in einem Schritt (via enroll_voice.py im Repo):
-cd /opt/hannah-voiceid/voiceid
+cd /opt/hannah-voiceid
 source /opt/hannah-voiceid/venv/bin/activate
 python enroll_voice.py --roomie leonie --host localhost
 ```

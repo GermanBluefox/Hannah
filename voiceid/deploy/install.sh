@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — Hannah Voice-ID installer / updater
 #
-# Clones the hannah repo (voiceid/ subdirectory), sets up a Python venv,
+# Downloads Voice-ID from the Update Server, sets up a Python venv,
 # mounts a RAM-disk for fast embedding lookups, and installs a systemd service.
 #
 # Usage:
@@ -9,14 +9,16 @@
 #   ./install.sh --uninstall  # remove service (keeps voice profiles)
 #
 # Env vars:
-#   REPO_URL     Full Git clone URL (default: public GitHub repo)
-#   REPO_TOKEN   Optional token for private forks (injected into URL)
+#   UPDATE_SERVER_URL    Base URL of the Hannah Update Server
+#   UPDATE_SERVER_TOKEN  Bearer token for the Update Server
+#   VOICEID_CHANNEL      Channel to install from (default: voiceid-stable)
 #
 set -euo pipefail
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-REPO_URL="${REPO_URL:-https://github.com/OWNER/hannah.git}"   # public default
-REPO_TOKEN="${REPO_TOKEN:-}"
+UPDATE_SERVER_URL="${UPDATE_SERVER_URL:-https://hannah-update.sgessinger.de}"
+UPDATE_SERVER_TOKEN="${UPDATE_SERVER_TOKEN:-}"
+VOICEID_CHANNEL="${VOICEID_CHANNEL:-voiceid-stable}"
 INSTALL_DIR="/opt/hannah-voiceid"
 RAM_DISK="/mnt/hannah_mem"
 RAM_DISK_SIZE="128M"
@@ -30,13 +32,9 @@ ok()    { echo "[OK]    $*"; }
 err()   { echo "[ERROR] $*" >&2; exit 1; }
 
 need() { command -v "$1" &>/dev/null || err "Required tool not found: $1"; }
-need git
 need python3
+need curl
 need systemctl
-
-if [[ -n "$REPO_TOKEN" ]]; then
-    REPO_URL="${REPO_URL/https:\/\//https://oauth2:${REPO_TOKEN}@}"
-fi
 
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 uninstall() {
@@ -47,20 +45,36 @@ uninstall() {
     systemctl daemon-reload
     info "Removing ${INSTALL_DIR} ..."
     rm -rf "${INSTALL_DIR}"
-    ok "Uninstalled. Voice profiles in ${RAM_DISK} (RAM) and ~/hannah/voice_profiles were kept."
+    ok "Uninstalled. Voice profiles in ${RAM_DISK} (RAM) were kept."
 }
 
 [[ "${1:-}" == "--uninstall" ]] && { uninstall; exit 0; }
 
-# ── Repo: clone or update ──────────────────────────────────────────────────────
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
-    info "Updating repository in ${INSTALL_DIR} ..."
-    git config --global --add safe.directory "${INSTALL_DIR}"
-    git -C "${INSTALL_DIR}" pull --ff-only
-else
-    info "Cloning repository into ${INSTALL_DIR} ..."
-    git clone --depth=1 "${REPO_URL}" "${INSTALL_DIR}"
+# ── Download latest release from Update Server ────────────────────────────────
+if [[ -z "$UPDATE_SERVER_TOKEN" ]]; then
+    err "UPDATE_SERVER_TOKEN is not set."
 fi
+
+info "Fetching latest voiceid release from ${UPDATE_SERVER_URL} (channel: ${VOICEID_CHANNEL}) ..."
+LATEST_JSON=$(curl -sf \
+    -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
+    "${UPDATE_SERVER_URL}/latest?channel=${VOICEID_CHANNEL}")
+LATEST_VERSION=$(echo "$LATEST_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+info "Latest version: ${LATEST_VERSION}"
+
+TMPFILE=$(mktemp /tmp/hannah-voiceid-XXXXXX.tar.gz)
+trap 'rm -f "$TMPFILE"' EXIT
+
+curl -sf \
+    -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
+    -o "$TMPFILE" \
+    "${UPDATE_SERVER_URL}/releases/${LATEST_VERSION}?channel=${VOICEID_CHANNEL}"
+ok "Downloaded ${LATEST_VERSION}."
+
+# ── Extract to install dir ────────────────────────────────────────────────────
+mkdir -p "${INSTALL_DIR}"
+tar -xzf "$TMPFILE" -C "${INSTALL_DIR}"
+ok "Extracted to ${INSTALL_DIR}."
 
 # ── Python venv ───────────────────────────────────────────────────────────────
 VENV="${INSTALL_DIR}/venv"
@@ -85,9 +99,9 @@ fi
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
 
 # ── Voice profiles directory (persistent, on SD card) ─────────────────────────
-PROFILES_DIR="${INSTALL_DIR}/hannah/voice_profiles"
+PROFILES_DIR="${INSTALL_DIR}/voice_profiles"
 mkdir -p "$PROFILES_DIR"
-chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}/hannah"
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "$PROFILES_DIR"
 ok "Voice profiles directory: ${PROFILES_DIR}"
 
 # ── Config directory ──────────────────────────────────────────────────────────
@@ -96,7 +110,6 @@ if [[ ! -d "$CONFIG_DIR" ]]; then
     mkdir -p "$CONFIG_DIR"
     chown "${SERVICE_USER}:${SERVICE_USER}" "$CONFIG_DIR"
     info "Created ${CONFIG_DIR} — place your config.yaml there."
-    info "Example: ${INSTALL_DIR}/voiceid/config.yaml"
 fi
 
 # ── RAM-disk ──────────────────────────────────────────────────────────────────
@@ -117,12 +130,7 @@ if ! mountpoint -q "$RAM_DISK"; then
 fi
 
 # ── systemd unit ──────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/hannah-voiceid.service" ]]; then
-    install -m 644 "${SCRIPT_DIR}/hannah-voiceid.service" "$SERVICE_FILE"
-else
-    install -m 644 "${INSTALL_DIR}/voiceid/deploy/hannah-voiceid.service" "$SERVICE_FILE"
-fi
+install -m 644 "${INSTALL_DIR}/deploy/hannah-voiceid.service" "$SERVICE_FILE"
 ok "Service unit installed."
 
 systemctl daemon-reload
@@ -136,5 +144,5 @@ else
     systemctl enable --now "${SERVICE_NAME}"
 fi
 
-ok "${SERVICE_NAME} is running."
+ok "${SERVICE_NAME} is running (${LATEST_VERSION})."
 systemctl status "${SERVICE_NAME}" --no-pager -l || true

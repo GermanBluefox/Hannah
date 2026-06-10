@@ -5,6 +5,14 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.15
+### Satellite Firmware
+* Fixed: `mic_task` could starve `IDLE0` on CPU0 and trigger the task watchdog — every loop iteration now yields via `vTaskDelay(1)` instead of relying solely on `i2s_channel_read()` blocking (or `taskYIELD()`)
+
+### Hannah Core
+* Fixed: audio received via UDP from a satellite in capture/sampling mode was processed through the normal STT/LLM/TTS pipeline instead of being routed to the capture stream — `process_audio_udp` now checks `is_captured()` like the gRPC path
+* Fixed: a satellite could get stuck in capture/sampling mode after a Hannah Core restart because the retained MQTT sampling-mode flag survived independently of Hannah's in-memory capture state — Hannah now republishes `sampling: false` (retained) for any newly (re)connected satellite it doesn't consider captured
+
 ## 0.23.14
 ### Satellite Firmware
 * Added: configurable status LED — `HANNAH_STATUS_LED_ENABLED` / `HANNAH_STATUS_LED_GPIO` (Kconfig, default GPIO 18 for Rev 4); turned on as early as possible in `app_main`

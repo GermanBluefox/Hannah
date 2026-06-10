@@ -631,6 +631,10 @@ def main():
         ble_macs = ble_engine.get_all_macs()
         for device in current - _known_satellites:
             grpc_servicer.agent_satellite_update(device, satellite_map[device], "", True)
+            if not grpc_servicer.is_captured(device):
+                # Stelle sicher, dass kein retained Capture-Modus aus einer
+                # vorherigen Hannah-Session am Satelliten hängen geblieben ist.
+                mqtt_handler.publish_sampling_mode(device, False)
             if ble_macs:
                 mqtt_handler.publish_ble_watchlist(device, ble_macs)
             if _connect_pcm:
@@ -1124,6 +1128,13 @@ def main():
     # UDP-Pfad
 
     def process_audio_udp(device: str, raw_pcm: bytes):
+        if grpc_servicer.is_captured(device):
+            grpc_servicer.push_capture_audio(
+                device, raw_pcm, audio_cfg.get("sample_rate", 16000), end_of_utterance=True,
+            )
+            log.debug(f"[{device}] Capture-Audio (UDP) weitergeleitet ({len(raw_pcm)} Bytes)")
+            return
+
         try:
             audio_array = audio_mod.from_raw_pcm(raw_pcm, audio_cfg)
         except Exception as e:

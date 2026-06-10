@@ -302,8 +302,10 @@ static void mic_task(void *arg)
             if (!s_sampling_mode)
                 hannah_led_set_state(LED_STATE_MUTE);
             was_ptt = false;
-            if (!s_sampling_mode)
+            if (!s_sampling_mode) {
+                vTaskDelay(pdMS_TO_TICKS(1));
                 continue;  /* Im Sampling-Mode: Audio trotz Mute streamen */
+            }
         }
 
         if (s_streaming_paused) {
@@ -345,6 +347,7 @@ static void mic_task(void *arg)
                     }
                 }
                 was_ptt = s_ptt_active;
+                vTaskDelay(pdMS_TO_TICKS(1));
                 continue;
             }
 
@@ -491,7 +494,7 @@ static void mic_task(void *arg)
 
         was_ptt = ptt;
 #endif
-        taskYIELD();
+        vTaskDelay(pdMS_TO_TICKS(1));  /* taskYIELD reicht nicht — IDLE0 sonst Watchdog-Timeout */
     }
 
     free(raw);

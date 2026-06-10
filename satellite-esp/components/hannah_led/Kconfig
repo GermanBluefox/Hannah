@@ -13,4 +13,17 @@ menu "Hannah LED"
         default 12
         range 1 64
 
+    config HANNAH_STATUS_LED_ENABLED
+        bool "Status-LED aktivieren"
+        default y
+        help
+            Einfache GPIO-LED die leuchtet wenn der ESP läuft.
+
+    config HANNAH_STATUS_LED_GPIO
+        int "Status-LED GPIO"
+        default 18
+        depends on HANNAH_STATUS_LED_ENABLED
+        help
+            PCB Rev.4: GPIO18.
+
 endmenu

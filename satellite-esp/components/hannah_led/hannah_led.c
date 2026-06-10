@@ -20,6 +20,7 @@
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 #include <math.h>
 #include <string.h>
 
@@ -184,4 +185,20 @@ void hannah_led_set_state(led_state_t state)
                  names[(int)s_current_state], names[(int)state]);
     }
     s_current_state = state;
+}
+
+void hannah_status_led_init(void)
+{
+#if CONFIG_HANNAH_STATUS_LED_ENABLED
+    gpio_config_t io = {
+        .pin_bit_mask = (1ULL << CONFIG_HANNAH_STATUS_LED_GPIO),
+        .mode         = GPIO_MODE_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io);
+    gpio_set_level(CONFIG_HANNAH_STATUS_LED_GPIO, 1);
+    ESP_LOGI(TAG, "Status-LED an GPIO %d", CONFIG_HANNAH_STATUS_LED_GPIO);
+#endif
 }

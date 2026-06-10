@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.14
+### Satellite Firmware
+* Added: configurable status LED — `HANNAH_STATUS_LED_ENABLED` / `HANNAH_STATUS_LED_GPIO` (Kconfig, default GPIO 18 for Rev 4); turned on as early as possible in `app_main`
+
 ## 0.23.13
 ### Hannah Core
 * Fixed: `_on_satellite_change` callback crashed with `TypeError` when a proxy satellite registered — `grpc_server.py` was passing `{device: {"room": ..., "addr": ...}}` but the callback expected `{device: room_string}`; snapshots now consistently use `{device: room_string}` matching the UDP server format

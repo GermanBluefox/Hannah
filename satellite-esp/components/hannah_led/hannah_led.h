@@ -13,3 +13,4 @@ typedef enum {
 
 void hannah_led_init(void);
 void hannah_led_set_state(led_state_t state);
+void hannah_status_led_init(void);

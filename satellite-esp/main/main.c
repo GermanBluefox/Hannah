@@ -68,6 +68,9 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+    /* Status-LED sofort einschalten */
+    hannah_status_led_init();
+
     /* Mute beim Start gedrückt? → WiFi löschen → AP-Modus */
     check_factory_reset();
 

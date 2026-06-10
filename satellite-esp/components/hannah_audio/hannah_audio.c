@@ -265,12 +265,11 @@ static void mic_task(void *arg)
                          &bytes_read, pdMS_TO_TICKS(200));
 
 #if CONFIG_HANNAH_MIC_TYPE_PDM
-        /* PDM: 16-bit stereo → rechter Kanal (SPH0641: SEL=VDD → R, Index 1) */
+        /* PDM: 16-bit stereo → linker Kanal (SPH0641: SEL=GND → L, Index 0) */
         size_t frames    = bytes_read / 4;
         int16_t *s16     = (int16_t *)raw;
         for (size_t i = 0; i < frames; i++) {
-            int32_t s = (int32_t)s16[i * 2 + 1] * 256;
-            mono[i] = (int16_t)(s > 32767 ? 32767 : (s < -32768 ? -32768 : s));
+            mono[i] = (int16_t)((int32_t)s16[i * 2] * 64 > 32767 ? 32767 : (int32_t)s16[i * 2] * 64 < -32768 ? -32768 : (int32_t)s16[i * 2] * 64);
         }
 #else
         /* I2S: 32-bit slots → linker Kanal (INMP441: MSB in bits[31:8]) */

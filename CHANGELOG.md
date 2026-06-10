@@ -5,6 +5,11 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.23.16
+### Satellite Firmware
+* Fixed: PDM microphone channel selection was wrong — code read right channel (SEL=VDD, index 1) but Rev 4 PCB has SEL=GND (left channel, index 0); switched to `s16[i * 2]`
+* Fixed: PDM gain factor x256 caused hard clipping; tuned to x64 which gives usable speech levels without distortion
+
 ## 0.23.15
 ### Satellite Firmware
 * Fixed: `mic_task` could starve `IDLE0` on CPU0 and trigger the task watchdog — every loop iteration now yields via `vTaskDelay(1)` instead of relying solely on `i2s_channel_read()` blocking (or `taskYIELD()`)

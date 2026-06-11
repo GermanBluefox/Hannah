@@ -203,7 +203,7 @@ static void store_sha256(const char *asset_id, const char *sha256)
 
 static void update_task(void *arg)
 {
-    vTaskDelay(pdMS_TO_TICKS(10000));
+    vTaskDelay(pdMS_TO_TICKS(50000));
     ESP_LOGI(TAG, "Free heap vor Manifest-Fetch: %lu", esp_get_free_heap_size());
     char *body = fetch_manifest();
     if (!body) {

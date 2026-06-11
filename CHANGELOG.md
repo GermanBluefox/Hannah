@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.3
+### Satellite Firmware
+* Fixed: `hannah_asset` startup delay increased from 10s to 50s to ensure PSA crypto is ready before first TLS connection (asset check at t=50s, OTA check at t=60s)
+
 ## 0.24.2
 ### Satellite Firmware
 * Fixed: `PSA_ERROR_INSUFFICIENT_MEMORY` (-141) during TLS handshake — `hannah_asset` delays 10s at boot before manifest fetch and uses `esp_crt_bundle_attach`; OTA unmounts SPIFFS before download to free heap for PSA signature verification

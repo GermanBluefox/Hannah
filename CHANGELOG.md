@@ -5,6 +5,11 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.0
+### Satellite Firmware
+* Changed: asset server URL and token moved from compile-time Kconfig constants to NVS (with sdkconfig fallback) — adapter can now provision them during initial flash
+* Changed: `hannah_asset` uses `hannah_config_get()` instead of `CONFIG_HANNAH_ASSET_SERVER_URL` / `CONFIG_HANNAH_ASSET_SERVER_TOKEN`; asset URL is now logged on each manifest fetch
+
 ## 0.23.16
 ### Satellite Firmware
 * Fixed: PDM microphone channel selection was wrong — code read right channel (SEL=VDD, index 1) but Rev 4 PCB has SEL=GND (left channel, index 0); switched to `s16[i * 2]`

@@ -16,8 +16,10 @@ typedef struct {
     uint8_t  wakeword_threshold;  /* Erkennungsschwelle 0–100 (entspricht 0.00–1.00) */
     uint16_t vad_silence_ms;      /* VAD-Stille bis audio_end, Runtime-Override für CONFIG_HANNAH_VAD_SILENCE_MS */
     char     ota_url[128];
-    char     ota_token[128];      /* nur aus Kconfig, nie per NVS überschrieben */
+    char     ota_token[128];
     char     ota_channel[32];
+    char     asset_url[128];
+    char     asset_token[128];
 } hannah_config_t;
 
 /* Lädt Einstellungen aus NVS — sdkconfig-Werte als Fallback beim Erststart. */

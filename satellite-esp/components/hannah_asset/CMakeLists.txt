@@ -3,6 +3,7 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         hannah_audio
+        hannah_config
         nvs_flash
         spiffs
         esp_http_client

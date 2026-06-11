@@ -1,5 +1,6 @@
 #include "hannah_asset.h"
 #include "hannah_audio.h"
+#include "hannah_config.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -91,8 +92,9 @@ static bool wav_find_data(FILE *f, uint32_t *sr_out, uint16_t *ch_out, uint32_t 
 
 static void set_auth_header(esp_http_client_handle_t client)
 {
+    const hannah_config_t *cfg = hannah_config_get();
     char auth[280];
-    snprintf(auth, sizeof(auth), "Bearer %s", CONFIG_HANNAH_ASSET_SERVER_TOKEN);
+    snprintf(auth, sizeof(auth), "Bearer %s", cfg->asset_token);
     esp_http_client_set_header(client, "Authorization", auth);
 }
 
@@ -100,9 +102,10 @@ static void set_auth_header(esp_http_client_handle_t client)
  * NULL bei Fehler. */
 static char *fetch_manifest(void)
 {
+    const hannah_config_t *hcfg = hannah_config_get();
     char url[256];
-    snprintf(url, sizeof(url), "%s/manifest?namespace=satellite",
-             CONFIG_HANNAH_ASSET_SERVER_URL);
+    snprintf(url, sizeof(url), "%s/manifest?namespace=satellite", hcfg->asset_url);
+    ESP_LOGI(TAG, "Manifest abrufen: %s", url);
 
     esp_http_client_config_t cfg = {
         .url        = url,
@@ -141,7 +144,8 @@ done:
 static bool download_asset(const char *asset_id)
 {
     char url[256];
-    snprintf(url, sizeof(url), "%s/assets/%s", CONFIG_HANNAH_ASSET_SERVER_URL, asset_id);
+    const hannah_config_t *hcfg = hannah_config_get();
+    snprintf(url, sizeof(url), "%s/assets/%s", hcfg->asset_url, asset_id);
 
     char path[72];
     snprintf(path, sizeof(path), ASSET_MOUNT "/%s.wav", asset_id);

@@ -36,8 +36,8 @@ static volatile bool           s_has_data = false;
 #define BME680_REG_MEAS_STATUS   0x1D
 #define BME680_REG_DATA0         0x1F
 #define BME680_REG_GAS_R_MSB     0x2A
-#define BME680_CALIB1_ADDR       0x89
-#define BME680_CALIB1_LEN        25
+#define BME680_CALIB1_ADDR       0x8A
+#define BME680_CALIB1_LEN        23
 #define BME680_CALIB2_ADDR       0xE1
 #define BME680_CALIB2_LEN        16
 #define BME680_REG_RES_HEAT_VAL   0x00

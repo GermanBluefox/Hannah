@@ -5,6 +5,12 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.4
+### Satellite Firmware
+* Changed: `wakeword_enabled` removed from NVS and web interface — wake-word on/off is now a compile-time decision via `CONFIG_HANNAH_WAKEWORD_ENABLED`; threshold (`ww_threshold`) remains configurable at runtime
+* Fixed: `hannah_asset` manifest fetch retries up to 3 times with 30s delay on failure instead of silently skipping the update
+* Fixed: BME680 calibration block 1 address corrected from `0x89` to `0x8A`, length from 25 to 23 bytes — fixes incorrect temperature/humidity readings
+
 ## 0.24.3
 ### Satellite Firmware
 * Fixed: `hannah_asset` startup delay increased from 10s to 50s to ensure PSA crypto is ready before first TLS connection (asset check at t=50s, OTA check at t=60s)

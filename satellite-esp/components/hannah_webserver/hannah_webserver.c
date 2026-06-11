@@ -221,7 +221,6 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         "<label>Benutzer<input name=mqtt_user value='%s'></label>"
         "<label>Passwort<input type=password name=mqtt_pass placeholder='(unverändert lassen)'></label>"
         "<h3>Features</h3>"
-        "<label><input type=checkbox name=wakeword%s> Wake-Word aktiviert</label>"
         "<label>Erkennungsschwelle: <b id=tv>%d%%</b>"
         "<input type=range name=ww_threshold min=0 max=100 value=%d "
           "oninput=\"document.getElementById('tv').textContent=this.value+'%%'\"></label>"
@@ -261,7 +260,6 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         S_HEAD,
         cfg->wifi_ssid, cfg->device_id, cfg->room,
         cfg->mqtt_broker, cfg->mqtt_port, cfg->mqtt_user,
-        cfg->wakeword_enabled ? " checked" : "",
         cfg->wakeword_threshold, cfg->wakeword_threshold,
         cfg->vad_silence_ms,
         cfg->ota_url,
@@ -319,9 +317,6 @@ static esp_err_t settings_post_handler(httpd_req_t *req)
         int v = atoi(vad_str);
         if (v >= 200 && v <= 10000) new_cfg.vad_silence_ms = (uint16_t)v;
     }
-
-    char ww[4] = {0};
-    new_cfg.wakeword_enabled = form_get(body, "wakeword", ww, sizeof(ww));
 
     char thr_str[8] = {0};
     if (form_get(body, "ww_threshold", thr_str, sizeof(thr_str))) {

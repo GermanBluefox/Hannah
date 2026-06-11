@@ -204,10 +204,18 @@ static void store_sha256(const char *asset_id, const char *sha256)
 static void update_task(void *arg)
 {
     vTaskDelay(pdMS_TO_TICKS(50000));
-    ESP_LOGI(TAG, "Free heap vor Manifest-Fetch: %lu", esp_get_free_heap_size());
-    char *body = fetch_manifest();
+
+    char *body = NULL;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        ESP_LOGI(TAG, "Manifest-Fetch Versuch %d/3 (free heap: %lu)",
+                 attempt, esp_get_free_heap_size());
+        body = fetch_manifest();
+        if (body) break;
+        ESP_LOGW(TAG, "Manifest nicht abrufbar (Versuch %d/3).", attempt);
+        if (attempt < 3) vTaskDelay(pdMS_TO_TICKS(30000));
+    }
     if (!body) {
-        ESP_LOGW(TAG, "Manifest nicht abrufbar — Asset-Update übersprungen.");
+        ESP_LOGW(TAG, "Manifest nach 3 Versuchen nicht abrufbar — Asset-Update übersprungen.");
         vTaskDelete(NULL);
         return;
     }

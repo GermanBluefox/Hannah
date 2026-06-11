@@ -12,7 +12,6 @@ typedef struct {
     uint16_t mqtt_port;
     char     mqtt_user[32];
     char     mqtt_pass[32];
-    bool     wakeword_enabled;
     uint8_t  wakeword_threshold;  /* Erkennungsschwelle 0–100 (entspricht 0.00–1.00) */
     uint16_t vad_silence_ms;      /* VAD-Stille bis audio_end, Runtime-Override für CONFIG_HANNAH_VAD_SILENCE_MS */
     char     ota_url[128];

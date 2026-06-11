@@ -37,7 +37,6 @@ void hannah_config_init(void)
         snprintf(s_cfg.mqtt_pass,   sizeof(s_cfg.mqtt_pass),   "%s", CONFIG_HANNAH_MQTT_PASS);
         snprintf(s_cfg.asset_url,   sizeof(s_cfg.asset_url),   "%s", CONFIG_HANNAH_ASSET_SERVER_URL);
         snprintf(s_cfg.asset_token, sizeof(s_cfg.asset_token), "%s", CONFIG_HANNAH_ASSET_SERVER_TOKEN);
-        s_cfg.wakeword_enabled   = false;
 #ifdef CONFIG_HANNAH_WAKEWORD_THRESHOLD
         s_cfg.wakeword_threshold = CONFIG_HANNAH_WAKEWORD_THRESHOLD;
 #else
@@ -58,10 +57,6 @@ void hannah_config_init(void)
     uint16_t port = CONFIG_HANNAH_MQTT_PORT;
     nvs_get_u16(h, "mqtt_port", &port);
     s_cfg.mqtt_port = port;
-
-    uint8_t ww = 0;
-    nvs_get_u8(h, "wakeword", &ww);
-    s_cfg.wakeword_enabled = (ww != 0);
 
 #ifdef CONFIG_HANNAH_WAKEWORD_THRESHOLD
     uint8_t thr = CONFIG_HANNAH_WAKEWORD_THRESHOLD;
@@ -117,7 +112,6 @@ void hannah_config_save(const hannah_config_t *cfg)
     nvs_set_u16(h, "mqtt_port",   cfg->mqtt_port);
     nvs_set_str(h, "mqtt_user",   cfg->mqtt_user);
     nvs_set_str(h, "mqtt_pass",   cfg->mqtt_pass);
-    nvs_set_u8 (h, "wakeword",    cfg->wakeword_enabled ? 1 : 0);
     nvs_set_u8 (h, "ww_threshold", cfg->wakeword_threshold);
     nvs_set_u16(h, "vad_ms",       cfg->vad_silence_ms);
     nvs_set_str(h, "ota_url",      cfg->ota_url);

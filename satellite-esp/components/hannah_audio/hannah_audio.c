@@ -227,13 +227,9 @@ static void mic_task(void *arg)
     int           warmup_remaining = WARMUP_FRAMES;
 
 #if CONFIG_HANNAH_WAKEWORD_ENABLED
-    if (hannah_config_get()->wakeword_enabled) {
-        ESP_LOGI(TAG, "Mic-Task: Wakeword-Modus (Schwelle=%.2f, VAD=%dms).",
-                 hannah_config_get()->wakeword_threshold / 100.0f,
-                 hannah_config_get()->vad_silence_ms);
-    } else {
-        ESP_LOGI(TAG, "Mic-Task: PTT-Modus (Wakeword kompiliert, per Config deaktiviert).");
-    }
+    ESP_LOGI(TAG, "Mic-Task: Wakeword-Modus (Schwelle=%.2f, VAD=%dms).",
+             hannah_config_get()->wakeword_threshold / 100.0f,
+             hannah_config_get()->vad_silence_ms);
 #else
     ESP_LOGI(TAG, "Mic-Task: PTT-Modus.");
 #endif
@@ -285,8 +281,7 @@ static void mic_task(void *arg)
         if (warmup_remaining > 0) {
             --warmup_remaining;
 #if CONFIG_HANNAH_WAKEWORD_ENABLED
-            if (hannah_config_get()->wakeword_enabled)
-                hannah_wakeword_process(mono);
+            hannah_wakeword_process(mono);
 #endif
             if (warmup_remaining == 0) {
                 hannah_led_set_state(LED_STATE_IDLE);
@@ -320,7 +315,7 @@ static void mic_task(void *arg)
 
 /* -- Wakeword-Modus -------------------------------------------------- */
 #if CONFIG_HANNAH_WAKEWORD_ENABLED
-        if (hannah_config_get()->wakeword_enabled) {
+        {
             float confidence = hannah_wakeword_process(mono);
 
             if (s_sampling_mode) {
@@ -409,43 +404,6 @@ static void mic_task(void *arg)
                 }
                 break;
             }
-            }
-        } else {
-            /* PTT-Modus: Wakeword kompiliert, aber per Config deaktiviert */
-            bool ptt = s_ptt_active;
-            if (s_sampling_mode) {
-                if (s_sampling_hey_hannah) {
-                    if (ptt)
-                        hannah_net_send_audio_sampling((uint8_t *)mono, mono_samples * 2);
-                    if (was_ptt && !ptt)
-                        hannah_net_send_audio_end();
-                } else {
-                    if (!was_ptt && ptt && s_stream_frames > 0) {
-                        hannah_net_send_audio_end();
-                        s_stream_frames = 0;
-                    }
-                    hannah_net_send_audio_sampling((uint8_t *)mono, mono_samples * 2);
-                    s_stream_frames++;
-                    bool ptt_flush  = (was_ptt && !ptt);
-                    bool auto_flush = (s_stream_frames >= 500);  /* 500 × 10ms = 5s */
-                    if (ptt_flush || auto_flush) {
-                        hannah_net_send_audio_end();
-                        s_stream_frames = 0;
-                    }
-                }
-            } else {
-                if (!was_ptt && ptt) {
-                    mic_led(LED_STATE_STREAM);
-                    state = AUDIO_STATE_STREAMING;
-                }
-                if (state == AUDIO_STATE_STREAMING && ptt) {
-                    hannah_net_send_audio((uint8_t *)mono, mono_samples * 2);
-                }
-                if (was_ptt && !ptt && state == AUDIO_STATE_STREAMING) {
-                    hannah_net_send_audio_end();
-                    mic_led(LED_STATE_IDLE);
-                    state = AUDIO_STATE_IDLE;
-                }
             }
         }
         was_ptt = s_ptt_active;

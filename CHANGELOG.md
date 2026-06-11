@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.1
+### Satellite Firmware
+* Fixed: OTA TLS handshake failed with `MBEDTLS_ERR_X509_CERT_VERIFY_FAILED` — replaced hardcoded intermediate CA PEM with `esp_crt_bundle_attach` in both version check and OTA download
+
 ## 0.24.0
 ### Satellite Firmware
 * Changed: asset server URL and token moved from compile-time Kconfig constants to NVS (with sdkconfig fallback) — adapter can now provision them during initial flash

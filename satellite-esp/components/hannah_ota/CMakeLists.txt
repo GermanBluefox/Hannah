@@ -11,4 +11,5 @@ idf_component_register(
         app_update
         espressif__cjson
         nvs_flash
+        mbedtls
 )

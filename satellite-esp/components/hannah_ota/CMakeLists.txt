@@ -12,4 +12,5 @@ idf_component_register(
         espressif__cjson
         nvs_flash
         mbedtls
+        spiffs
 )

@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "esp_http_client.h"
+#include "esp_crt_bundle.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "cJSON.h"
@@ -19,35 +20,6 @@ static const char *TAG        = "hannah_asset";
 #define ASSET_MOUNT   "/assets"
 #define ASSET_NVS_NS  "hna"   /* max 15 chars für nvs namespace */
 
-/* Thawte TLS RSA CA G1 — Intermediate-CA für den Asset-Server */
-static const char s_ca_cert_pem[] =
-    "-----BEGIN CERTIFICATE-----\n"
-    "MIIEizCCA3OgAwIBAgIQCQ7oxd5b+mLSri/3CXxIVzANBgkqhkiG9w0BAQsFADBh\n"
-    "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
-    "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH\n"
-    "MjAeFw0xNzExMDIxMjI0MjVaFw0yNzExMDIxMjI0MjVaMF4xCzAJBgNVBAYTAlVT\n"
-    "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
-    "b20xHTAbBgNVBAMTFFRoYXd0ZSBUTFMgUlNBIENBIEcxMIIBIjANBgkqhkiG9w0B\n"
-    "AQEFAAOCAQ8AMIIBCgKCAQEAxjngmPhVetC0b/ozbYJdzOBUA1sMog47030cAP+P\n"
-    "23ANUN8grXECL8NhDEF4F1R9tL0wY0mczHaR0a7lYanlxtwWo1s2uGnnyDs6mOCs\n"
-    "66ew2w3YETr6Tb14xgjpu1gGFtAeewaikO9Fud8hxGJTSwn8xeNkfKVWpD2L4vFN\n"
-    "36FNgxeilK6aE4ykgGAzNlokTp6hNOLAYpDySdLAPKzuJSQ7JCEZ6O+SDKywIdXL\n"
-    "oMTnpxuBKGSG88NWTo3CHCOGmQECia2yqdPDjgLqnEiYNjwQL8uMqj8rOvlMgviB\n"
-    "cHA7xty+7/uYLN6ZS7Vq1/F/lVhVOf5ej6jZdmB85szFbQIDAQABo4IBQDCCATww\n"
-    "HQYDVR0OBBYEFKWM/jLM6w8s1BnGCLgAJIhdw8W3MB8GA1UdIwQYMBaAFE4iVCAY\n"
-    "lebjbuYP+vq5Eu0GF485MA4GA1UdDwEB/wQEAwIBhjAdBgNVHSUEFjAUBggrBgEF\n"
-    "BQcDAQYIKwYBBQUHAwIwEgYDVR0TAQH/BAgwBgEB/wIBADA0BggrBgEFBQcBAQQo\n"
-    "MCYwJAYIKwYBBQUHMAGGGGh0dHA6Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBCBgNVHR8E\n"
-    "OzA5MDegNaAzhjFodHRwOi8vY3JsMy5kaWdpY2VydC5jb20vRGlnaUNlcnRHbG9i\n"
-    "YWxSb290RzIuY3JsMD0GA1UdIAQ2MDQwMgYEVR0gADAqMCgGCCsGAQUFBwIBFhxo\n"
-    "dHRwczovL3d3dy5kaWdpY2VydC5jb20vQ1BTMA0GCSqGSIb3DQEBCwUAA4IBAQC6\n"
-    "km0KA4sTb2VYpEBm/uL2HL/pZX9B7L/hbJ4NcoBe7V56oCnt7aeIo8sMjCRWTCWZ\n"
-    "D1dY0+2KZOC1dKj8d1VXXAtnjytDDuPPf6/iow0mYQTO/GAg/MLyL6CDm3FzDB8V\n"
-    "tsH/aeMgP6pgD1XQqz+haDnfnJTKBuxhcpnx3Adbleue/QnPf1hHYa8L+Rv8Pi5U\n"
-    "h4V9FwHOfphdMXOxi14OqmsiTbc5cOs9/uukH+YVsuFdWTna6IVw1qh+tEtyH16R\n"
-    "vmi7pkqyZYULOPMIE7avrljVVBZuikwARtY8tCVV6Pp9l3VeagBqb2ffgqNJt3C0\n"
-    "TYNYQI+BXG1R1cABlold\n"
-    "-----END CERTIFICATE-----\n";
 
 /* ── WAV-Chunk-Scanner ───────────────────────────────────────────────────── */
 
@@ -110,7 +82,7 @@ static char *fetch_manifest(void)
     esp_http_client_config_t cfg = {
         .url        = url,
         .timeout_ms = 10000,
-        .cert_pem   = s_ca_cert_pem,
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     set_auth_header(client);
@@ -154,7 +126,7 @@ static bool download_asset(const char *asset_id)
         .url         = url,
         .timeout_ms  = 60000,
         .buffer_size = 4096,
-        .cert_pem    = s_ca_cert_pem,
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     set_auth_header(client);
@@ -231,6 +203,8 @@ static void store_sha256(const char *asset_id, const char *sha256)
 
 static void update_task(void *arg)
 {
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    ESP_LOGI(TAG, "Free heap vor Manifest-Fetch: %lu", esp_get_free_heap_size());
     char *body = fetch_manifest();
     if (!body) {
         ESP_LOGW(TAG, "Manifest nicht abrufbar — Asset-Update übersprungen.");

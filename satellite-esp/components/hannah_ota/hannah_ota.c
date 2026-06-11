@@ -24,6 +24,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
+#include "esp_spiffs.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -267,6 +268,8 @@ static void ota_update_task(void *arg)
 
         ESP_LOGI(TAG, "Starte OTA von %s", s_pending_url);
         hannah_audio_pause_wakeword();
+        esp_vfs_spiffs_unregister("spiffs");
+        ESP_LOGI(TAG, "Free heap vor OTA: %lu", esp_get_free_heap_size());
 
         esp_http_client_config_t http_cfg = {
             .url               = s_pending_url,

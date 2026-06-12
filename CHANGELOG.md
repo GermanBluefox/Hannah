@@ -5,6 +5,11 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.9
+### Satellite Firmware
+* Fixed: `hannah_asset` retries manifest fetch indefinitely (every 30 min) instead of giving up after 3 attempts — previously the update task deleted itself on failure, so assets were never fetched if TLS wasn't ready at boot
+* Fixed: `CONFIG_MBEDTLS_KEY_EXCHANGE_RSA=n` added — disables RSA key exchange cipher suites (no forward secrecy); forces ECDHE negotiation with the Netscaler reverse proxy which otherwise prefers `AES256-SHA` (RSA key exchange) causing TLS handshake failure on ESP32-S3 via PSA crypto
+
 ## 0.24.8
 ### Satellite Firmware
 * Fixed: `CONFIG_LWIP_SNTP_MAX_SERVERS=2` added — without it, pool.ntp.org (at slot 1) was silently dropped because lwIP only allocated one server slot; now DHCP NTP (slot 0) and pool.ntp.org (slot 1) are both active

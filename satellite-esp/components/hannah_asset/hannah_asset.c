@@ -207,52 +207,55 @@ static void update_task(void *arg)
     vTaskDelay(pdMS_TO_TICKS(50000));
     hannah_net_wait_sntp(10000);
 
-    char *body = NULL;
-    for (int attempt = 1; attempt <= 3; attempt++) {
-        ESP_LOGI(TAG, "Manifest-Fetch Versuch %d/3 (free heap: %lu)",
-                 attempt, esp_get_free_heap_size());
-        body = fetch_manifest();
-        if (body) break;
-        ESP_LOGW(TAG, "Manifest nicht abrufbar (Versuch %d/3).", attempt);
-        if (attempt < 3) vTaskDelay(pdMS_TO_TICKS(30000));
-    }
-    if (!body) {
-        ESP_LOGW(TAG, "Manifest nach 3 Versuchen nicht abrufbar — Asset-Update übersprungen.");
-        vTaskDelete(NULL);
-        return;
-    }
+    while (1) {
+        char *body = NULL;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            ESP_LOGI(TAG, "Manifest-Fetch Versuch %d/3 (free heap: %lu)",
+                     attempt, esp_get_free_heap_size());
+            body = fetch_manifest();
+            if (body) break;
+            ESP_LOGW(TAG, "Manifest nicht abrufbar (Versuch %d/3).", attempt);
+            if (attempt < 3) vTaskDelay(pdMS_TO_TICKS(30000));
+        }
+        if (!body) {
+            ESP_LOGW(TAG, "Manifest nach 3 Versuchen nicht abrufbar — Retry in 30 min.");
+            vTaskDelay(pdMS_TO_TICKS(1800000));
+            continue;
+        }
 
-    cJSON *root = cJSON_Parse(body);
-    free(body);
-    if (!root) {
-        ESP_LOGE(TAG, "Manifest-JSON ungültig.");
-        vTaskDelete(NULL);
-        return;
-    }
+        cJSON *root = cJSON_Parse(body);
+        free(body);
+        if (!root) {
+            ESP_LOGE(TAG, "Manifest-JSON ungültig.");
+            vTaskDelete(NULL);
+            return;
+        }
 
-    cJSON *assets = cJSON_GetObjectItemCaseSensitive(root, "assets");
-    if (cJSON_IsObject(assets)) {
-        cJSON *item;
-        cJSON_ArrayForEach(item, assets) {
-            const char *id   = item->string;
-            const cJSON *jsha = cJSON_GetObjectItemCaseSensitive(item, "sha256");
-            if (!cJSON_IsString(jsha)) continue;
+        cJSON *assets = cJSON_GetObjectItemCaseSensitive(root, "assets");
+        if (cJSON_IsObject(assets)) {
+            cJSON *item;
+            cJSON_ArrayForEach(item, assets) {
+                const char *id    = item->string;
+                const cJSON *jsha = cJSON_GetObjectItemCaseSensitive(item, "sha256");
+                if (!cJSON_IsString(jsha)) continue;
 
-            if (sha256_matches(id, jsha->valuestring)) {
-                ESP_LOGI(TAG, "Asset %s aktuell.", id);
-                continue;
-            }
+                if (sha256_matches(id, jsha->valuestring)) {
+                    ESP_LOGI(TAG, "Asset %s aktuell.", id);
+                    continue;
+                }
 
-            ESP_LOGI(TAG, "Asset %s herunterladen...", id);
-            if (download_asset(id)) {
-                store_sha256(id, jsha->valuestring);
+                ESP_LOGI(TAG, "Asset %s herunterladen...", id);
+                if (download_asset(id)) {
+                    store_sha256(id, jsha->valuestring);
+                }
             }
         }
-    }
 
-    cJSON_Delete(root);
-    ESP_LOGI(TAG, "Asset-Update abgeschlossen.");
-    vTaskDelete(NULL);
+        cJSON_Delete(root);
+        ESP_LOGI(TAG, "Asset-Update abgeschlossen.");
+        vTaskDelete(NULL);
+        return;
+    }
 }
 
 /* ── Öffentliche API ─────────────────────────────────────────────────────── */

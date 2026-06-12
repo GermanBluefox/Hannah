@@ -29,6 +29,7 @@
 #include "esp_sntp.h"
 #include "esp_system.h"
 #include "esp_ota_ops.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -36,6 +37,7 @@
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include "mqtt_client.h"
+#include "mbedtls/platform.h"
 #include "cJSON.h"
 
 static const char *TAG = "hannah_net";
@@ -568,8 +570,14 @@ static void sntp_retry_cb(TimerHandle_t t)
     esp_sntp_restart();
 }
 
+static void *mbedtls_spiram_calloc(size_t n, size_t size)
+{
+    return heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+}
+
 void hannah_net_init(void)
 {
+    mbedtls_platform_set_calloc_free(mbedtls_spiram_calloc, free);
     wifi_driver_init();
 
     if (hannah_config_has_wifi()) {

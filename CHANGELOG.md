@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.10
+### Satellite Firmware
+* Fixed: mbedTLS context allocations redirected to PSRAM via `mbedtls_platform_set_calloc_free()` — internal RAM fragmentation (caused by BLE/NimBLE init) prevented `mbedtls_ssl_setup` from allocating the SSL context, causing all TLS connections to fail after boot
+
 ## 0.24.9
 ### Satellite Firmware
 * Fixed: `hannah_asset` retries manifest fetch indefinitely (every 30 min) instead of giving up after 3 attempts — previously the update task deleted itself on failure, so assets were never fetched if TLS wasn't ready at boot

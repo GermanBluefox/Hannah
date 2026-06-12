@@ -27,6 +27,8 @@ CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192
 CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=4096
 # RSA-Key-Exchange deaktivieren (kein Forward Secrecy) — erzwingt ECDHE
 CONFIG_MBEDTLS_KEY_EXCHANGE_RSA=n
+# mbedTLS-Allokationen in PSRAM — verhindert Fragmentierung des internen RAM
+CONFIG_MBEDTLS_PLATFORM_MEMORY=y
 
 # FreeRTOS
 CONFIG_FREERTOS_HZ=1000

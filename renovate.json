@@ -4,11 +4,17 @@
     "config:best-practices",
     "mergeConfidence:all-badges"
   ],
+  "git-submodules": {
+    "enabled": true
+  },
+  "dependencyDashboard": true,
+  "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "enabled": true,
     "labels": [
       "security"
-    ]
+    ],
+    "automerge": true
   },
   "packageRules": [
     {
@@ -22,6 +28,15 @@
         "devDependencies"
       ],
       "commitMessagePrefix": "chore(dev-deps):"
+    },
+    {
+      "matchUpdateTypes": ["patch", "pin"],
+      "minimumReleaseAge": "3 days",
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": ["digest"],
+      "automerge": true
     }
   ]
 }

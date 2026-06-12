@@ -105,3 +105,8 @@ void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb);
  * asset_id ist nur während des Callbacks gültig — bei asynchroner Nutzung kopieren. */
 typedef void (*hannah_net_play_asset_cb_t)(const char *asset_id);
 void hannah_net_set_play_asset_callback(hannah_net_play_asset_cb_t cb);
+
+/* Wartet bis SNTP die Systemzeit synchronisiert hat oder timeout_ms abläuft.
+ * Gibt true zurück wenn die Zeit erfolgreich synchronisiert wurde.
+ * Im AP-Modus oder wenn SNTP noch nicht gestartet wurde: sofort false. */
+bool hannah_net_wait_sntp(uint32_t timeout_ms);

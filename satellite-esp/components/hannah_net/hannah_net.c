@@ -25,6 +25,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "esp_netif_sntp.h"
 #include "esp_system.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
@@ -55,6 +56,7 @@ static int                     s_wifi_retry  = 0;
 static char                    s_proxy_host[64] = {0};
 static int                     s_proxy_port     = 0;
 static volatile bool           s_ap_mode        = false;
+static bool                    s_sntp_started   = false;
 
 static EventGroupHandle_t        s_wifi_event_group;
 static esp_mqtt_client_handle_t  s_mqtt_client = NULL;
@@ -467,6 +469,22 @@ static void on_wifi_event(void *arg, esp_event_base_t base,
         ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&ev->ip_info.ip));
         s_wifi_retry = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        if (!s_sntp_started) {
+            esp_sntp_config_t sntp_cfg = {
+                .smooth_sync                = false,
+                .server_from_dhcp           = true,
+                .wait_for_sync              = false,
+                .start                      = true,
+                .renew_servers_after_new_IP = true,
+                .ip_event_to_renew          = IP_EVENT_STA_GOT_IP,
+                .index_of_first_server      = 1,
+                .num_of_servers             = 1,
+                .servers                    = { "pool.ntp.org" },
+            };
+            esp_netif_sntp_init(&sntp_cfg);
+            s_sntp_started = true;
+            ESP_LOGI(TAG, "SNTP gestartet (DHCP-NTP bevorzugt, Fallback: pool.ntp.org).");
+        }
         mqtt_init();
     }
 }
@@ -648,6 +666,19 @@ void hannah_net_publish_volume(int vol)
     char payload[8];
     snprintf(payload, sizeof(payload), "%d", vol);
     hannah_net_mqtt_publish(topic, payload, 1, 1);
+}
+
+bool hannah_net_wait_sntp(uint32_t timeout_ms)
+{
+    if (s_ap_mode || !s_sntp_started) return false;
+    esp_err_t ret = esp_netif_sntp_sync_wait(pdMS_TO_TICKS(timeout_ms));
+    if (ret == ESP_OK) {
+        time_t now; time(&now);
+        ESP_LOGI(TAG, "SNTP sync OK: %s", ctime(&now));
+    } else {
+        ESP_LOGW(TAG, "SNTP sync timeout nach %lu ms.", timeout_ms);
+    }
+    return ret == ESP_OK;
 }
 
 void hannah_net_mqtt_publish(const char *topic, const char *payload, int qos, int retain)

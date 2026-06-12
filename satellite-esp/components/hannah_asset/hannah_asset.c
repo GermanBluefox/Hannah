@@ -1,6 +1,7 @@
 #include "hannah_asset.h"
 #include "hannah_audio.h"
 #include "hannah_config.h"
+#include "hannah_net.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -204,6 +205,7 @@ static void store_sha256(const char *asset_id, const char *sha256)
 static void update_task(void *arg)
 {
     vTaskDelay(pdMS_TO_TICKS(50000));
+    hannah_net_wait_sntp(10000);
 
     char *body = NULL;
     for (int attempt = 1; attempt <= 3; attempt++) {

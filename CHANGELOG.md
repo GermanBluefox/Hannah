@@ -5,6 +5,16 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.6
+### Satellite Firmware
+* Fixed: `CONFIG_LWIP_DHCP_GET_NTP_SRV=y` added to `sdkconfig.defaults` — required for `server_from_dhcp = true` in SNTP config; without it ESP-IDF rejected the SNTP init with `sntp_init_api: Tried to configure SNTP server from DHCP, while disabled`
+
+## 0.24.5
+### Satellite Firmware
+* Fixed: SNTP time synchronization added — `hannah_net` starts NTP (`pool.ntp.org`) after WiFi connect; `hannah_asset` waits up to 10s for sync before first manifest fetch — fixes TLS handshake failure (`-0x3B00`) caused by invalid system clock
+* Improved: SNTP now prefers NTP server from DHCP (Option 42); falls back to `pool.ntp.org` if DHCP provides none; DHCP-provided server is refreshed automatically on IP renewal
+* Fixed: BME680 humidity compensation formula corrected to match Bosch reference (`bme68x.c`) — wrong divisors for `par_h3` (200→100), `par_h4` (100→16384), `par_h5` (10⁹→1048576) and wrong structure of correction term (used `v1` instead of `h`); fixes `H=0.0%` readings
+
 ## 0.24.4
 ### Satellite Firmware
 * Changed: `wakeword_enabled` removed from NVS and web interface — wake-word on/off is now a compile-time decision via `CONFIG_HANNAH_WAKEWORD_ENABLED`; threshold (`ww_threshold`) remains configurable at runtime

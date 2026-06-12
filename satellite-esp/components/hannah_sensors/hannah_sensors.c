@@ -136,9 +136,14 @@ static float comp_press(uint32_t adc_p) {
     return (float)(p/100.0);
 }
 static float comp_hum(uint16_t adc_h, float tc) {
-    double v1 = (double)adc_h - ((double)s_calib.par_h1*16.0) - (tc*(double)s_calib.par_h3/100.0*0.5);
-    double v2 = (double)s_calib.par_h2/262144.0*(1.0 + tc*(double)s_calib.par_h4/100.0 + tc*tc*(double)s_calib.par_h5/10000000.0*0.01);
-    double h  = v1*v2*(1.0 + (double)s_calib.par_h6/16384.0*v1 + (double)s_calib.par_h7/2097152.0*v1*v1);
+    double v1 = (double)adc_h - ((double)s_calib.par_h1 * 16.0) -
+                (tc * (double)s_calib.par_h3 / 100.0);
+    double v2 = (double)s_calib.par_h2 / 262144.0 *
+                (1.0 + tc * (double)s_calib.par_h4 / 16384.0 +
+                 tc * tc * (double)s_calib.par_h5 / 1048576.0);
+    double h  = v1 * v2;
+    h += ((double)s_calib.par_h6 / 16384.0) * h * h +
+         ((double)s_calib.par_h7 / 2097152.0) * h * h * h;
     if (h > 100.0) h = 100.0;
     if (h < 0.0)   h = 0.0;
     return (float)h;

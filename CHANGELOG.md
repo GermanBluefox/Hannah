@@ -5,6 +5,11 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.12
+### Satellite Firmware
+* Fixed: `hannah_asset` now verifies the SHA256 of a downloaded asset against the manifest before caching it — previously an aborted partial download (e.g. 512 bytes from a dropped TLS connection) was accepted as valid (`total > 0`), its manifest hash stored in NVS, and the corrupt file served forever; mismatching files are now discarded and re-fetched on the next cycle (SHA256 via PSA Crypto API, mbedTLS 4.x compatible)
+* Changed: BLE (NimBLE) memory footprint reduced — host heap moved to PSRAM (`BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL`) and roles restricted to observer-only (central/peripheral/broadcaster/SMP disabled), since `hannah_ble` is a pure passive scanner; frees scarce internal RAM that AES/I2S DMA and WiFi mgmt-frames compete for (TLS asset download failed with `esp-aes: Failed to allocate memory` while BLE was active)
+
 ## 0.24.11
 ### Satellite Firmware
 * Fixed: `asset_upd` task stack increased from 8 KB to 16 KB — with mbedTLS now able to complete the TLS handshake (v0.24.10), the ECDHE MPI hardware-acceleration operations (`mpi_ll_read_from_mem_block`) ran out of stack during the asset download, causing a stack overflow and reboot

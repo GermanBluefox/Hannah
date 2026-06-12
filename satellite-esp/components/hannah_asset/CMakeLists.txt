@@ -8,4 +8,5 @@ idf_component_register(
         spiffs
         esp_http_client
         espressif__cjson
+        mbedtls
 )

@@ -14,6 +14,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "cJSON.h"
+#include "psa/crypto.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -59,6 +60,44 @@ static bool wav_find_data(FILE *f, uint32_t *sr_out, uint16_t *ch_out, uint32_t 
         }
     }
     return false;
+}
+
+/* ── SHA256 über Datei ───────────────────────────────────────────────────── */
+
+/* Berechnet den SHA256 der Datei unter `path` und schreibt ihn als
+ * 64-Zeichen-Hex-String (+ NUL) nach `out_hex` (>= 65 Bytes).
+ * false bei Datei-/Lesefehler. */
+static bool file_sha256_hex(const char *path, char *out_hex)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+
+    psa_crypto_init();   /* idempotent — TLS-Stack hat PSA i.d.R. schon initialisiert */
+    psa_hash_operation_t op = PSA_HASH_OPERATION_INIT;
+    if (psa_hash_setup(&op, PSA_ALG_SHA_256) != PSA_SUCCESS) {
+        fclose(f);
+        return false;
+    }
+
+    uint8_t buf[1024];
+    size_t  n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        psa_hash_update(&op, buf, n);
+    }
+    fclose(f);
+
+    uint8_t digest[32];
+    size_t  digest_len = 0;
+    if (psa_hash_finish(&op, digest, sizeof(digest), &digest_len) != PSA_SUCCESS) {
+        psa_hash_abort(&op);
+        return false;
+    }
+
+    for (int i = 0; i < 32; i++) {
+        snprintf(out_hex + i * 2, 3, "%02x", digest[i]);
+    }
+    out_hex[64] = '\0';
+    return true;
 }
 
 /* ── HTTP-Hilfsfunktionen ────────────────────────────────────────────────── */
@@ -245,8 +284,21 @@ static void update_task(void *arg)
                 }
 
                 ESP_LOGI(TAG, "Asset %s herunterladen...", id);
-                if (download_asset(id)) {
+                if (!download_asset(id)) continue;
+
+                /* SHA256 der heruntergeladenen Datei gegen das Manifest prüfen —
+                 * verhindert, dass abgebrochene Teildownloads als gültig gecacht
+                 * werden. */
+                char path[72];
+                snprintf(path, sizeof(path), ASSET_MOUNT "/%s.wav", id);
+                char actual[65];
+                if (file_sha256_hex(path, actual) &&
+                    strcmp(actual, jsha->valuestring) == 0) {
                     store_sha256(id, jsha->valuestring);
+                    ESP_LOGI(TAG, "Asset %s verifiziert (sha256 ok).", id);
+                } else {
+                    ESP_LOGW(TAG, "Asset %s: sha256-Mismatch — verwerfe Datei.", id);
+                    remove(path);
                 }
             }
         }

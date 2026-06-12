@@ -277,7 +277,7 @@ void hannah_asset_init(void)
     esp_spiffs_info("spiffs", &total, &used);
     ESP_LOGI(TAG, "SPIFFS: %u/%u bytes", used, total);
 
-    xTaskCreate(update_task, "asset_upd", 8192, NULL, 3, NULL);
+    xTaskCreate(update_task, "asset_upd", 16384, NULL, 3, NULL);
 }
 
 void hannah_asset_play(const char *asset_id)

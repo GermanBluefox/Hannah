@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.11
+### Satellite Firmware
+* Fixed: `asset_upd` task stack increased from 8 KB to 16 KB — with mbedTLS now able to complete the TLS handshake (v0.24.10), the ECDHE MPI hardware-acceleration operations (`mpi_ll_read_from_mem_block`) ran out of stack during the asset download, causing a stack overflow and reboot
+
 ## 0.24.10
 ### Satellite Firmware
 * Fixed: mbedTLS context allocations redirected to PSRAM via `mbedtls_platform_set_calloc_free()` — internal RAM fragmentation (caused by BLE/NimBLE init) prevented `mbedtls_ssl_setup` from allocating the SSL context, causing all TLS connections to fail after boot

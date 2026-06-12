@@ -469,22 +469,6 @@ static void on_wifi_event(void *arg, esp_event_base_t base,
         ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&ev->ip_info.ip));
         s_wifi_retry = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        if (!s_sntp_started) {
-            esp_sntp_config_t sntp_cfg = {
-                .smooth_sync                = false,
-                .server_from_dhcp           = true,
-                .wait_for_sync              = false,
-                .start                      = true,
-                .renew_servers_after_new_IP = true,
-                .ip_event_to_renew          = IP_EVENT_STA_GOT_IP,
-                .index_of_first_server      = 1,
-                .num_of_servers             = 1,
-                .servers                    = { "pool.ntp.org" },
-            };
-            esp_netif_sntp_init(&sntp_cfg);
-            s_sntp_started = true;
-            ESP_LOGI(TAG, "SNTP gestartet (DHCP-NTP bevorzugt, Fallback: pool.ntp.org).");
-        }
         mqtt_init();
     }
 }
@@ -563,6 +547,20 @@ void hannah_net_init(void)
     wifi_driver_init();
 
     if (hannah_config_has_wifi()) {
+        esp_sntp_config_t sntp_cfg = {
+            .smooth_sync                = false,
+            .server_from_dhcp           = true,
+            .wait_for_sync              = false,
+            .start                      = true,
+            .renew_servers_after_new_IP = true,
+            .ip_event_to_renew          = IP_EVENT_STA_GOT_IP,
+            .index_of_first_server      = 1,
+            .num_of_servers             = 1,
+            .servers                    = { "pool.ntp.org" },
+        };
+        esp_netif_sntp_init(&sntp_cfg);
+        s_sntp_started = true;
+        ESP_LOGI(TAG, "SNTP gestartet (DHCP-NTP bevorzugt, Fallback: pool.ntp.org).");
         wifi_start_sta();
     } else {
         ESP_LOGW(TAG, "Keine WiFi-Config — starte AP-Modus.");

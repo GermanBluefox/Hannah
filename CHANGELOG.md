@@ -5,6 +5,11 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.7
+### Satellite Firmware
+* Fixed: SNTP init moved from `IP_EVENT_STA_GOT_IP` handler to `hannah_net_init()` — previously SNTP registered its `renew_servers_after_new_IP` event handler *after* the IP event already fired, so the DHCP-provided NTP server (Option 42) was never picked up; now the handler is registered before WiFi connects
+* Fixed: `hannah_ota` now waits up to 10s for SNTP sync before the first `check_for_update()` call — prevents TLS handshake failure (`-0x008D`) caused by invalid system clock at t=60s boot
+
 ## 0.24.6
 ### Satellite Firmware
 * Fixed: `CONFIG_LWIP_DHCP_GET_NTP_SRV=y` added to `sdkconfig.defaults` — required for `server_from_dhcp = true` in SNTP config; without it ESP-IDF rejected the SNTP init with `sntp_init_api: Tried to configure SNTP server from DHCP, while disabled`

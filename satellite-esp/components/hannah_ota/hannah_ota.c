@@ -325,6 +325,8 @@ static void ota_poll_task(void *arg)
         ESP_LOGI(TAG, "Firmware-Version publiziert: %s = %s", fw_topic, fw_payload);
     }
 
+    hannah_net_wait_sntp(10000);
+
     while (1) {
         check_for_update();
         vTaskDelay(pdMS_TO_TICKS((uint32_t)CONFIG_HANNAH_OTA_POLL_INTERVAL_S * 1000));

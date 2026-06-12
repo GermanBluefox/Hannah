@@ -26,11 +26,13 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
+#include "esp_sntp.h"
 #include "esp_system.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/timers.h"
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include "mqtt_client.h"
@@ -42,8 +44,9 @@ static const char *TAG = "hannah_net";
 #define TYPE_AUDIO      0x02
 #define TYPE_TTS        0x03
 #define UDP_RX_BUF_SIZE 65536
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
+#define WIFI_CONNECTED_BIT  BIT0
+#define WIFI_FAIL_BIT       BIT1
+#define NET_SNTP_SYNCED_BIT BIT0
 
 /* ── Zustand ─────────────────────────────────────────────────────────────── */
 
@@ -59,6 +62,8 @@ static volatile bool           s_ap_mode        = false;
 static bool                    s_sntp_started   = false;
 
 static EventGroupHandle_t        s_wifi_event_group;
+static EventGroupHandle_t        s_net_events  = NULL;
+static TimerHandle_t             s_sntp_retry  = NULL;
 static esp_mqtt_client_handle_t  s_mqtt_client = NULL;
 static esp_netif_t              *s_sta_netif   = NULL;
 static esp_netif_t              *s_ap_netif    = NULL;
@@ -470,6 +475,7 @@ static void on_wifi_event(void *arg, esp_event_base_t base,
         s_wifi_retry = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         mqtt_init();
+        if (s_sntp_retry) xTimerStart(s_sntp_retry, 0);
     }
 }
 
@@ -542,6 +548,26 @@ void hannah_net_set_tts_callback(hannah_net_tts_cb_t cb)            { s_tts_cb  
 void hannah_net_set_tts_end_callback(hannah_net_tts_end_cb_t cb)    { s_tts_end_cb  = cb; }
 void hannah_net_set_playback_callback(hannah_net_playback_cb_t cb)  { s_playback_cb = cb; }
 
+/* ── SNTP ────────────────────────────────────────────────────────────────── */
+
+static void sntp_sync_cb(struct timeval *tv)
+{
+    if (s_net_events) xEventGroupSetBits(s_net_events, NET_SNTP_SYNCED_BIT);
+    if (s_sntp_retry)  xTimerStop(s_sntp_retry, 0);
+    time_t now = tv->tv_sec;
+    ESP_LOGI(TAG, "SNTP sync OK: %s", ctime(&now));
+}
+
+static void sntp_retry_cb(TimerHandle_t t)
+{
+    if (s_net_events && (xEventGroupGetBits(s_net_events) & NET_SNTP_SYNCED_BIT)) {
+        xTimerStop(t, 0);
+        return;
+    }
+    ESP_LOGW(TAG, "SNTP: Wiederhole Sync-Versuch...");
+    esp_sntp_restart();
+}
+
 void hannah_net_init(void)
 {
     wifi_driver_init();
@@ -560,7 +586,10 @@ void hannah_net_init(void)
         };
         esp_netif_sntp_init(&sntp_cfg);
         s_sntp_started = true;
-        ESP_LOGI(TAG, "SNTP gestartet (DHCP-NTP bevorzugt, Fallback: pool.ntp.org).");
+        s_net_events = xEventGroupCreate();
+        esp_sntp_set_time_sync_notification_cb(sntp_sync_cb);
+        s_sntp_retry = xTimerCreate("sntp_retry", pdMS_TO_TICKS(30000), pdTRUE, NULL, sntp_retry_cb);
+        ESP_LOGI(TAG, "SNTP gestartet (DHCP-NTP bevorzugt, Fallback: pool.ntp.org, Retry: 30s).");
         wifi_start_sta();
     } else {
         ESP_LOGW(TAG, "Keine WiFi-Config — starte AP-Modus.");
@@ -668,15 +697,15 @@ void hannah_net_publish_volume(int vol)
 
 bool hannah_net_wait_sntp(uint32_t timeout_ms)
 {
-    if (s_ap_mode || !s_sntp_started) return false;
-    esp_err_t ret = esp_netif_sntp_sync_wait(pdMS_TO_TICKS(timeout_ms));
-    if (ret == ESP_OK) {
-        time_t now; time(&now);
-        ESP_LOGI(TAG, "SNTP sync OK: %s", ctime(&now));
-    } else {
+    if (s_ap_mode || !s_sntp_started || !s_net_events) return false;
+    EventBits_t bits = xEventGroupWaitBits(s_net_events, NET_SNTP_SYNCED_BIT,
+                                           pdFALSE, pdTRUE,
+                                           pdMS_TO_TICKS(timeout_ms));
+    if (!(bits & NET_SNTP_SYNCED_BIT)) {
         ESP_LOGW(TAG, "SNTP sync timeout nach %lu ms.", timeout_ms);
+        return false;
     }
-    return ret == ESP_OK;
+    return true;
 }
 
 void hannah_net_mqtt_publish(const char *topic, const char *payload, int qos, int retain)

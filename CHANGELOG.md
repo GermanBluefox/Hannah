@@ -5,6 +5,12 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.8
+### Satellite Firmware
+* Fixed: `CONFIG_LWIP_SNTP_MAX_SERVERS=2` added — without it, pool.ntp.org (at slot 1) was silently dropped because lwIP only allocated one server slot; now DHCP NTP (slot 0) and pool.ntp.org (slot 1) are both active
+* Improved: `hannah_net_wait_sntp()` now uses an EventGroup bit instead of `esp_netif_sntp_sync_wait` — fixes immediate return on second call; bit stays set after sync so all subsequent callers return instantly
+* Improved: after WiFi gets IP, a 30s repeating FreeRTOS timer calls `esp_sntp_restart()` until SNTP is synced
+
 ## 0.24.7
 ### Satellite Firmware
 * Fixed: SNTP init moved from `IP_EVENT_STA_GOT_IP` handler to `hannah_net_init()` — previously SNTP registered its `renew_servers_after_new_IP` event handler *after* the IP event already fired, so the DHCP-provided NTP server (Option 42) was never picked up; now the handler is registered before WiFi connects

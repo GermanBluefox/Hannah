@@ -1957,11 +1957,14 @@ func (x *ProxyAck) GetMessage() string {
 
 // Hannah instructs the proxy to play TTS audio on a specific satellite.
 // Used for announcements and other server-initiated audio.
+// For streaming: Hannah sends multiple PlayAudioCommands with chunks of PCM.
+// is_last=true on the final chunk signals the proxy to send tts_end to the satellite.
 type PlayAudioCommand struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`        // satellite device name (as registered via UDP or proxy)
 	AudioPcm      []byte                 `protobuf:"bytes,2,opt,name=audio_pcm,json=audioPcm,proto3" json:"audio_pcm,omitempty"`        // raw PCM, 16-bit signed mono
 	SampleRate    int32                  `protobuf:"varint,3,opt,name=sample_rate,json=sampleRate,proto3" json:"sample_rate,omitempty"` // e.g. 24000 (Azure) or 16000 (Piper)
+	IsLast        bool                   `protobuf:"varint,4,opt,name=is_last,json=isLast,proto3" json:"is_last,omitempty"`             // true on the last chunk of a TTS response
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2015,6 +2018,13 @@ func (x *PlayAudioCommand) GetSampleRate() int32 {
 		return x.SampleRate
 	}
 	return 0
+}
+
+func (x *PlayAudioCommand) GetIsLast() bool {
+	if x != nil {
+		return x.IsLast
+	}
+	return false
 }
 
 // Sent by the proxy when a satellite has finished recording an utterance.
@@ -5160,12 +5170,13 @@ const file_hannah_proto_rawDesc = "" +
 	"\acommand\"G\n" +
 	"\bProxyAck\x12!\n" +
 	"\fudp_disabled\x18\x01 \x01(\bR\vudpDisabled\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"m\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x86\x01\n" +
 	"\x10PlayAudioCommand\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x1b\n" +
 	"\taudio_pcm\x18\x02 \x01(\fR\baudioPcm\x12\x1f\n" +
 	"\vsample_rate\x18\x03 \x01(\x05R\n" +
-	"sampleRate\"\xb8\x01\n" +
+	"sampleRate\x12\x17\n" +
+	"\ais_last\x18\x04 \x01(\bR\x06isLast\"\xb8\x01\n" +
 	"\x1bSubmitSatelliteAudioRequest\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
 	"\x04room\x18\x02 \x01(\tR\x04room\x12\x1b\n" +

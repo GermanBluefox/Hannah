@@ -154,11 +154,14 @@ func main() {
 	// - receives PlayAudioCommand for server-initiated announcements
 	// - onReady: fires when Hannah's ProxyAck arrives → safe to bind UDP now
 	go hannahClient.RunProxy(ctx, cfg.ProxyID, cfg.UDP.AdvertiseHost, int32(udpPort),
-		func(deviceID string, pcm []byte, sampleRate int32) {
-			slog.Info("announcement from Hannah", "device", deviceID, "bytes", len(pcm))
+		func(deviceID string, pcm []byte, sampleRate int32, isLast bool) {
 			udpServer.SendStatus(deviceID, "speaking")
-			udpServer.SendTTS(deviceID, pcm, int(sampleRate))
-			udpServer.SendStatus(deviceID, "idle")
+			udpServer.SendTTSChunk(deviceID, pcm)
+			if isLast {
+				udpServer.SendTTSEnd(deviceID, int(sampleRate))
+				udpServer.SendStatus(deviceID, "idle")
+				slog.Info("announcement complete", "device", deviceID)
+			}
 		},
 		func() {
 			if err := udpServer.Start(); err != nil {

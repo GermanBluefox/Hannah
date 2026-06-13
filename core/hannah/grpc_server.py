@@ -159,17 +159,50 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             return dict(self._proxy_satellites)
 
     def push_audio_to_proxy(self, device_id: str, pcm: bytes, sample_rate: int):
-        """Push a PlayAudioCommand to all connected proxy streams."""
+        """Push a single PlayAudioCommand (full PCM, is_last=True) to all connected proxy streams."""
         cmd = pb.ProxyCommand(
             play_audio=pb.PlayAudioCommand(
                 device_id=device_id,
                 audio_pcm=pcm,
                 sample_rate=sample_rate,
+                is_last=True,
             )
         )
         with self._proxy_lock:
             for q in list(self._proxy_queues):
                 q.put(cmd)
+
+    def stream_audio_to_proxy(self, device_id: str, pcm: bytes, sample_rate: int,
+                               chunk_size: int = 4800):
+        """Slice PCM into chunks and push one PlayAudioCommand per chunk.
+
+        Chunks arrive at the proxy in order; the proxy forwards each to the satellite
+        immediately so playback can start before the full TTS response is sent.
+        chunk_size=4800 ≈ 100ms @ 24kHz 16-bit mono.
+        """
+        if not pcm:
+            return
+        with self._proxy_lock:
+            queues = list(self._proxy_queues)
+        if not queues:
+            return
+        offset = 0
+        total = len(pcm)
+        while offset < total:
+            end = min(offset + chunk_size, total)
+            chunk = pcm[offset:end]
+            is_last = end >= total
+            cmd = pb.ProxyCommand(
+                play_audio=pb.PlayAudioCommand(
+                    device_id=device_id,
+                    audio_pcm=chunk,
+                    sample_rate=sample_rate,
+                    is_last=is_last,
+                )
+            )
+            for q in queues:
+                q.put(cmd)
+            offset = end
 
     # ------------------------------------------------------------------
     # Public: push an event to all matching subscribers

@@ -163,18 +163,14 @@ func (s *Server) SendStatus(device, state string) {
 	s.sendControl(map[string]any{"type": "status", "state": state}, sat.ttsAddr)
 }
 
-// SendTTS sends raw PCM audio to a registered satellite in ≤60 KB chunks,
-// followed by a tts_end control message.
-func (s *Server) SendTTS(device string, pcm []byte, sampleRate int) {
+// SendTTSChunk sends a single PCM chunk to a registered satellite (≤ttsChunk bytes per UDP packet).
+// Does not send tts_end — call SendTTSEnd when the last chunk is delivered.
+func (s *Server) SendTTSChunk(device string, pcm []byte) {
 	s.mu.Lock()
 	sat := s.satellites[device]
 	conn := s.conn
 	s.mu.Unlock()
-	if sat == nil {
-		slog.Warn("SendTTS: satellite not registered", "device", device)
-		return
-	}
-	if conn == nil {
+	if sat == nil || conn == nil {
 		return
 	}
 	for offset := 0; offset < len(pcm); offset += ttsChunk {
@@ -185,8 +181,31 @@ func (s *Server) SendTTS(device string, pcm []byte, sampleRate int) {
 		pkt := append([]byte{typeTTS}, pcm[offset:end]...)
 		conn.WriteToUDP(pkt, sat.ttsAddr) //nolint:errcheck
 	}
-	time.Sleep(300 * time.Millisecond)
+}
+
+// SendTTSEnd sends a tts_end control message to signal the satellite that playback is complete.
+func (s *Server) SendTTSEnd(device string, sampleRate int) {
+	s.mu.Lock()
+	sat := s.satellites[device]
+	s.mu.Unlock()
+	if sat == nil {
+		return
+	}
 	s.sendControl(map[string]any{"type": "tts_end", "sample_rate": sampleRate}, sat.ttsAddr)
+}
+
+// SendTTS sends raw PCM audio to a registered satellite followed by a tts_end control message.
+// Kept for the SubmitSatelliteAudio response path where the full blob arrives at once.
+func (s *Server) SendTTS(device string, pcm []byte, sampleRate int) {
+	s.mu.Lock()
+	sat := s.satellites[device]
+	s.mu.Unlock()
+	if sat == nil {
+		slog.Warn("SendTTS: satellite not registered", "device", device)
+		return
+	}
+	s.SendTTSChunk(device, pcm)
+	s.SendTTSEnd(device, sampleRate)
 	slog.Info("TTS sent", "device", device, "bytes", len(pcm), "sample_rate", sampleRate)
 }
 

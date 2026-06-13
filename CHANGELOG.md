@@ -5,6 +5,17 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.25.0
+### Core
+* Added: `stream_audio_to_proxy()` — slices full TTS PCM into ~100ms chunks (4800 bytes @ 24kHz) and sends each as a separate `PlayAudioCommand` with `is_last=true` on the final chunk; reduces satellite startup latency from full Azure response time to first chunk arrival
+
+### Proxy
+* Added: `SendTTSChunk()` / `SendTTSEnd()` on the UDP server — proxy forwards each `PlayAudioCommand` chunk immediately without buffering; `tts_end` is sent only when `is_last=true`; removed 300ms sleep before `tts_end`
+* Changed: `PlayAudioFunc` callback is now synchronous (no goroutine) to preserve chunk order within the gRPC stream
+
+### Proto
+* Changed: `PlayAudioCommand` — added `bool is_last = 4`; signals the proxy to send `tts_end` after the final chunk
+
 ## 0.24.13
 ### Satellite Firmware
 * Added: Asset Server URL and Token fields to the satellite settings web interface (`/settings`) — token inputs are write-only (password type); submitting an empty token field leaves the stored value unchanged

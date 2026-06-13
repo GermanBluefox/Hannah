@@ -13,8 +13,9 @@ import (
 )
 
 // PlayAudioFunc is called when Hannah pushes a PlayAudioCommand via the proxy stream.
-// The proxy should play pcm (raw 16-bit signed mono) on the given satellite.
-type PlayAudioFunc func(deviceID string, pcm []byte, sampleRate int32)
+// isLast is true on the final chunk of a TTS response — the proxy should send tts_end after it.
+// Calls are serialised (no concurrent invocations for the same stream), so chunks arrive in order.
+type PlayAudioFunc func(deviceID string, pcm []byte, sampleRate int32, isLast bool)
 
 // Client is a gRPC client to Hannah Core.
 type Client struct {
@@ -136,9 +137,11 @@ func (c *Client) runProxyOnce(ctx context.Context, proxyID, udpHost string, udpP
 				slog.Info("PlayAudioCommand received",
 					"device", v.PlayAudio.DeviceId,
 					"bytes", len(v.PlayAudio.AudioPcm),
-					"sample_rate", v.PlayAudio.SampleRate)
+					"sample_rate", v.PlayAudio.SampleRate,
+					"is_last", v.PlayAudio.IsLast)
 				if onPlayAudio != nil {
-					go onPlayAudio(v.PlayAudio.DeviceId, v.PlayAudio.AudioPcm, v.PlayAudio.SampleRate)
+					// Synchronous — preserves chunk order within the stream.
+					onPlayAudio(v.PlayAudio.DeviceId, v.PlayAudio.AudioPcm, v.PlayAudio.SampleRate, v.PlayAudio.IsLast)
 				}
 			}
 		}

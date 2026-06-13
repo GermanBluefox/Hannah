@@ -473,8 +473,8 @@ def main():
     def _send_audio(target: str, pcm: bytes, rate: int, label: str = ""):
         """Sendet PCM an einen Satelliten."""
         if grpc_servicer.has_proxy():
-            grpc_servicer.push_audio_to_proxy(target, pcm, rate)
-            log.info(f"{label}Announcement → {target} (via Proxy)")
+            grpc_servicer.stream_audio_to_proxy(target, pcm, rate)
+            log.info(f"{label}Announcement → {target} (via Proxy, streamed)")
         else:
             udp_server.send_tts(target, pcm, sample_rate=rate)
             log.info(f"{label}Announcement → {target} (via UDP)")

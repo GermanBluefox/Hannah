@@ -339,10 +339,13 @@ message ProxyAck {
 
 // Hannah instructs the proxy to play TTS audio on a specific satellite.
 // Used for announcements and other server-initiated audio.
+// For streaming: Hannah sends multiple PlayAudioCommands with chunks of PCM.
+// is_last=true on the final chunk signals the proxy to send tts_end to the satellite.
 message PlayAudioCommand {
   string device_id   = 1;  // satellite device name (as registered via UDP or proxy)
   bytes  audio_pcm   = 2;  // raw PCM, 16-bit signed mono
   int32  sample_rate = 3;  // e.g. 24000 (Azure) or 16000 (Piper)
+  bool   is_last     = 4;  // true on the last chunk of a TTS response
 }
 
 // Sent by the proxy when a satellite has finished recording an utterance.

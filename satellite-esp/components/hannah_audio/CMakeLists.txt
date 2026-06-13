@@ -13,4 +13,5 @@ idf_component_register(
         hannah_net
         hannah_led
         hannah_wakeword
+        esp_ringbuf
 )

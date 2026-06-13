@@ -26,7 +26,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
+#include "freertos/ringbuf.h"
 #include "driver/gpio.h"
 #include "driver/i2s_std.h"
 #if CONFIG_HANNAH_MIC_TYPE_PDM
@@ -51,8 +51,8 @@ static const char *TAG = "hannah_audio";
 
 /* VAD_SILENCE_FRAMES wird zur Laufzeit aus hannah_config_get()->vad_silence_ms berechnet */
 
-/* Speaker-Queue */
-#define SPK_QUEUE_DEPTH 256
+/* Speaker-Ring-Buffer (PSRAM, NOSPLIT — kein malloc/free pro Chunk) */
+#define SPK_RINGBUF_SIZE (128 * 1024)
 
 /* Mic-Warmup: erste Frames nach Boot verwerfen (PDM-Transienten, Fehlauslöser) */
 #define WARMUP_FRAMES 500  /* 500 × 10ms = 5s */
@@ -60,11 +60,11 @@ static const char *TAG = "hannah_audio";
 /* ------------------------------------------------------------------ */
 /* Typen                                                                 */
 
+/* Ring-Buffer-Item: Header + inline PCM. len==0 → End-Sentinel. */
 typedef struct {
-    uint8_t *data;
-    size_t   len;
-    bool     is_end;
-} spk_chunk_t;
+    uint32_t len;
+    uint8_t  data[];  /* flexible array — len Bytes PCM folgen direkt */
+} spk_rb_item_t;
 
 typedef enum {
     AUDIO_STATE_IDLE,
@@ -76,7 +76,7 @@ typedef enum {
 
 static i2s_chan_handle_t s_rx_chan    = NULL;
 static i2s_chan_handle_t s_tx_chan    = NULL;
-static QueueHandle_t     s_spk_queue = NULL;
+static RingbufHandle_t   s_spk_ringbuf = NULL;
 static volatile bool     s_ptt_active        = false;
 static volatile bool     s_streaming_paused  = false;
 static volatile bool     s_wakeword_paused   = false;
@@ -466,11 +466,13 @@ static void mic_task(void *arg)
 #if CONFIG_HANNAH_SPEAKER_ENABLED
 static void speaker_task(void *arg)
 {
-    spk_chunk_t chunk;
     bool was_speaking = false;
     ESP_LOGI(TAG, "Speaker-Task gestartet.");
     while (1) {
-        if (xQueueReceive(s_spk_queue, &chunk, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        size_t item_size;
+        spk_rb_item_t *item = xRingbufferReceive(s_spk_ringbuf, &item_size,
+                                                   pdMS_TO_TICKS(1000));
+        if (!item) {
             /* Timeout — keine neuen Chunks seit 1s → TTS abgeschlossen */
             if (was_speaking) {
                 was_speaking = false;
@@ -480,33 +482,33 @@ static void speaker_task(void *arg)
             }
             continue;
         }
-        if (chunk.is_end) {
-            /* DMA-Buffer drainieren: 8 Descriptors × 640 Frames × 2 Bytes = 10240 Bytes Stille */
+        if (item->len == 0) {
+            /* End-Sentinel: DMA-Buffer drainieren */
             static const uint8_t silence[8 * STEP_SAMPLES * 4 * 2] = {0};
             size_t written;
             i2s_channel_write(s_tx_chan, silence, sizeof(silence),
                               &written, portMAX_DELAY);
+            vRingbufferReturnItem(s_spk_ringbuf, item);
             was_speaking = false;
             s_speaking_active = false;
             if (!s_sampling_mode)
                 hannah_led_set_state(LED_STATE_IDLE);
             continue;
         }
-        if (!chunk.data) continue;
         was_speaking = true;
         s_speaking_active = true;
-        /* Lautstärke-Skalierung */
+        /* Lautstärke-Skalierung in-place (Ring-Buffer-Speicher ist schreibbar) */
         int vol = s_volume;
         if (vol < 100) {
-            int16_t *samples = (int16_t *)chunk.data;
-            size_t count = chunk.len / 2;
+            int16_t *samples = (int16_t *)item->data;
+            size_t count = item->len / 2;
             for (size_t i = 0; i < count; i++)
                 samples[i] = (int16_t)(((int32_t)samples[i] * vol) / 100);
         }
         size_t written;
-        i2s_channel_write(s_tx_chan, chunk.data, chunk.len,
+        i2s_channel_write(s_tx_chan, item->data, item->len,
                           &written, pdMS_TO_TICKS(500));
-        free(chunk.data);
+        vRingbufferReturnItem(s_spk_ringbuf, item);
     }
 }
 #endif /* CONFIG_HANNAH_SPEAKER_ENABLED */
@@ -590,7 +592,12 @@ static void on_volume_set(int vol)
 void hannah_audio_init(void)
 {
 #if CONFIG_HANNAH_SPEAKER_ENABLED
-    s_spk_queue = xQueueCreate(SPK_QUEUE_DEPTH, sizeof(spk_chunk_t));
+    s_spk_ringbuf = xRingbufferCreateWithCaps(SPK_RINGBUF_SIZE, RINGBUF_TYPE_NOSPLIT,
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_spk_ringbuf) {
+        ESP_LOGW(TAG, "PSRAM Ring-Buffer fehlgeschlagen — verwende DRAM (32KB)");
+        s_spk_ringbuf = xRingbufferCreate(32 * 1024, RINGBUF_TYPE_NOSPLIT);
+    }
     speaker_init();
 #endif
 #if !CONFIG_HANNAH_MIC_TYPE_NONE
@@ -689,34 +696,43 @@ void hannah_audio_init(void)
 
 void hannah_audio_play(const uint8_t *pcm, size_t len, int sample_rate)
 {
-    if (!s_spk_queue || !pcm || len == 0) return;
-    if (s_sampling_mode && !s_sampling_hey_hannah) return;  /* Im Noise-Capture-Modus kein Speaker-Output */
-    uint8_t *copy = malloc(len);
-    if (!copy) { ESP_LOGW(TAG, "play: kein Speicher"); return; }
-    memcpy(copy, pcm, len);
-    spk_chunk_t chunk = {.data = copy, .len = len, .is_end = false};
-    if (xQueueSend(s_spk_queue, &chunk, pdMS_TO_TICKS(2000)) != pdTRUE) {
-        ESP_LOGW(TAG, "Speaker-Queue voll — Chunk verworfen.");
-        free(copy);
+    if (!s_spk_ringbuf || !pcm || len == 0) return;
+    if (s_sampling_mode && !s_sampling_hey_hannah) return;
+    spk_rb_item_t *item;
+    if (xRingbufferSendAcquire(s_spk_ringbuf, (void **)&item,
+                                sizeof(spk_rb_item_t) + len,
+                                pdMS_TO_TICKS(2000)) != pdTRUE) {
+        ESP_LOGW(TAG, "play: Ring-Buffer voll — Chunk verworfen.");
+        return;
     }
+    item->len = (uint32_t)len;
+    memcpy(item->data, pcm, len);
+    xRingbufferSendComplete(s_spk_ringbuf, item);
 }
 
 void hannah_audio_play_end(void)
 {
-    if (!s_spk_queue) return;
-    spk_chunk_t sentinel = {.data = NULL, .len = 0, .is_end = true};
-    xQueueSend(s_spk_queue, &sentinel, pdMS_TO_TICKS(50));
+    if (!s_spk_ringbuf) return;
+    spk_rb_item_t *item;
+    if (xRingbufferSendAcquire(s_spk_ringbuf, (void **)&item,
+                                sizeof(spk_rb_item_t),
+                                pdMS_TO_TICKS(50)) != pdTRUE) {
+        ESP_LOGW(TAG, "play_end: Ring-Buffer voll — Sentinel verworfen.");
+        return;
+    }
+    item->len = 0;  /* sentinel: len==0 signalisiert End-of-Stream */
+    xRingbufferSendComplete(s_spk_ringbuf, item);
 }
 
 void hannah_audio_stop(void)
 {
     s_streaming_paused = false;
-    /* Speaker-Queue leeren */
-    if (s_spk_queue) {
-        spk_chunk_t chunk;
-        while (xQueueReceive(s_spk_queue, &chunk, 0) == pdTRUE) {
-            if (chunk.data) free(chunk.data);
-        }
+    /* Ring-Buffer drainieren */
+    if (s_spk_ringbuf) {
+        size_t item_size;
+        void *item;
+        while ((item = xRingbufferReceive(s_spk_ringbuf, &item_size, 0)) != NULL)
+            vRingbufferReturnItem(s_spk_ringbuf, item);
     }
     if (!s_sampling_mode)
         hannah_led_set_state(LED_STATE_IDLE);

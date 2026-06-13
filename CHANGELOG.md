@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.25.1
+### Satellite Firmware
+* Changed: Speaker audio buffering replaced per-chunk `malloc`/`free` with a FreeRTOS `RINGBUF_TYPE_NOSPLIT` ring buffer (128 KB in PSRAM, 32 KB DRAM fallback) — `hannah_audio_play()` uses `xRingbufferSendAcquire`/`xRingbufferSendComplete` to write directly into the ring buffer without heap allocation; `speaker_task` uses `pvRingbufferReceive`/`vRingbufferReturnItem`; end-of-stream signalled by a sentinel item with `len=0`
+
 ## 0.25.0
 ### Core
 * Added: `stream_audio_to_proxy()` — slices full TTS PCM into ~100ms chunks (4800 bytes @ 24kHz) and sends each as a separate `PlayAudioCommand` with `is_last=true` on the final chunk; reduces satellite startup latency from full Azure response time to first chunk arrival

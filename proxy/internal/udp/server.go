@@ -164,8 +164,10 @@ func (s *Server) SendStatus(device, state string) {
 }
 
 // SendTTSChunk sends a single PCM chunk to a registered satellite (≤ttsChunk bytes per UDP packet).
+// Packets are throttled to playback rate so the satellite's lwIP socket buffer does not overflow
+// on long TTS responses (without throttling all packets arrive in a burst and most are dropped).
 // Does not send tts_end — call SendTTSEnd when the last chunk is delivered.
-func (s *Server) SendTTSChunk(device string, pcm []byte) {
+func (s *Server) SendTTSChunk(device string, pcm []byte, sampleRate int) {
 	s.mu.Lock()
 	sat := s.satellites[device]
 	conn := s.conn
@@ -173,13 +175,19 @@ func (s *Server) SendTTSChunk(device string, pcm []byte) {
 	if sat == nil || conn == nil {
 		return
 	}
+	const bytesPerSample = 2 // 16-bit mono
 	for offset := 0; offset < len(pcm); offset += ttsChunk {
 		end := offset + ttsChunk
 		if end > len(pcm) {
 			end = len(pcm)
 		}
-		pkt := append([]byte{typeTTS}, pcm[offset:end]...)
+		chunk := pcm[offset:end]
+		pkt := append([]byte{typeTTS}, chunk...)
 		conn.WriteToUDP(pkt, sat.ttsAddr) //nolint:errcheck
+		// Sleep proportional to the audio duration of this chunk so the satellite
+		// receives packets at roughly the playback rate, keeping its ring buffer
+		// topped up without overflowing the socket receive buffer.
+		time.Sleep(time.Duration(len(chunk)) * time.Second / time.Duration(sampleRate*bytesPerSample))
 	}
 }
 
@@ -204,7 +212,7 @@ func (s *Server) SendTTS(device string, pcm []byte, sampleRate int) {
 		slog.Warn("SendTTS: satellite not registered", "device", device)
 		return
 	}
-	s.SendTTSChunk(device, pcm)
+	s.SendTTSChunk(device, pcm, sampleRate)
 	s.SendTTSEnd(device, sampleRate)
 	slog.Info("TTS sent", "device", device, "bytes", len(pcm), "sample_rate", sampleRate)
 }

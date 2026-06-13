@@ -51,8 +51,9 @@ static const char *TAG = "hannah_audio";
 
 /* VAD_SILENCE_FRAMES wird zur Laufzeit aus hannah_config_get()->vad_silence_ms berechnet */
 
-/* Speaker-Ring-Buffer (PSRAM, NOSPLIT — kein malloc/free pro Chunk) */
-#define SPK_RINGBUF_SIZE (128 * 1024)
+/* Speaker-Ring-Buffer (internes DRAM, NOSPLIT — kein malloc/free pro Chunk)
+ * 32KB ≈ ~22 Chunks × 29ms @ 24kHz = ~640ms Buffer — I2S-DMA braucht cache-kohärenten Speicher */
+#define SPK_RINGBUF_SIZE (32 * 1024)
 
 /* Mic-Warmup: erste Frames nach Boot verwerfen (PDM-Transienten, Fehlauslöser) */
 #define WARMUP_FRAMES 500  /* 500 × 10ms = 5s */
@@ -592,12 +593,8 @@ static void on_volume_set(int vol)
 void hannah_audio_init(void)
 {
 #if CONFIG_HANNAH_SPEAKER_ENABLED
-    s_spk_ringbuf = xRingbufferCreateWithCaps(SPK_RINGBUF_SIZE, RINGBUF_TYPE_NOSPLIT,
-                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!s_spk_ringbuf) {
-        ESP_LOGW(TAG, "PSRAM Ring-Buffer fehlgeschlagen — verwende DRAM (32KB)");
-        s_spk_ringbuf = xRingbufferCreate(32 * 1024, RINGBUF_TYPE_NOSPLIT);
-    }
+    /* Internes DRAM — I2S-DMA benötigt cache-kohärenten Speicher; PSRAM ist nicht geeignet. */
+    s_spk_ringbuf = xRingbufferCreate(SPK_RINGBUF_SIZE, RINGBUF_TYPE_NOSPLIT);
     speaker_init();
 #endif
 #if !CONFIG_HANNAH_MIC_TYPE_NONE

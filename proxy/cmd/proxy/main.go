@@ -156,7 +156,7 @@ func main() {
 	go hannahClient.RunProxy(ctx, cfg.ProxyID, cfg.UDP.AdvertiseHost, int32(udpPort),
 		func(deviceID string, pcm []byte, sampleRate int32, isLast bool) {
 			udpServer.SendStatus(deviceID, "speaking")
-			udpServer.SendTTSChunk(deviceID, pcm)
+			udpServer.SendTTSChunk(deviceID, pcm, int(sampleRate))
 			if isLast {
 				udpServer.SendTTSEnd(deviceID, int(sampleRate))
 				udpServer.SendStatus(deviceID, "idle")

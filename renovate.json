@@ -7,15 +7,14 @@
   "git-submodules": {
     "enabled": true
   },
+  "labels": [
+    "renovate"
+  ],
+  "assignees": [
+    "NurPech"
+  ],
   "dependencyDashboard": true,
   "osvVulnerabilityAlerts": true,
-  "vulnerabilityAlerts": {
-    "enabled": true,
-    "labels": [
-      "security"
-    ],
-    "automerge": true
-  },
   "packageRules": [
     {
       "matchDepTypes": [
@@ -30,12 +29,29 @@
       "commitMessagePrefix": "chore(dev-deps):"
     },
     {
-      "matchUpdateTypes": ["patch", "pin"],
+      "matchManagers": [
+        "git-submodules"
+      ],
+      "commitMessagePrefix": "chore(submodule):"
+    },
+    {
+      "matchUpdateTypes": [
+        "patch",
+        "pin"
+      ],
       "minimumReleaseAge": "3 days",
       "automerge": true
     },
     {
-      "matchUpdateTypes": ["digest"],
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "matchManagers": [
+        "npm",
+        "gomod",
+        "cargo",
+        "dockerfile"
+      ],
       "automerge": true
     }
   ]

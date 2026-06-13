@@ -122,7 +122,7 @@ static char *fetch_manifest(void)
     esp_http_client_config_t cfg = {
         .url        = url,
         .timeout_ms = 10000,
-        .crt_bundle_attach = esp_crt_bundle_attach,
+        .crt_bundle_attach = hannah_config_get()->tls_skip_verify ? NULL : esp_crt_bundle_attach,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     set_auth_header(client);
@@ -166,7 +166,7 @@ static bool download_asset(const char *asset_id)
         .url         = url,
         .timeout_ms  = 60000,
         .buffer_size = 4096,
-        .crt_bundle_attach = esp_crt_bundle_attach,
+        .crt_bundle_attach = hannah_config_get()->tls_skip_verify ? NULL : esp_crt_bundle_attach,
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     set_auth_header(client);

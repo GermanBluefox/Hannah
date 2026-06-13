@@ -196,10 +196,10 @@ static esp_err_t status_handler(httpd_req_t *req)
 static esp_err_t settings_get_handler(httpd_req_t *req)
 {
     const hannah_config_t *cfg = hannah_config_get();
-    char *buf = malloc(5120);
+    char *buf = malloc(6144);
     if (!buf) return ESP_ERR_NO_MEM;
 
-    int n = snprintf(buf, 5120,
+    int n = snprintf(buf, 6144,
         "%s<h1>Einstellungen</h1>"
         "<form method=post action=/settings>"
         "<h3>WiFi</h3>"
@@ -228,6 +228,13 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         "<h3>Firmware</h3>"
         "<label>Update-Server URL<input name=ota_url value='%s'></label>"
         "<label>Update-Channel<input name=ota_channel value='%s' placeholder='(leer = stable)'></label>"
+        "<label>Update-Server Token<input type=password name=ota_token placeholder='(unverändert lassen)'></label>"
+        "<h3>Asset Server</h3>"
+        "<label>URL<input name=asset_url value='%s'></label>"
+        "<label>Token<input type=password name=asset_token placeholder='(unverändert lassen)'></label>"
+        "<h3>Sicherheit</h3>"
+        "<label><input type=checkbox name=tls_skip_verify value=1%s> "
+          "TLS-Zertifikatsprüfung deaktivieren <span style='color:#c00'>(unsicher)</span></label>"
         "<br><button type=submit class=btn>Speichern &amp; Neustart</button>"
         "</form>"
         "<script>"
@@ -264,6 +271,8 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         cfg->vad_silence_ms,
         cfg->ota_url,
         cfg->ota_channel,
+        cfg->asset_url,
+        cfg->tls_skip_verify ? " checked" : "",
         S_FOOT);
 
     httpd_resp_set_type(req, "text/html");
@@ -276,7 +285,7 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
 
 static esp_err_t settings_post_handler(httpd_req_t *req)
 {
-    if (req->content_len > 1536) {
+    if (req->content_len > 2048) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body too large");
         return ESP_FAIL;
     }
@@ -311,6 +320,14 @@ static esp_err_t settings_post_handler(httpd_req_t *req)
 
     form_get(body, "ota_url",     new_cfg.ota_url,     sizeof(new_cfg.ota_url));
     form_get(body, "ota_channel", new_cfg.ota_channel, sizeof(new_cfg.ota_channel));
+    form_get(body, "asset_url",   new_cfg.asset_url,   sizeof(new_cfg.asset_url));
+
+    char tok[128] = {0};
+    if (form_get(body, "ota_token",   tok, sizeof(tok)) && tok[0])
+        strncpy(new_cfg.ota_token,   tok, sizeof(new_cfg.ota_token)   - 1);
+    memset(tok, 0, sizeof(tok));
+    if (form_get(body, "asset_token", tok, sizeof(tok)) && tok[0])
+        strncpy(new_cfg.asset_token, tok, sizeof(new_cfg.asset_token) - 1);
 
     char vad_str[8] = {0};
     if (form_get(body, "vad_ms", vad_str, sizeof(vad_str))) {
@@ -323,6 +340,10 @@ static esp_err_t settings_post_handler(httpd_req_t *req)
         int t = atoi(thr_str);
         if (t >= 0 && t <= 100) new_cfg.wakeword_threshold = (uint8_t)t;
     }
+
+    /* Checkbox: nur im Body wenn angehakt; fehlt = abgehakt */
+    char skip_str[4] = {0};
+    new_cfg.tls_skip_verify = form_get(body, "tls_skip_verify", skip_str, sizeof(skip_str));
 
     free(body);
     hannah_config_save(&new_cfg);

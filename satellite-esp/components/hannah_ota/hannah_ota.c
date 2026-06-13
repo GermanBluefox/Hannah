@@ -145,7 +145,7 @@ static void check_for_update(void)
     esp_http_client_config_t http_cfg = {
         .url               = url,
         .event_handler     = http_event_handler,
-        .crt_bundle_attach = esp_crt_bundle_attach,
+        .crt_bundle_attach = hannah_config_get()->tls_skip_verify ? NULL : esp_crt_bundle_attach,
         .timeout_ms        = 10000,
     };
 
@@ -273,7 +273,7 @@ static void ota_update_task(void *arg)
 
         esp_http_client_config_t http_cfg = {
             .url               = s_pending_url,
-            .crt_bundle_attach = esp_crt_bundle_attach,
+            .crt_bundle_attach = hannah_config_get()->tls_skip_verify ? NULL : esp_crt_bundle_attach,
             .timeout_ms        = 60000,
             .keep_alive_enable = true,
             .buffer_size       = 4096,

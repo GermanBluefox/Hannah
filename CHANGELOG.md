@@ -5,6 +5,12 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.24.13
+### Satellite Firmware
+* Added: Asset Server URL and Token fields to the satellite settings web interface (`/settings`) — token inputs are write-only (password type); submitting an empty token field leaves the stored value unchanged
+* Added: Update Server Token field to the satellite settings web interface — same write-only behaviour
+* Added: "Disable TLS certificate validation" checkbox in settings web interface — stored in NVS (`tls_skip`), default off; when enabled, `crt_bundle_attach` is omitted so ESP-IDF skips chain verification (useful for self-signed certificates)
+
 ## 0.24.12
 ### Satellite Firmware
 * Fixed: `hannah_asset` now verifies the SHA256 of a downloaded asset against the manifest before caching it — previously an aborted partial download (e.g. 512 bytes from a dropped TLS connection) was accepted as valid (`total > 0`), its manifest hash stored in NVS, and the corrupt file served forever; mismatching files are now discarded and re-fetched on the next cycle (SHA256 via PSA Crypto API, mbedTLS 4.x compatible)

@@ -37,6 +37,7 @@ void hannah_config_init(void)
         snprintf(s_cfg.mqtt_pass,   sizeof(s_cfg.mqtt_pass),   "%s", CONFIG_HANNAH_MQTT_PASS);
         snprintf(s_cfg.asset_url,   sizeof(s_cfg.asset_url),   "%s", CONFIG_HANNAH_ASSET_SERVER_URL);
         snprintf(s_cfg.asset_token, sizeof(s_cfg.asset_token), "%s", CONFIG_HANNAH_ASSET_SERVER_TOKEN);
+        s_cfg.tls_skip_verify = false;
 #ifdef CONFIG_HANNAH_WAKEWORD_THRESHOLD
         s_cfg.wakeword_threshold = CONFIG_HANNAH_WAKEWORD_THRESHOLD;
 #else
@@ -75,6 +76,10 @@ void hannah_config_init(void)
     NVS_STR(h, "ota_token",   ota_token,   CONFIG_HANNAH_OTA_TOKEN);
     NVS_STR(h, "asset_url",   asset_url,   CONFIG_HANNAH_ASSET_SERVER_URL);
     NVS_STR(h, "asset_token", asset_token, CONFIG_HANNAH_ASSET_SERVER_TOKEN);
+
+    uint8_t tls_skip = 0;
+    nvs_get_u8(h, "tls_skip", &tls_skip);
+    s_cfg.tls_skip_verify = (bool)tls_skip;
 
     nvs_close(h);
 
@@ -119,6 +124,7 @@ void hannah_config_save(const hannah_config_t *cfg)
     nvs_set_str(h, "ota_token",    cfg->ota_token);
     nvs_set_str(h, "asset_url",    cfg->asset_url);
     nvs_set_str(h, "asset_token",  cfg->asset_token);
+    nvs_set_u8 (h, "tls_skip",    (uint8_t)cfg->tls_skip_verify);
 
     nvs_commit(h);
     nvs_close(h);

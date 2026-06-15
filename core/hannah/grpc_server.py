@@ -82,6 +82,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_agent_send_residents: Optional[Callable[[Iterable[pb.AgentResident]], None]] = None,
         on_trigger_firmware_update: Optional[Callable[[str], None]] = None,  # (device)
         on_timer_fired: Optional[Callable[[str, str], None]] = None,          # (timer_id, label)
+        on_timer_list: Optional[Callable[[list], None]] = None,               # (list[TimerInfo])
         on_timer_connected: Optional[Callable[[], None]] = None,
         on_set_capture: Optional[Callable[[str, bool, str], None]] = None,     # (device_id, enabled, sample_type) — set DND + satellite MQTT
         on_trigger_plink: Optional[Callable[[str, float], None]] = None,       # (device_id, record_duration_s)
@@ -112,6 +113,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_agent_send_residents     = on_agent_send_residents
         self._on_trigger_firmware_update  = on_trigger_firmware_update or (lambda _: None)
         self._on_timer_fired    = on_timer_fired
+        self._on_timer_list     = on_timer_list
         self._on_timer_connected = on_timer_connected
         self._on_set_capture    = on_set_capture or (lambda *_: None)
         self._on_trigger_plink  = on_trigger_plink or (lambda *_: None)
@@ -668,6 +670,15 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             self._timer_queue.put(cmd)
         return True
 
+    def timer_list_request(self) -> bool:
+        """Send TimerListRequest to the Timer Service. Returns False if not connected."""
+        cmd = pb.TimerCommand(list=pb.TimerListRequest())
+        with self._timer_lock:
+            if self._timer_queue is None:
+                return False
+            self._timer_queue.put(cmd)
+        return True
+
     def AgentConnect(self, request_iterator, context):
         """
         Bidirektionaler Stream: Adapter → State-Updates, Hannah → Geräte-Befehle.
@@ -788,6 +799,11 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                                 log.error(f"[grpc] on_timer_fired Fehler: {e}")
                     elif which == "list":
                         log.debug(f"[grpc] TimerListResponse: {len(msg.list.timers)} Timer")
+                        if self._on_timer_list:
+                            try:
+                                self._on_timer_list(list(msg.list.timers))
+                            except Exception as e:
+                                log.error(f"[grpc] on_timer_list Fehler: {e}")
                     else:
                         log.warning(f"[grpc] Unbekanntes TimerMessage-Payload: {which!r}")
             except Exception as e:

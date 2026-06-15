@@ -4,13 +4,16 @@ Trigger-Engine — proaktive Ansagen und Fragen aus ioBroker-States und Zeitplä
 Konfiguration in triggers.yaml:
 
     triggers:
+      # Zeit-Trigger (einmal pro Tag):
       - id: aussentuer_abend
         when:
           time: "23:00"
+          days: [mon, tue, wed, thu, fri]   # optional; ohne days: täglich
         say: "Leonie, denk an die Außentüren."
         rephrase: true   # optional: LLM formuliert 'say' vor der Ausgabe um
         room: all
 
+      # State-Trigger mit Zusatzbedingung:
       - id: fenster_kalt
         when:
           state: "javascript.0.virtualDevice.Fenster.Wohnzimmer.open"
@@ -18,21 +21,47 @@ Konfiguration in triggers.yaml:
           also:
             state: "javascript.0.virtualDevice.Temperaturen.Wohnzimmer.Raumtemperatur.current"
             below: 12
+          unless:
+            state: "0_userdata.0.abwesend"
+            value: true
         say: "Das Fenster ist noch offen und es wird kalt draußen."
         cooldown: 3600   # Sekunden, Standard 3600
 
+      # Delay-Trigger — Aktion erst nach Ablauf einer Wartezeit (via Timer Service):
       - id: friteuse_lang_an
         when:
-          state: "javascript.0.virtualDevice.Steckdosen.Friteuse.on_duration_h"
-          above: 5
-        ask: "Die Friteuse ist seit über 5 Stunden an. Soll ich sie ausschalten?"
+          state: "javascript.0.virtualDevice.Steckdosen.Friteuse.on"
+          value: true
+        for: "5h"            # Wartezeit: "5h" | "30m" | "90s"
+        cancel_when:         # Timer canceln wenn Bedingung vorher nicht mehr zutrifft
+          state: "javascript.0.virtualDevice.Steckdosen.Friteuse.on"
+          value: false
+        ask: "Die Friteuse ist seit 5 Stunden an. Soll ich sie ausschalten?"
         room: all
         on_response:
           - condition: 'llm_match("Zustimmung")'
             say: "Okay, ich schalte die Friteuse aus."
+            set_state:       # optional: ioBroker-State direkt setzen
+              id: "javascript.0.virtualDevice.Steckdosen.Friteuse.on"
+              value: false
           - condition: 'llm_match("Verneinung")'
             say: "Alright, ich lasse sie an."
-          - say: "Ich habe dich leider nicht verstanden."
+          - say: "Ich habe dich leider nicht verstanden."   # Fallback (keine condition)
+
+Schlüsselfelder im Überblick:
+  when.state / when.value   — State-Übergang auf exakten Wert
+  when.above / when.below   — numerischer Schwellwert
+  when.also                 — zusätzliche Bedingung (State oder Liste davon)
+  when.unless               — Sperrbedingung (State oder Liste davon)
+  when.time / when.days     — Uhrzeit-Trigger (HH:MM, Wochentage: mon–sun)
+  for                       — Wartezeit vor Ausführung (Timer Service, SQLite-persistent)
+  cancel_when               — bricht den Delay-Timer ab wenn Bedingung eintritt
+  cooldown                  — Mindestabstand zwischen zwei Auslösungen (Standard: 3600s)
+  say                       — TTS-Ansage
+  ask                       — Frage per TTS; Antwort wird per on_response ausgewertet
+  rephrase                  — LLM formuliert say/ask vor der Ausgabe um
+  on_response               — Regeln nach ask; condition: llm_match("Kategorie")
+  set_state                 — ioBroker-State in on_response setzen: {id, value}
 
 Hot-Reload: Dateiänderung wird beim nächsten Tick/State-Update erkannt.
 """
@@ -41,6 +70,7 @@ import os
 import re
 import threading
 import time
+import uuid as _uuid
 from datetime import date, datetime
 from typing import Any, Callable, Optional
 
@@ -58,6 +88,8 @@ class TriggerEngine:
         ask_fn: Callable[[str, str, Callable[[str], None]], None] | None = None,
         match_fn: Callable[[str, str], bool] | None = None,
         set_state_fn: Callable[[str, Any], None] | None = None,
+        schedule_timer_fn: Callable[[str, str, int, str], None] | None = None,  # (timer_id, label, fire_at, room)
+        cancel_timer_fn: Callable[[str], None] | None = None,                    # (timer_id)
     ):
         """
         path:          Pfad zur triggers.yaml
@@ -74,6 +106,8 @@ class TriggerEngine:
         self._ask_fn = ask_fn
         self._match_fn = match_fn
         self._set_state_fn = set_state_fn
+        self._schedule_timer_fn = schedule_timer_fn
+        self._cancel_timer_fn = cancel_timer_fn
         self._triggers: list[dict] = []
         self._mtime: float = -1.0
 
@@ -85,6 +119,8 @@ class TriggerEngine:
         self._last_fired: dict[str, float] = {}
         # Zeit-Trigger: {trigger_id: last_fired_date} — einmal pro Tag
         self._last_fired_date: dict[str, date] = {}
+        # Laufende Delay-Timer: {trigger_id: timer_id} — in-memory, per reconcile nach Restart befüllt
+        self._delay_timers: dict[str, str] = {}
 
         self._lock = threading.Lock()
         self._load()
@@ -95,6 +131,70 @@ class TriggerEngine:
 
     # ------------------------------------------------------------------
     # Öffentliche Schnittstelle
+
+    def fire_delayed(self, trigger_id: str) -> None:
+        """Aufgerufen wenn ein Delay-Timer des Timer Service gefeuert hat."""
+        with self._lock:
+            timer_id = self._delay_timers.pop(trigger_id, None)
+            triggers = list(self._triggers)
+
+        if timer_id is None:
+            log.debug(f"Trigger '{trigger_id}': fire_delayed ohne pending Timer (bereits gecancelt?) — ignoriert.")
+            return
+
+        trigger = next((t for t in triggers if t.get("id") == trigger_id), None)
+        if trigger is None:
+            log.warning(f"Trigger '{trigger_id}': fire_delayed aber Trigger nicht mehr in YAML — ignoriert.")
+            return
+
+        room = trigger.get("room", "all")
+        log.info(f"Trigger '{trigger_id}': Delay abgelaufen → Aktion ausführen")
+        self._execute_trigger_action(trigger, room)
+
+    def reconcile_timers(self, timer_infos: list) -> None:
+        """
+        Verarbeitet TimerListResponse nach Reconnect zum Timer Service.
+        Trigger-Timer werden im RAM wiederhergestellt oder gecancelt.
+        """
+        with self._lock:
+            triggers_by_id = {t.get("id", ""): t for t in self._triggers}
+            state_cache = dict(self._state_cache)
+
+        for info in timer_infos:
+            label = info.label
+            if not label.startswith("trigger:"):
+                continue
+            trigger_id = label[len("trigger:"):]
+            timer_id = info.timer_id
+
+            trigger = triggers_by_id.get(trigger_id)
+            if trigger is None:
+                log.info(f"Reconcile: Timer '{timer_id}' (label={label!r}) — Trigger nicht mehr vorhanden → canceln")
+                if self._cancel_timer_fn:
+                    try:
+                        self._cancel_timer_fn(timer_id)
+                    except Exception as e:
+                        log.error(f"Reconcile: cancel_timer_fn fehlgeschlagen: {e}")
+                continue
+
+            when = trigger.get("when", {})
+            state_id = when.get("state")
+            if state_id and state_id in state_cache:
+                condition_met = self._state_condition_matches(when, state_cache[state_id])
+            else:
+                condition_met = True  # State unbekannt → konservativ behalten
+
+            if condition_met:
+                log.info(f"Reconcile: Trigger '{trigger_id}' Bedingung noch erfüllt → Timer wiederherstellen")
+                with self._lock:
+                    self._delay_timers[trigger_id] = timer_id
+            else:
+                log.info(f"Reconcile: Trigger '{trigger_id}' Bedingung nicht mehr erfüllt → Timer canceln")
+                if self._cancel_timer_fn:
+                    try:
+                        self._cancel_timer_fn(timer_id)
+                    except Exception as e:
+                        log.error(f"Reconcile: cancel_timer_fn fehlgeschlagen: {e}")
 
     def get_referenced_state_ids(self) -> set[str]:
         """Gibt alle in Triggern referenzierten ioBroker-State-IDs zurück.
@@ -107,6 +207,9 @@ class TriggerEngine:
                     ids.add(when["state"])
                 self._collect_condition_state_ids(when.get("unless"), ids)
                 self._collect_condition_state_ids(when.get("also"), ids)
+                cancel_when = t.get("cancel_when")
+                if isinstance(cancel_when, dict) and "state" in cancel_when:
+                    ids.add(cancel_when["state"])
         return ids
 
     @staticmethod
@@ -131,6 +234,13 @@ class TriggerEngine:
             triggers = list(self._triggers)
 
         for trigger in triggers:
+            tid = trigger.get("id", "")
+
+            cancel_when = trigger.get("cancel_when")
+            if cancel_when and cancel_when.get("state") == state_id:
+                if self._state_condition_matches(cancel_when, value):
+                    self._cancel_delay(tid)
+
             when = trigger.get("when", {})
             if "state" not in when:
                 continue
@@ -199,6 +309,14 @@ class TriggerEngine:
             self._last_fired[tid] = now
 
         room = trigger.get("room", "all")
+        if trigger.get("for"):
+            self._schedule_delay(trigger, room)
+        else:
+            self._execute_trigger_action(trigger, room)
+
+    def _execute_trigger_action(self, trigger: dict, room: str) -> None:
+        """Führt die ask/say-Aktion eines Triggers aus (ohne Cooldown-Prüfung)."""
+        tid = trigger.get("id", "?")
         ask = trigger.get("ask", "").strip()
         say = trigger.get("say", "").strip()
 
@@ -239,6 +357,53 @@ class TriggerEngine:
             self._announce(room, text)
         except Exception as e:
             log.error(f"Trigger '{tid}': Announcement fehlgeschlagen: {e}")
+
+    def _schedule_delay(self, trigger: dict, room: str) -> None:
+        """Registriert einen Delay-Timer beim Timer Service statt sofortiger Ausführung."""
+        tid = trigger.get("id", "?")
+        for_str = str(trigger.get("for", ""))
+
+        if not self._schedule_timer_fn:
+            log.warning(f"Trigger '{tid}': 'for' definiert aber schedule_timer_fn fehlt — sofortige Ausführung.")
+            self._execute_trigger_action(trigger, room)
+            return
+
+        try:
+            delay_secs = self._parse_duration(for_str)
+        except (ValueError, TypeError) as e:
+            log.error(f"Trigger '{tid}': Ungültiger 'for'-Wert {for_str!r}: {e} — übersprungen.")
+            return
+
+        with self._lock:
+            if tid in self._delay_timers:
+                log.debug(f"Trigger '{tid}': Delay-Timer läuft bereits, übersprungen.")
+                return
+
+        timer_id = str(_uuid.uuid4())
+        fire_at = int(time.time()) + delay_secs
+        label = f"trigger:{tid}"
+        log.info(f"Trigger '{tid}': Delay-Timer für {delay_secs}s registriert (timer_id={timer_id!r})")
+        try:
+            self._schedule_timer_fn(timer_id, label, fire_at, room)
+        except Exception as e:
+            log.error(f"Trigger '{tid}': schedule_timer_fn fehlgeschlagen: {e}")
+            return
+
+        with self._lock:
+            self._delay_timers[tid] = timer_id
+
+    def _cancel_delay(self, trigger_id: str) -> None:
+        """Cancelt einen laufenden Delay-Timer (cancel_when erfüllt)."""
+        with self._lock:
+            timer_id = self._delay_timers.pop(trigger_id, None)
+        if timer_id is None:
+            return
+        log.info(f"Trigger '{trigger_id}': Delay-Timer gecancelt (cancel_when erfüllt), timer_id={timer_id!r}")
+        if self._cancel_timer_fn:
+            try:
+                self._cancel_timer_fn(timer_id)
+            except Exception as e:
+                log.error(f"Trigger '{trigger_id}': cancel_timer_fn fehlgeschlagen: {e}")
 
     def _process_response(self, answer: str, tid: str, room: str, rules: list) -> None:
         """Wertet on_response-Regeln aus und führt die erste passende Aktion aus."""
@@ -361,6 +526,18 @@ class TriggerEngine:
 
     # ------------------------------------------------------------------
     # Helpers
+
+    @staticmethod
+    def _parse_duration(s: str) -> int:
+        """Parst Dauer-Strings wie '5h', '30m', '90s' in Sekunden."""
+        s = s.strip()
+        if s.endswith("h"):
+            return int(s[:-1]) * 3600
+        if s.endswith("m"):
+            return int(s[:-1]) * 60
+        if s.endswith("s"):
+            return int(s[:-1])
+        return int(s)
 
     @staticmethod
     def _parse(raw: str) -> object:

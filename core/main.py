@@ -704,6 +704,14 @@ def main():
     def _trigger_set_state(state_id: str, value: object) -> None:
         grpc_servicer.agent_set_state(state_id, value)
 
+    def _schedule_trigger_timer(timer_id: str, label: str, fire_at: int, room: str) -> None:
+        timer_store.set(timer_id, label, fire_at, room)
+        grpc_servicer.timer_create(timer_id, label, fire_at, room)
+
+    def _cancel_trigger_timer(timer_id: str) -> None:
+        timer_store.remove(timer_id)
+        grpc_servicer.timer_cancel(timer_id)
+
     trigger_engine = TriggerEngine(
         path=cfg.get("triggers_file", "triggers.yaml"),
         announce_fn=process_announcement,
@@ -711,6 +719,8 @@ def main():
         ask_fn=_ask_fn,
         match_fn=llm.match,
         set_state_fn=_trigger_set_state,
+        schedule_timer_fn=_schedule_trigger_timer,
+        cancel_timer_fn=_cancel_trigger_timer,
     )
 
     def _on_state_update(state_id: str, raw: str) -> None:
@@ -922,6 +932,13 @@ def main():
     _iobroker_ready: bool = False
 
     def _on_timer_fired(timer_id: str, label: str):
+        if label.startswith("trigger:"):
+            trigger_id = label[len("trigger:"):]
+            timer_store.remove(timer_id)
+            log.info(f"[timer] Delay-Timer gefeuert für Trigger '{trigger_id}'")
+            trigger_engine.fire_delayed(trigger_id)
+            return
+
         entry = timer_store.get(timer_id)
         if not entry:
             log.warning(f"[timer] TimerFired für unbekannte ID {timer_id!r} ({label!r}) — ignoriert.")
@@ -948,9 +965,13 @@ def main():
             for device in targets:
                 _send_audio(device, pcm, rate)
 
+    def _on_timer_list(timers: list) -> None:
+        trigger_engine.reconcile_timers(timers)
+
     def _on_timer_connected():
         if _iobroker_ready:
             grpc_servicer.timer_send_ready()
+            grpc_servicer.timer_list_request()
 
     def _on_set_capture(device_id: str, enabled: bool, sample_type: str = "noise"):
         _device_dnd[device_id] = enabled
@@ -977,6 +998,7 @@ def main():
         nlu._devices = iobroker.devices
         _iobroker_ready = True
         grpc_servicer.timer_send_ready()
+        grpc_servicer.timer_list_request()
 
     def _on_agent_connect():
         state_ids = trigger_engine.get_referenced_state_ids()
@@ -1018,6 +1040,7 @@ def main():
         on_agent_send_residents=registry.sync,
         on_trigger_firmware_update=lambda device: mqtt_handler.publish_ota_ok(device),
         on_timer_fired=_on_timer_fired,
+        on_timer_list=_on_timer_list,
         on_timer_connected=_on_timer_connected,
         on_set_capture=_on_set_capture,
         on_trigger_plink=_on_trigger_plink,

@@ -5,6 +5,10 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.27.0
+### Core
+* Added: `for:` delay in triggers — state-trigger can specify `for: "5h"` (or `"30m"`, `"90s"`) to defer execution until the duration elapses; the Timer Service registers a SQLite-persistent timer so delays survive Hannah restarts; `cancel_when:` cancels the pending timer if a counter-condition is met before the delay fires; on reconnect, `TimerListRequest` reconciles active trigger timers against current state (stale timers cancelled, active ones restored into RAM); `cancel_when` state IDs included in `WatchMore` so the adapter watches them
+
 ## 0.26.0
 ### Core
 * Added: Trigger-Engine supports active questioning — triggers can use `ask` instead of `say` to pose a question via TTS and route the next utterance from that room as the answer; `on_response` rules match the free-form answer via `llm_match("category")` (LLM classification prompt) and execute `say` actions accordingly; unanswered questions time out after 60s; answered utterances bypass NLU routing (`AnswerPending` intent)

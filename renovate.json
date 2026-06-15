@@ -50,7 +50,9 @@
         "npm",
         "gomod",
         "cargo",
-        "dockerfile"
+        "dockerfile",
+        "gitlabci",
+        "gitlabci-include"
       ],
       "automerge": true
     }

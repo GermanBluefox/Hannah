@@ -1,5 +1,5 @@
 """
-Trigger-Engine — proaktive Ansagen aus ioBroker-States und Zeitplänen.
+Trigger-Engine — proaktive Ansagen und Fragen aus ioBroker-States und Zeitplänen.
 
 Konfiguration in triggers.yaml:
 
@@ -21,14 +21,28 @@ Konfiguration in triggers.yaml:
         say: "Das Fenster ist noch offen und es wird kalt draußen."
         cooldown: 3600   # Sekunden, Standard 3600
 
+      - id: friteuse_lang_an
+        when:
+          state: "javascript.0.virtualDevice.Steckdosen.Friteuse.on_duration_h"
+          above: 5
+        ask: "Die Friteuse ist seit über 5 Stunden an. Soll ich sie ausschalten?"
+        room: all
+        on_response:
+          - condition: 'llm_match("Zustimmung")'
+            say: "Okay, ich schalte die Friteuse aus."
+          - condition: 'llm_match("Verneinung")'
+            say: "Alright, ich lasse sie an."
+          - say: "Ich habe dich leider nicht verstanden."
+
 Hot-Reload: Dateiänderung wird beim nächsten Tick/State-Update erkannt.
 """
 import logging
 import os
+import re
 import threading
 import time
 from datetime import date, datetime
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -41,15 +55,25 @@ class TriggerEngine:
         path: str,
         announce_fn: Callable[[str, str], None],
         rephrase_fn: Callable[[str], str] | None = None,
+        ask_fn: Callable[[str, str, Callable[[str], None]], None] | None = None,
+        match_fn: Callable[[str, str], bool] | None = None,
+        set_state_fn: Callable[[str, Any], None] | None = None,
     ):
         """
-        path:        Pfad zur triggers.yaml
-        announce_fn: fn(room, text) — ruft process_announcement() auf
-        rephrase_fn: fn(text) → text — LLM-Umformulierung; None = Feature deaktiviert
+        path:          Pfad zur triggers.yaml
+        announce_fn:   fn(room, text) — ruft process_announcement() auf
+        rephrase_fn:   fn(text) → text — LLM-Umformulierung; None = Feature deaktiviert
+        ask_fn:        fn(room, question, callback) — stellt eine Frage per TTS und ruft
+                       callback(answer_text) auf wenn der Nutzer antwortet
+        match_fn:      fn(text, category) → bool — LLM-Klassifikation für on_response
+        set_state_fn:  fn(state_id, value) — setzt einen ioBroker-State; für set_state in on_response
         """
         self._path = path
         self._announce = announce_fn
         self._rephrase_fn = rephrase_fn
+        self._ask_fn = ask_fn
+        self._match_fn = match_fn
+        self._set_state_fn = set_state_fn
         self._triggers: list[dict] = []
         self._mtime: float = -1.0
 
@@ -174,10 +198,33 @@ class TriggerEngine:
                 return
             self._last_fired[tid] = now
 
-        say = trigger.get("say", "").strip()
         room = trigger.get("room", "all")
+        ask = trigger.get("ask", "").strip()
+        say = trigger.get("say", "").strip()
+
+        if ask:
+            if not self._ask_fn:
+                log.warning(f"Trigger '{tid}': 'ask' definiert aber ask_fn fehlt — Fallback auf say.")
+                if say:
+                    self._announce(room, say)
+                return
+            text = ask
+            if trigger.get("rephrase") and self._rephrase_fn:
+                try:
+                    text = self._rephrase_fn(ask) or ask
+                except Exception as e:
+                    log.warning(f"Trigger '{tid}': LLM-Rephrase fehlgeschlagen, nutze Original: {e}")
+            on_response = trigger.get("on_response", [])
+            log.info(f"Trigger '{tid}' fragt → [{room}] \"{text}\"")
+            try:
+                self._ask_fn(room, text, lambda answer, _tid=tid, _room=room, _rules=on_response:
+                             self._process_response(answer, _tid, _room, _rules))
+            except Exception as e:
+                log.error(f"Trigger '{tid}': ask_fn fehlgeschlagen: {e}")
+            return
+
         if not say:
-            log.warning(f"Trigger '{tid}': kein 'say' definiert.")
+            log.warning(f"Trigger '{tid}': weder 'say' noch 'ask' definiert.")
             return
 
         text = say
@@ -192,6 +239,55 @@ class TriggerEngine:
             self._announce(room, text)
         except Exception as e:
             log.error(f"Trigger '{tid}': Announcement fehlgeschlagen: {e}")
+
+    def _process_response(self, answer: str, tid: str, room: str, rules: list) -> None:
+        """Wertet on_response-Regeln aus und führt die erste passende Aktion aus."""
+        log.info(f"Trigger '{tid}' Antwort erhalten für Raum '{room}': {answer!r}")
+        fallback: Optional[dict] = None
+        for rule in rules:
+            condition = rule.get("condition", "").strip()
+            if not condition:
+                if fallback is None:
+                    fallback = rule  # letzte Regel ohne Condition = Fallback
+                continue
+            m = re.match(r"""llm_match\(['"](.+)['"]\)""", condition)
+            if not m:
+                log.warning(f"Trigger '{tid}': unbekannte Condition {condition!r} — übersprungen.")
+                continue
+            category = m.group(1)
+            if self._match_fn:
+                if not self._match_fn(answer, category):
+                    continue
+            else:
+                log.warning(f"Trigger '{tid}': llm_match benötigt match_fn — übersprungen.")
+                continue
+            self._execute_response_action(rule, tid, room)
+            return
+        if fallback is not None:
+            self._execute_response_action(fallback, tid, room)
+
+    def _execute_response_action(self, rule: dict, tid: str, room: str) -> None:
+        say = rule.get("say", "").strip()
+        if say:
+            log.info(f"Trigger '{tid}' on_response → [{room}] \"{say}\"")
+            try:
+                self._announce(room, say)
+            except Exception as e:
+                log.error(f"Trigger '{tid}': on_response Announcement fehlgeschlagen: {e}")
+
+        set_state = rule.get("set_state")
+        if set_state:
+            if not self._set_state_fn:
+                log.warning(f"Trigger '{tid}': set_state definiert aber set_state_fn fehlt — übersprungen.")
+            elif isinstance(set_state, dict):
+                state_id = set_state.get("id", "").strip()
+                value = set_state.get("value")
+                if state_id:
+                    log.info(f"Trigger '{tid}' set_state → {state_id} = {value!r}")
+                    try:
+                        self._set_state_fn(state_id, value)
+                    except Exception as e:
+                        log.error(f"Trigger '{tid}': set_state fehlgeschlagen: {e}")
 
     # ------------------------------------------------------------------
     # Bedingungen prüfen

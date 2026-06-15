@@ -5,6 +5,15 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.26.0
+### Core
+* Added: Trigger-Engine supports active questioning — triggers can use `ask` instead of `say` to pose a question via TTS and route the next utterance from that room as the answer; `on_response` rules match the free-form answer via `llm_match("category")` (LLM classification prompt) and execute `say` actions accordingly; unanswered questions time out after 60s; answered utterances bypass NLU routing (`AnswerPending` intent)
+* Added: `LLMClient.match(text, category)` — classifies whether a free-form answer belongs to a semantic category using a yes/no LLM prompt; `DummyLLM` always returns `False`
+* Added: `set_state` action in `on_response` rules — sets an ioBroker state directly when a response condition matches (`set_state: {id: "...", value: ...}`); can be combined with `say` in the same rule
+
+### Proxy
+* Changed: replaced `gopkg.in/yaml.v3` with `sigs.k8s.io/yaml` for config parsing — struct tags switched from `yaml:"..."` to `json:"..."` accordingly (config.yaml format unchanged)
+
 ## 0.25.2
 ### Proxy
 * Fixed: `SendTTSChunk()` now throttles UDP packet sending to playback rate — each 1400-byte packet is followed by a sleep proportional to its audio duration (`chunk_bytes / (sample_rate × 2)`); without this, the proxy sent all packets in a burst that overflowed the satellite's lwIP socket buffer, dropping most audio and causing garbled/truncated TTS on long responses

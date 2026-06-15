@@ -96,6 +96,16 @@ class LLMClient(ABC):
         result = self.chat(text, system_prompt=_CLASSIFY_PROMPT)
         return "COMMAND" in result.upper()
 
+    def match(self, text: str, category: str) -> bool:
+        """True wenn 'text' inhaltlich zur Kategorie passt (z.B. 'Zustimmung', 'Verneinung')."""
+        prompt = (
+            f"Gehört die folgende Antwort zur Kategorie '{category}'? "
+            "Antworte ausschließlich mit JA oder NEIN.\n"
+            f"Antwort: {text!r}"
+        )
+        result = self.chat("", system_prompt=prompt)
+        return "JA" in result.upper()
+
     def chat_with_tools(self, messages: list[dict], tools: list[dict]) -> dict:  # pyright: ignore[reportUnusedParameter]
         """
         Tool-Use-Aufruf. Gibt dict mit 'content', 'tool_calls', 'finish_reason' zurück.
@@ -130,6 +140,9 @@ class DummyLLM(LLMClient):
 
     def classify(self, text: str) -> bool:  # pyright: ignore[reportUnusedParameter]
         return True  # Kein LLM → immer als Command routen
+
+    def match(self, text: str, category: str) -> bool:  # pyright: ignore[reportUnusedParameter,reportUnusedParameter]
+        return False  # Kein LLM → kein Matching möglich
 
 
 class OpenAICompatibleLLM(LLMClient):

@@ -19,7 +19,7 @@ import sys
 import tempfile
 import threading
 import wave
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 
@@ -666,10 +666,51 @@ def main():
             log.warning(f"LLM-Rephrase fehlgeschlagen, nutze Original: {e}")
             return text
 
+    # Pending-Fragen: {room: (callback, timeout_timer)}
+    # Wenn Hannah eine Frage stellt, wird die nächste Äußerung aus dem Raum
+    # als Antwort gewertet und direkt an den Callback übergeben statt an NLU.
+    _pending_questions: dict[str, tuple[Callable, threading.Timer]] = {}
+    _pending_lock = threading.Lock()
+
+    def _ask_fn(room: str, question: str, callback: Callable[[str], None]) -> None:
+        process_announcement(room, question)
+
+        def _on_timeout():
+            with _pending_lock:
+                _pending_questions.pop(room, None)
+            log.info(f"Pending-Frage für Raum '{room}' abgelaufen (keine Antwort in 60s).")
+
+        timer = threading.Timer(60.0, _on_timeout)
+        with _pending_lock:
+            old = _pending_questions.pop(room, None)
+            if old:
+                old[1].cancel()
+            _pending_questions[room] = (callback, timer)
+        timer.start()
+
+    def _try_answer_pending(device: str, room: str, transcript: str) -> bool:
+        """Prüft ob eine offene Frage für diesen Raum wartet und leitet die Antwort weiter.
+        Gibt True zurück wenn die Äußerung als Antwort konsumiert wurde."""
+        with _pending_lock:
+            entry = _pending_questions.pop(room, None)
+        if not entry:
+            return False
+        callback, timer = entry
+        timer.cancel()
+        log.info(f"[{device}] Antwort auf offene Frage im Raum '{room}': {transcript!r}")
+        threading.Thread(target=callback, args=(transcript,), daemon=True, name="trigger-answer").start()
+        return True
+
+    def _trigger_set_state(state_id: str, value: object) -> None:
+        grpc_servicer.agent_set_state(state_id, value)
+
     trigger_engine = TriggerEngine(
         path=cfg.get("triggers_file", "triggers.yaml"),
         announce_fn=process_announcement,
         rephrase_fn=_rephrase_text,
+        ask_fn=_ask_fn,
+        match_fn=llm.match,
+        set_state_fn=_trigger_set_state,
     )
 
     def _on_state_update(state_id: str, raw: str) -> None:
@@ -779,6 +820,12 @@ def main():
 
         log.info(f"[{device}] Satellit-Transkript: {transcript!r}"
                  + (f" (Sprecher: {speaker_roomie_id})" if speaker_roomie_id else ""))
+
+        # Offene Trigger-Frage? Dann Äußerung als Antwort konsumieren statt NLU-Routing.
+        room = _get_satellite_room(device) or ""
+        if room and _try_answer_pending(device, room, transcript):
+            return transcript, "", "AnswerPending", b"", 0
+
         answer, intent_name = _handle_text(transcript, speaker_roomie_id=speaker_roomie_id, source=device)
 
         tts_pcm = b""

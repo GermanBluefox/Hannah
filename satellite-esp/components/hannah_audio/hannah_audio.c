@@ -142,7 +142,7 @@ static esp_err_t mic_init(void)
         .gpio_cfg = {
             .clk = (gpio_num_t)CONFIG_HANNAH_MIC_CLK_GPIO,
             .din = (gpio_num_t)CONFIG_HANNAH_MIC_DATA_GPIO,
-            .invert_flags = { .clk_inv = false },
+            .invert_flags = { .clk_inv = true },
         },
     };
     pdm_cfg.clk_cfg.dn_sample_mode = I2S_PDM_DSR_16S;
@@ -286,9 +286,14 @@ static void mic_task(void *arg)
 #if CONFIG_HANNAH_WAKEWORD_ENABLED
             hannah_wakeword_process(mono);
 #endif
+            /* Noise-Floor während Warmup kalibrieren (nicht während TTS) */
+            if (!s_speaking_active) {
+                float rms_warmup = hannah_rms(mono, (int)mono_samples);
+                s_noise_floor_ema = s_noise_floor_ema * 0.99f + rms_warmup * 0.01f;
+            }
             if (warmup_remaining == 0) {
                 hannah_led_set_state(LED_STATE_IDLE);
-                ESP_LOGI(TAG, "Mic-Warmup abgeschlossen.");
+                ESP_LOGI(TAG, "Mic-Warmup abgeschlossen. noise_ema=%.4f", s_noise_floor_ema);
             }
             vTaskDelay(pdMS_TO_TICKS(1));  /* taskYIELD reicht nicht — IDLE hat prio 0 und kommt bei vielen laufenden Boot-Tasks nie dran */
             continue;
@@ -353,7 +358,8 @@ static void mic_task(void *arg)
                 /* Noise-Floor-Tracking: schneller Anstieg, langsamer Abfall.
                  * Frames > 0.05 (Wakeword-Sprache) werden ignoriert. */
                 float rms_idle = hannah_rms(mono, (int)mono_samples);
-                if (rms_idle < 0.05f) {
+                /* Guard: Sprach-/Speaker-Frames ausschließen */
+                if (!s_speaking_active && rms_idle < 0.05f) {
                     if (rms_idle > s_noise_floor_ema)
                         s_noise_floor_ema = s_noise_floor_ema * 0.90f + rms_idle * 0.10f;
                     else

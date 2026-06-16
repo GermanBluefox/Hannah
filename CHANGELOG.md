@@ -5,8 +5,13 @@
 -->
 
 
+## 0.28.3
+### Satellite Firmware
+* Fixed: PDM clock inversion flag set to `true` (`clk_inv = true`) — SPH0641 with SEL=GND outputs data on the falling CLK edge; reading on the rising edge caused white noise instead of signal (Refs #5)
+* Fixed: VAD `noise_ema` stuck at initial value 0.02 — `noise_ema` is now calibrated during the 5 s mic warmup (excluding TTS frames via `s_speaking_active` guard) so the correct floor is known before the first stream; idle tracking also gated on `!s_speaking_active` to prevent speaker bleed from contaminating the noise floor estimate (Refs #19)
+
 ## 0.28.2
-### Core
+### Hannah Core
 * Fixed: `_ask_fn` routes `start_listening` via MQTT instead of UDP — UDP-based send silently failed for proxy-connected satellites (closes #18)
 
 ### Satellite Firmware
@@ -14,7 +19,7 @@
 * Fixed: `hannah_audio_start_listen_after_tts` activates virtual PTT immediately if TTS has already ended, avoiding a missed trigger when the MQTT message arrives after the sentinel
 
 ## 0.28.1
-### Core
+### Hannah Core
 * Fixed: `_ask_fn` now sends `start_listening` UDP command to all satellites in the room after TTS — satellites were not entering listening mode after the question was played, so no answer ever arrived at Hannah
 
 ### Satellite Firmware
@@ -25,27 +30,27 @@
 * Fixed: `release.js` now removes the `## **WORK IN PROGRESS**` line when promoting WIP entries to a version — the HTML comment above it is preserved
 
 ## 0.28.0
-### Core
+### Hannah Core
 * Added: `AgentAskResident` 
 
 ### Proto
 * Added: `correlation_id` field to `AgentAskResident` — identifies a pending question across the round-trip; `AgentResidentAnswered` message carries the resident's spoken answer back to the adapter; `resident_answered` variant added to `AgentCommand` oneof so Hannah can push the answer over the existing adapter stream
 
 ## 0.27.0
-### Core
+### Hannah Core
 * Added: `for:` delay in triggers — state-trigger can specify `for: "5h"` (or `"30m"`, `"90s"`) to defer execution until the duration elapses; the Timer Service registers a SQLite-persistent timer so delays survive Hannah restarts; `cancel_when:` cancels the pending timer if a counter-condition is met before the delay fires; on reconnect, `TimerListRequest` reconciles active trigger timers against current state (stale timers cancelled, active ones restored into RAM); `cancel_when` state IDs included in `WatchMore` so the adapter watches them
 
 ## 0.26.0
-### Core
+### Hannah Core
 * Added: Trigger-Engine supports active questioning — triggers can use `ask` instead of `say` to pose a question via TTS and route the next utterance from that room as the answer; `on_response` rules match the free-form answer via `llm_match("category")` (LLM classification prompt) and execute `say` actions accordingly; unanswered questions time out after 60s; answered utterances bypass NLU routing (`AnswerPending` intent)
 * Added: `LLMClient.match(text, category)` — classifies whether a free-form answer belongs to a semantic category using a yes/no LLM prompt; `DummyLLM` always returns `False`
 * Added: `set_state` action in `on_response` rules — sets an ioBroker state directly when a response condition matches (`set_state: {id: "...", value: ...}`); can be combined with `say` in the same rule
 
-### Proxy
+### Hannah Proxy
 * Changed: replaced `gopkg.in/yaml.v3` with `sigs.k8s.io/yaml` for config parsing — struct tags switched from `yaml:"..."` to `json:"..."` accordingly (config.yaml format unchanged)
 
 ## 0.25.2
-### Proxy
+### Hannah Proxy
 * Fixed: `SendTTSChunk()` now throttles UDP packet sending to playback rate — each 1400-byte packet is followed by a sleep proportional to its audio duration (`chunk_bytes / (sample_rate × 2)`); without this, the proxy sent all packets in a burst that overflowed the satellite's lwIP socket buffer, dropping most audio and causing garbled/truncated TTS on long responses
 
 ## 0.25.1
@@ -53,10 +58,10 @@
 * Changed: Speaker audio buffering replaced per-chunk `malloc`/`free` with a FreeRTOS `RINGBUF_TYPE_NOSPLIT` ring buffer (32 KB internal DRAM, ~640ms buffer at 24kHz) — `hannah_audio_play()` uses `xRingbufferSendAcquire`/`xRingbufferSendComplete` to write directly into the ring buffer without heap allocation; `speaker_task` uses `xRingbufferReceive`/`vRingbufferReturnItem`; end-of-stream signalled by a sentinel item with `len=0`; internal DRAM required (PSRAM not suitable for I2S-DMA source)
 
 ## 0.25.0
-### Core
+### Hannah Core
 * Added: `stream_audio_to_proxy()` — slices full TTS PCM into ~100ms chunks (4800 bytes @ 24kHz) and sends each as a separate `PlayAudioCommand` with `is_last=true` on the final chunk; reduces satellite startup latency from full Azure response time to first chunk arrival
 
-### Proxy
+### Hannah Proxy
 * Added: `SendTTSChunk()` / `SendTTSEnd()` on the UDP server — proxy forwards each `PlayAudioCommand` chunk immediately without buffering; `tts_end` is sent only when `is_last=true`; removed 300ms sleep before `tts_end`
 * Changed: `PlayAudioFunc` callback is now synchronous (no goroutine) to preserve chunk order within the gRPC stream
 
@@ -156,7 +161,7 @@
 ### Hannah Core
 * Fixed: proxy satellites always had empty `address` state in ioBroker — `SatelliteRegistration` proto now carries the satellite IP; `grpc_server.py` stores it in `_proxy_satellites`; `get_satellites` lambda uses new `proxy_satellites_full()` to include the address
 
-### Proxy
+### Hannah Proxy
 * Changed: `SatelliteChangeCallback` now includes `address` (satellite IP); passed through `NotifySatelliteRegistered` to Hannah Core
 * Added: `udp.Server.RegisteredDevicesFull()` — returns `{device: SatelliteInfo{Room, Address}}` for re-notify on reconnect
 
@@ -181,7 +186,7 @@
 ### Hannah Core
 * Changed: `udp_server` — added 300 ms delay before sending `tts_end` to satellite; prevents hard audio cutoff caused by `tts_end` arriving before the last PCM UDP packets are received and queued on the satellite
 
-### Proxy
+### Hannah Proxy
 * Changed: `udp.SendTTS` — added 300 ms delay before sending `tts_end`; same reason as above (proxy is the primary TTS path for ESP32 satellites)
 
 ### Satellite Firmware

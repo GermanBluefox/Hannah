@@ -80,8 +80,9 @@ static char s_ble_watchlist_cache[512];
 static int  s_ble_watchlist_cache_len = 0;
 static hannah_net_volume_cb_t          s_volume_cb          = NULL;
 static hannah_net_sampling_cb_t        s_sampling_cb        = NULL;
-static hannah_net_virtual_ptt_cb_t     s_virtual_ptt_cb     = NULL;
-static hannah_net_play_asset_cb_t      s_play_asset_cb      = NULL;
+static hannah_net_virtual_ptt_cb_t        s_virtual_ptt_cb        = NULL;
+static hannah_net_play_asset_cb_t         s_play_asset_cb         = NULL;
+static hannah_net_start_listening_cb_t    s_start_listening_cb    = NULL;
 
 /* ── Hilfsfunktionen ─────────────────────────────────────────────────────── */
 
@@ -203,6 +204,9 @@ static void udp_receive_task(void *arg)
                        strcmp(jtype->valuestring, "pause")  == 0 ||
                        strcmp(jtype->valuestring, "resume") == 0) {
                 if (s_playback_cb) s_playback_cb(jtype->valuestring);
+
+            } else if (strcmp(jtype->valuestring, "start_listening") == 0) {
+                if (s_start_listening_cb) s_start_listening_cb();
 
             } else if (strcmp(jtype->valuestring, "reregister") == 0) {
                 ESP_LOGW(TAG, "Re-Registrierung angefordert.");
@@ -690,8 +694,9 @@ void hannah_net_set_ble_watchlist_callback(hannah_net_ble_watchlist_cb_t cb)
 }
 void hannah_net_set_volume_callback(hannah_net_volume_cb_t cb)        { s_volume_cb        = cb; }
 void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb)       { s_sampling_cb      = cb; }
-void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb) { s_virtual_ptt_cb   = cb; }
-void hannah_net_set_play_asset_callback(hannah_net_play_asset_cb_t cb)   { s_play_asset_cb    = cb; }
+void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb)       { s_virtual_ptt_cb        = cb; }
+void hannah_net_set_play_asset_callback(hannah_net_play_asset_cb_t cb)         { s_play_asset_cb         = cb; }
+void hannah_net_set_start_listening_callback(hannah_net_start_listening_cb_t cb) { s_start_listening_cb  = cb; }
 
 void hannah_net_publish_volume(int vol)
 {

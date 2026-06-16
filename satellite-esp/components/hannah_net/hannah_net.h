@@ -100,6 +100,11 @@ void hannah_net_set_virtual_ptt_callback(hannah_net_virtual_ptt_cb_t cb);
 typedef void (*hannah_net_sampling_cb_t)(bool enabled, const char *sample_type);
 void hannah_net_set_sampling_callback(hannah_net_sampling_cb_t cb);
 
+/* Start-Listening-Callback: wird aufgerufen wenn Hannah einen `start_listening`-
+ * UDP-Control-Befehl sendet (nach ask-TTS). */
+typedef void (*hannah_net_start_listening_cb_t)(void);
+void hannah_net_set_start_listening_callback(hannah_net_start_listening_cb_t cb);
+
 /* Play-Asset-Callback: wird aufgerufen wenn hannah/satellite/<device>/play_asset empfangen.
  * Payload: {"asset_id":"timer_jingle"}
  * asset_id ist nur während des Callbacks gültig — bei asynchroner Nutzung kopieren. */

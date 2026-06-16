@@ -3,7 +3,17 @@
     Placeholder for the next version (at the beginning of the line):
     ## **WORK IN PROGRESS**
 -->
-## **WORK IN PROGRESS**
+
+## 0.28.1
+### Core
+* Fixed: `_ask_fn` now sends `start_listening` UDP command to all satellites in the room after TTS — satellites were not entering listening mode after the question was played, so no answer ever arrived at Hannah
+
+### Satellite Firmware
+* Fixed: added `start_listening` UDP command handler in `hannah_net` — triggers `hannah_audio_start_listen_after_tts()` callback
+* Fixed: `hannah_audio`: after TTS playback drains (end-sentinel), if `start_listening` was received, sets virtual PTT active with 8s auto-timeout; PTT-mode mic task decrements counter and clears PTT on timeout; wakeword-mode cleans up virtual listen state on stream end
+
+### Scripts
+* Fixed: `release.js` now removes the `## **WORK IN PROGRESS**` line when promoting WIP entries to a version — the HTML comment above it is preserved
 
 ## 0.28.0
 ### Core

@@ -42,6 +42,10 @@ void hannah_audio_resume(void);  /* Mic-Streaming fortsetzen. */
  * Wird von hannah_net bei hannah/satellite/<device>/sampling aufgerufen. */
 void hannah_audio_set_sampling_mode(bool enabled);
 
+/* Nach TTS-Wiedergabe automatisch in Listening-Mode wechseln (für ask-Befehl).
+ * Wird vom nächsten tts_end-Sentinel ausgelöst; läuft 8s oder bis PTT-Release. */
+void hannah_audio_start_listen_after_tts(void);
+
 /* Wakeword-Inference pausieren — mic_task schläft statt TFLite auszuführen.
  * Wird von OTA aufgerufen um IDLE0-Starvation während des Downloads zu vermeiden.
  * Nicht reversibel — OTA startet danach einen Neustart. */

@@ -83,8 +83,10 @@ static volatile bool     s_streaming_paused  = false;
 static volatile bool     s_wakeword_paused   = false;
 static volatile bool     s_vol_up_req        = false;
 static volatile bool     s_vol_down_req      = false;
-static volatile bool     s_speaking_active   = false;
-static volatile int      s_volume           = CONFIG_HANNAH_VOLUME_DEFAULT;
+static volatile bool     s_speaking_active        = false;
+static volatile bool     s_listen_after_tts       = false;
+static volatile int      s_virtual_listen_frames  = 0;
+static volatile int      s_volume                 = CONFIG_HANNAH_VOLUME_DEFAULT;
 static hannah_vad_state_t s_vad;
 static float              s_noise_floor_ema = 0.020f; /* adaptiver Noise-Floor-Schätzer */
 static int                s_stream_frames   = 0;
@@ -398,6 +400,10 @@ static void mic_task(void *arg)
                     hannah_net_send_audio_end();
                     mic_led(LED_STATE_IDLE);
                     state = AUDIO_STATE_IDLE;
+                    if (s_virtual_listen_frames > 0) {
+                        s_virtual_listen_frames = 0;
+                        s_ptt_active = false;
+                    }
                     s_rms_log_ctr = 0;
                     if (ptt_end)       ESP_LOGI(TAG, "PTT losgelassen → audio_end.");
                     else if (vad_end)  ESP_LOGI(TAG, "VAD: Stille erkannt → audio_end.");
@@ -442,11 +448,14 @@ static void mic_task(void *arg)
             }
             if (state == AUDIO_STATE_STREAMING && ptt) {
                 hannah_net_send_audio((uint8_t *)mono, mono_samples * 2);
+                if (s_virtual_listen_frames > 0 && --s_virtual_listen_frames == 0)
+                    s_ptt_active = false;
             }
             if (was_ptt && !ptt && state == AUDIO_STATE_STREAMING) {
                 hannah_net_send_audio_end();
                 mic_led(LED_STATE_IDLE);
                 state = AUDIO_STATE_IDLE;
+                s_virtual_listen_frames = 0;
             }
         }
 
@@ -494,6 +503,11 @@ static void speaker_task(void *arg)
             s_speaking_active = false;
             if (!s_sampling_mode)
                 hannah_led_set_state(LED_STATE_IDLE);
+            if (s_listen_after_tts && !s_sampling_mode) {
+                s_listen_after_tts = false;
+                s_virtual_listen_frames = 800;  /* 800 × 10ms = 8s */
+                s_ptt_active = true;
+            }
             continue;
         }
         was_speaking = true;
@@ -546,6 +560,11 @@ static void on_tts_end(int sample_rate)
 {
     (void)sample_rate;
     hannah_audio_play_end();
+}
+
+void hannah_audio_start_listen_after_tts(void)
+{
+    s_listen_after_tts = true;
 }
 
 static void on_status(const char *state)
@@ -667,6 +686,7 @@ void hannah_audio_init(void)
 #if !CONFIG_HANNAH_MIC_TYPE_NONE
     hannah_net_set_sampling_callback(on_sampling_mode);
     hannah_net_set_virtual_ptt_callback(on_virtual_ptt);
+    hannah_net_set_start_listening_callback(hannah_audio_start_listen_after_tts);
     xTaskCreatePinnedToCore(mic_task, "mic", 8192, NULL, 5, NULL, 0);
 #else
     hannah_led_set_state(LED_STATE_IDLE);

@@ -34,7 +34,7 @@ class MQTTHandler:
         self._on_ota_pending: Optional[Callable[[str, str], None]] = None
         self._on_firmware:    Optional[Callable[[str, str], None]] = None
         self._on_ble_report:  Optional[Callable[[str, str, int], None]] = None
-        self._on_sensor:      Optional[Callable[[str, float, float, float, float], None]] = None
+        self._on_sensor:      Optional[Callable[[str, float, float, float, float, int, float, float], None]] = None
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
@@ -222,7 +222,10 @@ class MQTTHandler:
                         float(data.get("temperature", 0.0)),
                         float(data.get("pressure", 0.0)),
                         float(data.get("humidity", 0.0)),
-                        float(data.get("gas_resistance", 0.0)),
+                        float(data.get("iaq", 0.0)),
+                        int(data.get("iaq_accuracy", 0)),
+                        float(data.get("co2_equiv", 0.0)),
+                        float(data.get("voc_equiv", 0.0)),
                     )
                 except Exception:
                     pass

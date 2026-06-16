@@ -5,6 +5,23 @@
 -->
 
 
+## 0.29.0
+### Hannah Core
+* Added: MQTT sensor handler forwards IAQ, IAQ accuracy, CO₂ equivalent and VOC equivalent from satellite MQTT payload through to gRPC `AgentSensorUpdate` (Refs #17)
+
+### Proto
+* Added: `AgentSensorUpdate` extended with fields `iaq` (float), `iaq_accuracy` (uint32), `co2_equiv` (float), `voc_equiv` (float) — fields 6–9; zero when BSEC2 not calibrated (Refs #17)
+
+### Hannah Proxy
+* Updated: `proto/hannah.proto` synced with Core — `AgentSensorUpdate` extended with BSEC2 fields `iaq`, `iaq_accuracy`, `co2_equiv`, `voc_equiv`; field 5 (`gas_resistance`) reserved (Refs #17)
+
+### Telegram
+* Updated: `proto/hannah.proto` synced with Core — `AgentSensorUpdate` extended with BSEC2 fields `iaq`, `iaq_accuracy`, `co2_equiv`, `voc_equiv`; field 5 (`gas_resistance`) reserved (Refs #17)
+
+### Satellite Firmware
+* Added: BSEC2 library integration for BME680 — replaces raw gas resistance (Ω) with meaningful IAQ (0–500), Static IAQ, CO₂ equivalent (ppm), and breath VOC equivalent (ppm); accuracy level (0–3) published alongside; BSEC2 calibration state persisted to NVS every 30 min and restored on boot to retain accuracy across reboots (Refs #17)
+* Added: `bme68x` and `bsec2` as local IDF components (`components/bme68x/`, `components/bsec2/`) with precompiled `libalgobsec.a` for ESP32-S3 (Xtensa LX7); workaround for IDF 6.0 `component_requirements.py` Windows path bug via explicit `target_include_directories` / `target_link_libraries` in `hannah_sensors/CMakeLists.txt`
+
 ## 0.28.3
 ### Satellite Firmware
 * Fixed: PDM clock inversion flag set to `true` (`clk_inv = true`) — SPH0641 with SEL=GND outputs data on the falling CLK edge; reading on the rising edge caused white noise instead of signal (Refs #5)

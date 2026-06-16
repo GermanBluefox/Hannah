@@ -4,6 +4,15 @@
     ## **WORK IN PROGRESS**
 -->
 
+
+## 0.28.2
+### Core
+* Fixed: `_ask_fn` routes `start_listening` via MQTT instead of UDP — UDP-based send silently failed for proxy-connected satellites (closes #18)
+
+### Satellite Firmware
+* Fixed: `hannah_net` subscribes to `hannah/satellite/{device}/listen` MQTT topic and calls `start_listening` callback on receipt — proxy satellites now receive the command
+* Fixed: `hannah_audio_start_listen_after_tts` activates virtual PTT immediately if TTS has already ended, avoiding a missed trigger when the MQTT message arrives after the sentinel
+
 ## 0.28.1
 ### Core
 * Fixed: `_ask_fn` now sends `start_listening` UDP command to all satellites in the room after TTS — satellites were not entering listening mode after the question was played, so no answer ever arrived at Hannah

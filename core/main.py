@@ -675,7 +675,7 @@ def main():
     def _ask_fn(room: str, question: str, callback: Callable[[str], None]) -> None:
         process_announcement(room, question)
         for target in _resolve_targets(room):
-            udp_server.send_command(target, {"type": "start_listening"})
+            mqtt_handler.publish_listen(target)
 
         def _on_timeout():
             with _pending_lock:

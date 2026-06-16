@@ -271,6 +271,9 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
         snprintf(topic, sizeof(topic), "hannah/satellite/%s/play_asset",
                  hannah_config_get()->device_id);
         esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
+        snprintf(topic, sizeof(topic), "hannah/satellite/%s/listen",
+                 hannah_config_get()->device_id);
+        esp_mqtt_client_subscribe(s_mqtt_client, topic, 0);
         break;
     }
 
@@ -391,6 +394,15 @@ static void on_mqtt_event(void *handler_arg, esp_event_base_t base,
                                 if (asset_id[0]) {
                                     ESP_LOGI(TAG, "PlayAsset: %s", asset_id);
                                     s_play_asset_cb(asset_id);
+                                }
+                            } else {
+                                char listen_topic[128];
+                                snprintf(listen_topic, sizeof(listen_topic),
+                                         "hannah/satellite/%s/listen",
+                                         hannah_config_get()->device_id);
+                                if (strcmp(topic, listen_topic) == 0) {
+                                    ESP_LOGI(TAG, "start_listening via MQTT.");
+                                    if (s_start_listening_cb) s_start_listening_cb();
                                 }
                             }
                         }

@@ -564,7 +564,12 @@ static void on_tts_end(int sample_rate)
 
 void hannah_audio_start_listen_after_tts(void)
 {
-    s_listen_after_tts = true;
+    if (!s_speaking_active && !s_sampling_mode) {
+        s_virtual_listen_frames = 800;
+        s_ptt_active = true;
+    } else {
+        s_listen_after_tts = true;
+    }
 }
 
 static void on_status(const char *state)

@@ -86,6 +86,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_timer_connected: Optional[Callable[[], None]] = None,
         on_set_capture: Optional[Callable[[str, bool, str], None]] = None,     # (device_id, enabled, sample_type) — set DND + satellite MQTT
         on_trigger_plink: Optional[Callable[[str, float], None]] = None,       # (device_id, record_duration_s)
+        on_agent_ask_resident: Optional[Callable[[str, str, str], None]] = None,  # (correlation_id, room, question)
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -115,8 +116,9 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_timer_fired    = on_timer_fired
         self._on_timer_list     = on_timer_list
         self._on_timer_connected = on_timer_connected
-        self._on_set_capture    = on_set_capture or (lambda *_: None)
-        self._on_trigger_plink  = on_trigger_plink or (lambda *_: None)
+        self._on_set_capture          = on_set_capture or (lambda *_: None)
+        self._on_trigger_plink        = on_trigger_plink or (lambda *_: None)
+        self._on_agent_ask_resident   = on_agent_ask_resident
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -631,6 +633,17 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             log.debug(f"agent_sensor_update({device}): pushed to {n} adapter(s)")
             return n > 0
 
+    def agent_resident_answered(self, correlation_id: str, answer: str) -> bool:
+        """Push AgentResidentAnswered to all connected adapters."""
+        cmd = pb.AgentCommand(resident_answered=pb.AgentResidentAnswered(
+            correlation_id=correlation_id,
+            answer=answer,
+        ))
+        with self._agent_lock:
+            for q in self._agent_queues:
+                q.put(cmd)
+            return len(self._agent_queues) > 0
+
     # ------------------------------------------------------------------
     # Timer Service (called from main.py)
 
@@ -730,6 +743,13 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                     elif which == "send_residents" and self._on_agent_send_residents:
                         r = msg.send_residents
                         self._on_agent_send_residents(r.residents)
+                    elif which == "ask_resident" and self._on_agent_ask_resident:
+                        ar = msg.ask_resident
+                        threading.Thread(
+                            target=self._on_agent_ask_resident,
+                            args=(ar.correlation_id, ar.room, ar.question),
+                            daemon=True, name="agent-ask",
+                        ).start()
                     else:
                         log.warning(f"[grpc] Unrecognized AgentMessage payload: {which}")
                             

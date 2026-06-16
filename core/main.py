@@ -1008,6 +1008,13 @@ def main():
         for tag, room, satellite, rssi in ble_engine.get_current_locations():
             grpc_servicer.agent_ble_update(tag.label, tag.mac, room or "", satellite or "", rssi)
 
+    def _on_agent_ask_resident(correlation_id: str, room: str, question: str) -> None:
+        log.info(f"[grpc/ask] corr={correlation_id!r} room={room!r} question={question!r}")
+        def _answer_callback(answer: str) -> None:
+            log.info(f"[grpc/ask] Antwort corr={correlation_id!r}: {answer!r}")
+            grpc_servicer.agent_resident_answered(correlation_id, answer)
+        _ask_fn(room, question, _answer_callback)
+
     # gRPC-Servicer wird hier erstellt damit _on_arrival/_on_departure Events pushen können.
     # get_satellites und get_car_state sind Lambdas (late binding) — udp_server ist
     # zum Zeitpunkt des Aufrufs bereits gesetzt.
@@ -1044,6 +1051,7 @@ def main():
         on_timer_connected=_on_timer_connected,
         on_set_capture=_on_set_capture,
         on_trigger_plink=_on_trigger_plink,
+        on_agent_ask_resident=_on_agent_ask_resident,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)

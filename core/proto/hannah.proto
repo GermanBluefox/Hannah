@@ -428,6 +428,7 @@ message AgentMessage {
     AgentSatelliteControl satellite_control = 4;  // satellite control command
     AgentDeviceSnapshot   send_snapshot     = 5;  // initial snapshot with all states
     AgentResidentSnapshot send_residents    = 6;  // initial snapshot with all residents
+    AgentAskResident      ask_resident      = 7;  // ask Resident via Hannah
   }
 }
 
@@ -479,8 +480,9 @@ message AgentCommand {
     AgentSatelliteUpdate satellite_update = 4;  // a satellite registered or disconnected
     AgentTextAnswer      text_answer      = 5;  // Hannah's answer to a text command
     AgentFirmwareEvent   firmware_event   = 6;  // satellite firmware version update
-    AgentBleUpdate       ble_update       = 7;  // BLE tag location changed
-    AgentSensorUpdate    sensor_update    = 8;  // satellite sensor reading
+    AgentBleUpdate          ble_update          = 7;  // BLE tag location changed
+    AgentSensorUpdate       sensor_update       = 8;  // satellite sensor reading
+    AgentResidentAnswered   resident_answered   = 9;  // answer to an ask_resident request
   }
 }
 
@@ -572,6 +574,17 @@ message AgentResident {
 // a list with all known residents
 message AgentResidentSnapshot {
   repeated AgentResident residents = 1;
+}
+
+message AgentAskResident {
+  string correlation_id = 3;
+  string room           = 1;
+  string question       = 2;
+}
+
+message AgentResidentAnswered {
+  string correlation_id = 1;
+  string answer         = 2;
 }
 
 // Hannah notifies the adapter that a BLE tag's location has changed.

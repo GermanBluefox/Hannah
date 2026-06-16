@@ -5,6 +5,13 @@
 -->
 ## **WORK IN PROGRESS**
 
+## 0.28.0
+### Core
+* Added: `AgentAskResident` 
+
+### Proto
+* Added: `correlation_id` field to `AgentAskResident` — identifies a pending question across the round-trip; `AgentResidentAnswered` message carries the resident's spoken answer back to the adapter; `resident_answered` variant added to `AgentCommand` oneof so Hannah can push the answer over the existing adapter stream
+
 ## 0.27.0
 ### Core
 * Added: `for:` delay in triggers — state-trigger can specify `for: "5h"` (or `"30m"`, `"90s"`) to defer execution until the duration elapses; the Timer Service registers a SQLite-persistent timer so delays survive Hannah restarts; `cancel_when:` cancels the pending timer if a counter-condition is met before the delay fires; on reconnect, `TimerListRequest` reconciles active trigger timers against current state (stale timers cancelled, active ones restored into RAM); `cancel_when` state IDs included in `WatchMore` so the adapter watches them

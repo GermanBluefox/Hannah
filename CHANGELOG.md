@@ -5,6 +5,12 @@
 -->
 
 
+## 0.30.0
+### Hannah Core
+* Added: `RoomManager` — SQLite persistence for rooms (synced from ioBroker), n:n room groups, and satellite-to-room assignment (`core/hannah/room_manager.py`) (Refs #25)
+* Added: Web UI (`core/hannah/webui.py`) — Flask app for room/group/satellite management; starts as daemon thread on configurable port (default 8080); `flask>=3.0.0` added to `requirements.txt` (Refs #25)
+* Added: `web_ui` and `room_manager` config sections in `config.example.yaml` (Refs #25)
+* Added: `_resolve_targets` uses DB satellite room assignments (overrides self-reported room) and DB groups (fallback: `config.yaml groups:`); NLU room list updated with DB groups on device snapshot (Refs #25)
 
 ## 0.29.3
 ### AutoDeploy

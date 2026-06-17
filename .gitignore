@@ -8,6 +8,12 @@ satelite_cache/
 hannah_users.db
 hannah_users.db-shm
 hannah_users.db-wal
+rooms.db
+rooms.db-shm
+rooms.db-wal
+timers.db
+timers.db-shm
+timers.db-wal
 .idea/
 .claude/
 satellite-esp/build/
@@ -17,6 +23,7 @@ iobroker/
 memory.db
 memory.db-shm
 memory.db-wal
+.tts_cache/
 
 # For PCBs designed using KiCad: https://www.kicad.org/
 # Format documentation: https://kicad.org/help/file-formats/

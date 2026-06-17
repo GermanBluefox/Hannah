@@ -40,6 +40,8 @@ from hannah.llm import load as load_llm, prepare_prompt
 from hannah.tool_agent import ToolAgent
 from hannah.memory import LongTermMemory
 from hannah.user_registry import UserRegistry
+from hannah.room_manager import RoomManager
+from hannah.webui import create_app as create_webui
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
 from hannah.ble_location import BleLocationEngine
@@ -108,6 +110,9 @@ def main():
         cfg.get("user_registry", {}),
         hannah_roomie=residents_cfg.get("hannah_roomie", "hannah"),
     )
+
+    # Room Manager (Räume, Gruppen, Satellit-Zuweisung)
+    room_manager = RoomManager(cfg.get("room_manager", {}))
 
     # STT + NLU + TTS
     stt = STT(cfg.get("stt", {}))
@@ -487,14 +492,32 @@ def main():
         if device in all_devices:
             return [device]
         room_lower = device.lower()
-        targets = [d for d, r in all_devices.items() if r.lower() == room_lower]
+
+        # DB-Raum-Overrides laden (eine Query für alle Satelliten)
+        db_room_map = room_manager.get_satellite_room_map()
+
+        def _satellite_room(d: str, self_reported: str) -> str:
+            return db_room_map.get(d, self_reported).lower()
+
+        # Raum-Match: DB-Zuweisung hat Vorrang vor Eigenangabe
+        targets = [d for d, r in all_devices.items() if _satellite_room(d, r) == room_lower]
+
         if not targets:
-            groups = cfg.get("groups", {})
-            for group_key, rooms in groups.items():
-                if group_key.lower() == room_lower:
-                    for room in rooms:
-                        targets += [d for d, r in all_devices.items() if r.lower() == room.lower()]
-                    break
+            # Gruppen: zuerst DB, dann config.yaml als Fallback
+            db_groups = room_manager.get_group_room_id_map()
+            if room_lower in db_groups:
+                room_ids = {rid for rid in db_groups[room_lower]}
+                for d, r in all_devices.items():
+                    if _satellite_room(d, r) in room_ids:
+                        targets.append(d)
+            else:
+                for group_key, rooms in cfg.get("groups", {}).items():
+                    if group_key.lower() == room_lower:
+                        for room in rooms:
+                            targets += [d for d, r in all_devices.items()
+                                        if _satellite_room(d, r) == room.lower()]
+                        break
+
         if not targets:
             log.warning(f"{label}kein Satellit in Raum/Gruppe '{device}' — ignoriert.")
         return targets
@@ -996,7 +1019,9 @@ def main():
     def _on_agent_device_snapshot(devices):
         nonlocal _iobroker_ready
         iobroker.handle_device_snapshot(devices)
-        nlu._rooms = {**iobroker.rooms, **_group_pseudo_rooms}
+        room_manager.sync_rooms(iobroker.rooms)
+        db_group_rooms = {g["group_id"]: g["display_name"] for g in room_manager.get_groups()}
+        nlu._rooms = {**iobroker.rooms, **_group_pseudo_rooms, **db_group_rooms}
         nlu._devices = iobroker.devices
         _iobroker_ready = True
         grpc_servicer.timer_send_ready()
@@ -1286,6 +1311,28 @@ def main():
 
     residents.announce_online()
     log.info(f"Residents: Hannah online ({residents.topic_prefix_read}/{residents.hannah_name}/state)")
+
+    # ------------------------------------------------------------------
+    # Web UI starten (Raum- und Gruppen-Verwaltung)
+
+    web_cfg = cfg.get("web_ui", {})
+    if web_cfg.get("enabled", True):
+        webui_app = create_webui(
+            room_manager=room_manager,
+            get_connected_satellites=lambda: {
+                **udp_server.registered_devices(),
+                **grpc_servicer.proxy_satellites(),
+            },
+        )
+        web_host = web_cfg.get("host", "0.0.0.0")
+        web_port = int(web_cfg.get("port", 8080))
+        web_thread = threading.Thread(
+            target=lambda: webui_app.run(host=web_host, port=web_port, use_reloader=False),
+            daemon=True,
+            name="webui",
+        )
+        web_thread.start()
+        log.info(f"Web UI: http://{web_host}:{web_port}")
 
     # ------------------------------------------------------------------
     # gRPC-Server starten

@@ -10,13 +10,21 @@ components:
     channel: autodeploy-stable
     install_dir: /opt/hannah/autodeploy
     service: hannah-autodeploy
+    post_install: "/opt/hannah/venv/bin/pip install -q -r /opt/hannah/autodeploy/requirements.txt"
 
   - name: core
     channel: core-stable
     install_dir: /opt/hannah/core
     service: hannah-core
+    post_install: "/opt/hannah/venv/bin/pip install -q -r /opt/hannah/core/requirements.txt"
 
   - name: proxy
     channel: proxy-stable
     install_dir: /opt/hannah/proxy
     service: hannah-proxy
+
+  - name: voiceid
+    channel: voiceid-stable
+    install_dir: /opt/hannah/voiceid
+    service: hannah-voiceid
+    post_install: "/opt/hannah/venv/bin/pip install -q -r /opt/hannah/voiceid/requirements.txt"

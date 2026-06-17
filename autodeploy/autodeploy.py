@@ -163,6 +163,13 @@ def deploy_component(component: dict, base_url: str, token: str, state: dict, de
         if not _verify_sha256(tmp_archive, latest.get("sha256", "")):
             return False
         _extract_and_copy(tmp_archive, install_dir)
+        post_install = component.get("post_install")
+        if post_install:
+            log.info("[%s] Running post_install: %s", name, post_install)
+            result = subprocess.run(post_install, shell=True)
+            if result.returncode != 0:
+                log.error("[%s] post_install failed with exit code %d", name, result.returncode)
+                return False
         state[name] = latest["version"]
         state.setdefault("_revisions", {})[name] = server_rev
         log.info("[%s] Deployed %s rev %d.", name, latest["version"], server_rev)

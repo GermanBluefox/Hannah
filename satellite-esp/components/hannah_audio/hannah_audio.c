@@ -87,7 +87,7 @@ static volatile bool     s_speaking_active        = false;
 static volatile bool     s_listen_after_tts       = false;
 static volatile int      s_virtual_listen_frames  = 0;
 static volatile int      s_volume                 = CONFIG_HANNAH_VOLUME_DEFAULT;
-static hannah_vad_state_t s_vad;
+static hannah_webrtc_vad_state_t s_webrtc_vad;
 static float              s_noise_floor_ema = 0.020f; /* adaptiver Noise-Floor-Schätzer */
 static int                s_stream_frames   = 0;
 
@@ -377,11 +377,14 @@ static void mic_task(void *arg)
                     mic_led(LED_STATE_WAKE);
                     vTaskDelay(pdMS_TO_TICKS(150));
                     mic_led(LED_STATE_STREAM);
-                    hannah_vad_stream_init(&s_vad, 3, vad_silence_frames, adaptive_thr);
-                    if (by_wakeword) s_vad.speaking = 1;
+                    if (hannah_webrtc_vad_init(&s_webrtc_vad,
+                            CONFIG_HANNAH_VAD_WEBRTC_AGGRESSIVENESS,
+                            SAMPLE_RATE, 3, vad_silence_frames) != 0)
+                        ESP_LOGE(TAG, "WebRTC VAD init fehlgeschlagen.");
+                    if (by_wakeword) s_webrtc_vad.speaking = 1;
                     s_stream_frames = 0;
-                    ESP_LOGI(TAG, "%s erkannt → Streaming. VAD thr=%.4f (noise_ema=%.4f)",
-                             by_wakeword ? "Wake-Word" : "PTT", adaptive_thr, s_noise_floor_ema);
+                    ESP_LOGI(TAG, "%s erkannt → Streaming. (noise_ema=%.4f)",
+                             by_wakeword ? "Wake-Word" : "PTT", s_noise_floor_ema);
                     state = AUDIO_STATE_STREAMING;
                 }
                 break;
@@ -393,17 +396,18 @@ static void mic_task(void *arg)
                 s_stream_frames++;
                 if (++s_rms_log_ctr >= 50) {
                     s_rms_log_ctr = 0;
-                    ESP_LOGI(TAG, "VAD RMS=%.4f thr=%.4f silence=%d/%d",
+                    ESP_LOGI(TAG, "VAD RMS=%.4f silence=%d/%d",
                              hannah_rms(mono, (int)mono_samples),
-                             s_vad.threshold, s_vad.offset_count, s_vad.offset_windows);
+                             s_webrtc_vad.offset_count, s_webrtc_vad.offset_windows);
                 }
                 bool ptt_end   = (was_ptt && !s_ptt_active);
                 bool vad_end   = (!ptt_end &&
                                   s_stream_frames >= 200 &&  /* mind. 2s nach Wakeword bevor VAD abschneiden darf */
-                                  hannah_vad_feed(&s_vad, mono, (int)mono_samples) == HANNAH_VAD_OFFSET);
+                                  hannah_webrtc_vad_feed(&s_webrtc_vad, mono, (int)mono_samples) == HANNAH_VAD_OFFSET);
                 bool timed_out = (s_stream_frames >= 1000);  /* 10s Hard-Limit */
                 if (ptt_end || vad_end || timed_out) {
                     hannah_net_send_audio_end();
+                    hannah_webrtc_vad_free(&s_webrtc_vad);
                     mic_led(LED_STATE_IDLE);
                     state = AUDIO_STATE_IDLE;
                     if (s_virtual_listen_frames > 0) {

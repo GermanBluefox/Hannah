@@ -5,6 +5,12 @@
 -->
 
 
+
+## 0.29.1
+### Satellite Firmware
+* Refactored: AudioLib integrated as an IDF component via EXTRA_COMPONENT_DIRS instead of a manual list of source files — future AudioLib updates will automatically include the source and header files (closes #23)
+* Added: WebRTC VAD replaces RMS-based silence detection during streaming — `hannah_webrtc_vad_init/feed/free` (from AudioLib 0.2.0 / libfvad) distinguishes speech from music and background noise by spectral features instead of energy level; aggressiveness configurable via Kconfig (`HANNAH_VAD_WEBRTC_AGGRESSIVENESS`, default 2); `noise_ema` stays for the wakeword-onset guard (closes #20)
+
 ## 0.29.0
 ### Hannah Core
 * Added: MQTT sensor handler forwards IAQ, IAQ accuracy, CO₂ equivalent and VOC equivalent from satellite MQTT payload through to gRPC `AgentSensorUpdate` (Refs #17)

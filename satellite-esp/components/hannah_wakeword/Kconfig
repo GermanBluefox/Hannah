@@ -30,6 +30,15 @@ menu "Hannah Wake Word"
         help
             RMS-Pegel unterhalb dessen ein Frame als Stille gilt.
 
+    config HANNAH_VAD_WEBRTC_AGGRESSIVENESS
+        int "WebRTC VAD Aggressivität (0–3)"
+        default 2
+        range 0 3
+        help
+            Aggressivität der WebRTC-VAD-Stille-Erkennung.
+            0 = sensitiv (weniger Nicht-Sprache herausgefiltert),
+            3 = aggressiv (Musik und Hintergrundgeräusche zuverlässig als Stille erkannt).
+
     config HANNAH_TFLITE_ARENA_KB
         int "TFLite-Micro Arena-Größe (KB)"
         default 256

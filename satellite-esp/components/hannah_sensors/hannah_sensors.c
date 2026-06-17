@@ -99,6 +99,15 @@ static bool sensor_init(void)
     bsec_version_t v; bsec_get_version(&v);
     ESP_LOGI(TAG, "BSEC2 v%d.%d.%d.%d", v.major, v.minor, v.major_bugfix, v.minor_bugfix);
 
+    extern const uint8_t _binary_bme680_iaq_33v_3s_4d_bin_start[];
+    extern const uint8_t _binary_bme680_iaq_33v_3s_4d_bin_end[];
+    static uint8_t work_buf[BSEC_MAX_WORKBUFFER_SIZE];
+    uint32_t cfg_size = (uint32_t)(_binary_bme680_iaq_33v_3s_4d_bin_end - _binary_bme680_iaq_33v_3s_4d_bin_start);
+    bsec_library_return_t cfg_ret = bsec_set_configuration(
+        _binary_bme680_iaq_33v_3s_4d_bin_start, cfg_size, work_buf, sizeof(work_buf));
+    if (cfg_ret != BSEC_OK)
+        ESP_LOGW(TAG, "bsec_set_configuration: %d", (int)cfg_ret);
+
     bsec_load_state();
 
     bsec_sensor_configuration_t req[7], required[BSEC_MAX_PHYSICAL_SENSOR];

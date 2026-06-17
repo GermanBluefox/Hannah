@@ -5,6 +5,10 @@
 -->
 
 
+## 0.29.2
+### Satellite Firmware
+* Added: BSEC2 3.3V config binary (`bme680_iaq_33v_3s_4d.bin`) embedded via `EMBED_FILES` and loaded with `bsec_set_configuration()` after `bsec_init()` to improve self-heating compensation for 3.3V supply; falls back to 1.8V defaults with a warning on version mismatch (Refs #17, Refs #24)
+* Fixed: `work_buf[BSEC_MAX_WORKBUFFER_SIZE]` (4096 bytes) in `sensor_init()` declared `static` to prevent stack overflow that caused heap corruption and a boot loop
 
 ## 0.29.1
 ### Satellite Firmware

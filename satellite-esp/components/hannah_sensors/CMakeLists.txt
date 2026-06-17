@@ -8,6 +8,7 @@ idf_component_register(
         hannah_config
         nvs_flash
         esp_timer
+    EMBED_FILES "bme680_iaq_33v_3s_4d.bin"
 )
 
 # IDF 6.0 component_requirements.py hat einen Windows-Pfad-Bug der REQUIRES-

@@ -5,6 +5,30 @@
 -->
 
 
+
+## 0.32.0
+### Hannah Core
+* Added: `RoomManager.resolve_satellite_name(device_id, serial)` — returns provisioned `display_name` from DB; looked up by serial if present, else by device_id (Refs #26)
+* Added: `display_name` field (8) to `AgentSatelliteUpdate` — Core populates it from DB on every satellite registration event so the adapter can show a human-readable name in ioBroker (Refs #26)
+* Added: `display_name` field (5) to `Satellite` message — returned by `GetSatellites` so the adapter has the correct name on initial connect without waiting for a re-registration event (Refs #26)
+* Added: `resolve_satellite_name` callback parameter to `HannahServicer`; wired to `RoomManager.resolve_satellite_name` in `main.py` (Refs #26)
+* Changed: `GetSatellites` now resolves `serial` and `display_name` per satellite from internal proxy state and DB (Refs #26)
+* Added: `AgentSatelliteUpdate.display_name` (field 8) — human-readable satellite name from Core DB (Refs #26)
+* Added: `Satellite.display_name` (field 5) — human-readable name included in `GetSatellites` response (Refs #26)
+* Changed: `device_id` is now always derived from the eFuse MAC at boot (12-char lowercase hex) — replaces the previously NVS-configurable string; `serial` fields removed from proto, DB, and proxy (Refs #32)
+* Changed: proto — removed `serial` from `Satellite` (field 4 reserved), `SatelliteRegistration` (field 4 reserved), `AgentSatelliteUpdate` (field 7 reserved) — field numbers reserved to prevent future accidental reuse (Refs #32)
+* Changed: `room_manager.py` — removed `serial` column from `satellites` table; `pair_satellite` and `resolve_satellite_name` now operate on `device_id` only; removed `get_satellite_by_serial()` (Refs #32)
+* Changed: `grpc_server.py` — `_proxy_satellites` keyed exclusively by `device_id`; removed dual-key serial/device_id lookup; `agent_satellite_update` no longer carries `serial` (Refs #32)
+
+### Satellite Firmware
+* Changed: status page (`/`) shows hardware serial (eFuse MAC) instead of configurable device-ID at "Gerät" row (Refs #26)
+* Changed: settings page (`/settings`) no longer exposes "Geräte-ID" and "Raum" input fields — both are now managed by Hannah Core; NVS values remain intact and are still used for routing (Refs #26)
+* Changed: `device_id` is now always the eFuse MAC (computed in `hannah_config_init`); `CONFIG_HANNAH_DEVICE_ID` Kconfig option removed; NVS key `device_id` no longer written or read (Refs #32)
+* Changed: `send_register()` no longer sends a `"serial"` JSON field — `device` already carries the eFuse MAC (Refs #32)
+
+### Hannah Proxy
+* Changed: proto updated — `serial` removed from `SatelliteRegistration`; `NotifySatelliteRegistered` and satellite callbacks no longer carry or store serial (Refs #32)
+
 ## 0.31.1
 ### Hannah Core
 * Fixed: `_migrate_db` in `room_manager.py` failed with `sqlite3.OperationalError: Cannot add a UNIQUE column` — SQLite does not support `ADD COLUMN … UNIQUE`; replaced with `ADD COLUMN serial TEXT` followed by `CREATE UNIQUE INDEX … WHERE serial IS NOT NULL` (Refs #26)

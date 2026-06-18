@@ -48,10 +48,10 @@ type AudioCallback func(device, room string, pcm []byte)
 type SessionStartCallback func(device string)
 
 // SatelliteChangeCallback is called when a satellite registers or disconnects.
-// On connect (registered=true): address is the satellite's IP, serial is the hardware MAC,
-// seed is the one-time pairing token (empty if not provisioned).
-// On disconnect (registered=false): address, serial, seed are all "".
-type SatelliteChangeCallback func(device, room, address, serial, seed string, registered bool)
+// On connect (registered=true): address is the satellite's IP, seed is the one-time pairing
+// token (empty after pairing or if not provisioned).
+// On disconnect (registered=false): address and seed are both "".
+type SatelliteChangeCallback func(device, room, address, seed string, registered bool)
 
 const heartbeatTimeout = 30 * time.Second // 3 × 10s heartbeat interval
 
@@ -59,7 +59,6 @@ type satellite struct {
 	audioAddr     *net.UDPAddr // source address of audio packets
 	ttsAddr       *net.UDPAddr // destination for TTS + control (may differ from audioAddr port)
 	room          string
-	serial        string
 	lastHeartbeat time.Time
 }
 
@@ -231,11 +230,10 @@ func (s *Server) RegisteredDevices() map[string]string {
 	return out
 }
 
-// SatelliteInfo holds room, address, and hardware serial for a registered satellite.
+// SatelliteInfo holds room and address for a registered satellite.
 type SatelliteInfo struct {
 	Room    string
 	Address string
-	Serial  string
 }
 
 // RegisteredDevicesFull returns a snapshot of {device: SatelliteInfo} for all registered satellites.
@@ -244,7 +242,7 @@ func (s *Server) RegisteredDevicesFull() map[string]SatelliteInfo {
 	defer s.mu.Unlock()
 	out := make(map[string]SatelliteInfo, len(s.satellites))
 	for d, sat := range s.satellites {
-		out[d] = SatelliteInfo{Room: sat.room, Address: sat.audioAddr.IP.String(), Serial: sat.serial}
+		out[d] = SatelliteInfo{Room: sat.room, Address: sat.audioAddr.IP.String()}
 	}
 	return out
 }
@@ -310,7 +308,6 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 	switch t {
 	case "register":
 		room, _ := msg["room"].(string)
-		serial, _ := msg["serial"].(string)
 		seed, _ := msg["seed"].(string)
 		listenPort := addr.Port
 		if lp, ok := msg["listen_port"].(float64); ok {
@@ -318,14 +315,14 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 		}
 		ttsAddr := &net.UDPAddr{IP: addr.IP, Port: listenPort}
 		s.mu.Lock()
-		s.satellites[device] = &satellite{audioAddr: addr, ttsAddr: ttsAddr, room: room, serial: serial, lastHeartbeat: time.Now()}
+		s.satellites[device] = &satellite{audioAddr: addr, ttsAddr: ttsAddr, room: room, lastHeartbeat: time.Now()}
 		delete(s.sessions, device) // verwaiste Session verwerfen (z.B. nach ESP-Neustart ohne audio_end)
 		s.mu.Unlock()
 		slog.Info("satellite registered", "device", device, "room", room,
-			"audio_from", addr, "tts_to_port", listenPort, "serial", serial)
+			"audio_from", addr, "tts_to_port", listenPort)
 		s.sendControl(map[string]any{"type": "registered", "ok": true}, addr)
 		if s.onSatelliteChange != nil {
-			go s.onSatelliteChange(device, room, addr.IP.String(), serial, seed, true)
+			go s.onSatelliteChange(device, room, addr.IP.String(), seed, true)
 		}
 
 	case "audio_end":
@@ -416,7 +413,7 @@ func (s *Server) checkTimeouts() {
 	for _, t := range timedOut {
 		slog.Warn("satellite heartbeat timeout — marking offline", "device", t.device, "room", t.room)
 		if s.onSatelliteChange != nil {
-			s.onSatelliteChange(t.device, t.room, "", "", "", false)
+			s.onSatelliteChange(t.device, t.room, "", "", false)
 		}
 	}
 }

@@ -12,14 +12,6 @@ menu "Hannah Network"
         help
             WPA2-Passwort. Leer lassen für offene Netzwerke.
 
-    config HANNAH_DEVICE_ID
-        string "Geräte-ID"
-        default "wohnzimmer-esp"
-        help
-            Eindeutiger Name dieses Satelliten. Wird als MQTT-Client-ID
-            und im Discovery-Protokoll verwendet.
-            Beispiele: wohnzimmer-esp, kueche-esp, schreibtisch-esp
-
     config HANNAH_MQTT_BROKER
         string "MQTT Broker Adresse"
         default "192.168.8.1"

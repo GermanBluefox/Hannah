@@ -652,9 +652,8 @@ def main():
         nonlocal _known_satellites, _prev_satellite_map
         current = set(satellite_map.keys())
         ble_macs = ble_engine.get_all_macs()
-        for device_key in current - _known_satellites:
-            device_id, serial = grpc_servicer.get_proxy_satellite_info(device_key)
-            grpc_servicer.agent_satellite_update(device_id, satellite_map[device_key], "", True, serial=serial)
+        for device_id in current - _known_satellites:
+            grpc_servicer.agent_satellite_update(device_id, satellite_map[device_id], "", True)
             if not grpc_servicer.is_captured(device_id):
                 # Stelle sicher, dass kein retained Capture-Modus aus einer
                 # vorherigen Hannah-Session am Satelliten hängen geblieben ist.
@@ -667,9 +666,8 @@ def main():
                     args=(device_id, _connect_pcm, _connect_rate),
                     daemon=True,
                 ).start()
-        for device_key in _known_satellites - current:
-            device_id, _ = grpc_servicer.get_proxy_satellite_info(device_key)
-            grpc_servicer.agent_satellite_update(device_id, _prev_satellite_map.get(device_key, ""), "", False)
+        for device_id in _known_satellites - current:
+            grpc_servicer.agent_satellite_update(device_id, _prev_satellite_map.get(device_id, ""), "", False)
         _known_satellites = current
         _prev_satellite_map = dict(satellite_map)
     def _rephrase_text(text: str) -> str:
@@ -1083,6 +1081,7 @@ def main():
         on_agent_ask_resident=_on_agent_ask_resident,
         provision_satellite=room_manager.provision_satellite,
         pair_satellite=room_manager.pair_satellite,
+        resolve_satellite_name=room_manager.resolve_satellite_name,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)

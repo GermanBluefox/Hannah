@@ -105,32 +105,24 @@ static void send_register(void)
 {
     const hannah_config_t *cfg = hannah_config_get();
 
-    uint8_t mac[6];
-    esp_efuse_mac_get_default(mac);
-    char serial[13];
-    snprintf(serial, sizeof(serial), "%02x%02x%02x%02x%02x%02x",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
     char msg[400];
     if (cfg->seed[0]) {
         snprintf(msg, sizeof(msg),
                  "{\"type\":\"register\",\"device\":\"%s\","
                  "\"room\":\"%s\",\"listen_port\":%d,"
-                 "\"serial\":\"%s\",\"seed\":\"%s\"}",
+                 "\"seed\":\"%s\"}",
                  cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
-                 serial, cfg->seed);
+                 cfg->seed);
     } else {
         snprintf(msg, sizeof(msg),
                  "{\"type\":\"register\",\"device\":\"%s\","
-                 "\"room\":\"%s\",\"listen_port\":%d,"
-                 "\"serial\":\"%s\"}",
-                 cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
-                 serial);
+                 "\"room\":\"%s\",\"listen_port\":%d}",
+                 cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT);
     }
     send_control(msg);
-    ESP_LOGI(TAG, "Register: device=%s room=%s port=%d serial=%s%s",
+    ESP_LOGI(TAG, "Register: device=%s room=%s port=%d%s",
              cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
-             serial, cfg->seed[0] ? " (mit Seed)" : "");
+             cfg->seed[0] ? " (mit Seed)" : "");
 }
 
 /* ── UDP ─────────────────────────────────────────────────────────────────── */

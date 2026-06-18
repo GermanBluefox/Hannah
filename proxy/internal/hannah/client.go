@@ -55,14 +55,13 @@ func (c *Client) SubmitSatelliteAudio(ctx context.Context, deviceID, room string
 }
 
 // NotifySatelliteRegistered tells Hannah Core that a satellite has connected via the proxy.
-// serial is the hardware MAC address (e.g. "e072a1d01adc"); seed is the one-time pairing token
-// (empty if not provisioned). Returns paired=true if Core confirmed pairing of the seed.
-func (c *Client) NotifySatelliteRegistered(ctx context.Context, deviceID, room, address, serial, seed string) (paired bool, err error) {
+// deviceID is the satellite's eFuse MAC (e.g. "e072a1d01adc"); seed is the one-time pairing
+// token (empty if not provisioned). Returns paired=true if Core confirmed pairing of the seed.
+func (c *Client) NotifySatelliteRegistered(ctx context.Context, deviceID, room, address, seed string) (paired bool, err error) {
 	resp, err := c.stub.NotifySatelliteRegistered(ctx, &pb.SatelliteRegistration{
 		DeviceId: deviceID,
 		Room:     room,
 		Address:  address,
-		Serial:   serial,
 		Seed:     seed,
 	})
 	if err != nil {

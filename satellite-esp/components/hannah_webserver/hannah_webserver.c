@@ -6,6 +6,7 @@
 
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_mac.h"
 #include "esp_ota_ops.h"
 #include "esp_app_format.h"
 #include "esp_wifi.h"
@@ -144,6 +145,13 @@ static esp_err_t status_handler(httpd_req_t *req)
     char ip[24];
     hannah_net_get_ip_str(ip, sizeof(ip));
 
+    /* Serial aus eFuse-MAC erzeugen (gleiche Logik wie in hannah_net) */
+    uint8_t mac[6];
+    esp_efuse_mac_get_default(mac);
+    char serial[13];
+    snprintf(serial, sizeof(serial), "%02x%02x%02x%02x%02x%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
     hannah_sensor_data_t sens = {0};
     bool has_sens = hannah_sensors_get(&sens);
 
@@ -157,14 +165,13 @@ static esp_err_t status_handler(httpd_req_t *req)
     int n = snprintf(buf, 3072,
         "%s<h1>Hannah Satellite</h1>"
         "<table>"
-        "<tr><td>Gerät</td><td><b>%s</b></td></tr>"
-        "<tr><td>Raum</td><td>%s</td></tr>"
+        "<tr><td>Serial</td><td><b>%s</b></td></tr>"
         "<tr><td>IP</td><td>%s%s</td></tr>"
         "<tr><td>Partition</td><td>%s</td></tr>"
         "<tr><td>Firmware</td><td>%s (%s %s)</td></tr>"
         "<tr><td>Uptime</td><td>%lu s</td></tr>",
         S_HEAD,
-        cfg->device_id, cfg->room, ip,
+        serial, ip,
         hannah_net_is_ap_mode() ? " <b style=color:orange>(Setup-Modus)</b>" : "",
         running ? running->label : "?",
         app ? app->version : "?",
@@ -212,9 +219,6 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         "<div id=sl style='display:none;border:1px solid #ccc;border-radius:3px;"
           "max-height:180px;overflow-y:auto;margin-bottom:.5em'></div>"
         "<label>Passwort<input type=password name=pass placeholder='(unverändert lassen)'></label>"
-        "<h3>Gerät</h3>"
-        "<label>Geräte-ID<input name=device_id value='%s'></label>"
-        "<label>Raum<input name=room value='%s'></label>"
         "<h3>MQTT</h3>"
         "<label>Broker<input name=mqtt_broker value='%s'></label>"
         "<label>Port<input name=mqtt_port value='%u'></label>"
@@ -265,7 +269,7 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         "}"
         "</script>%s",
         S_HEAD,
-        cfg->wifi_ssid, cfg->device_id, cfg->room,
+        cfg->wifi_ssid,
         cfg->mqtt_broker, cfg->mqtt_port, cfg->mqtt_user,
         cfg->wakeword_threshold, cfg->wakeword_threshold,
         cfg->vad_silence_ms,

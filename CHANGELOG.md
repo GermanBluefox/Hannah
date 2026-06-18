@@ -5,6 +5,9 @@
 -->
 
 
+## 0.31.1
+### Hannah Core
+* Fixed: `_migrate_db` in `room_manager.py` failed with `sqlite3.OperationalError: Cannot add a UNIQUE column` — SQLite does not support `ADD COLUMN … UNIQUE`; replaced with `ADD COLUMN serial TEXT` followed by `CREATE UNIQUE INDEX … WHERE serial IS NOT NULL` (Refs #26)
 
 ## 0.31.0
 ### Hannah Core

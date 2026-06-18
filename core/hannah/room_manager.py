@@ -60,12 +60,15 @@ class RoomManager:
     def _migrate_db(self, conn: sqlite3.Connection) -> None:
         existing = {row[1] for row in conn.execute("PRAGMA table_info(satellites)")}
         for col, definition in [
-            ("serial",    "TEXT UNIQUE"),
+            ("serial",    "TEXT"),
             ("seed",      "TEXT"),
             ("paired_at", "TEXT"),
         ]:
             if col not in existing:
                 conn.execute(f"ALTER TABLE satellites ADD COLUMN {col} {definition}")
+        existing_indexes = {row[1] for row in conn.execute("PRAGMA index_list(satellites)")}
+        if "uq_satellites_serial" not in existing_indexes:
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_satellites_serial ON satellites(serial) WHERE serial IS NOT NULL")
 
     # ------------------------------------------------------------------
     # Räume

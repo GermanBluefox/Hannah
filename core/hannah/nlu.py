@@ -401,13 +401,14 @@ class NLU:
         """
         norm_text = _normalize(text)
 
-        # 1. Vollständiger Key-Match — immer eindeutig (längster gewinnt)
+        # 1. Vollständiger Name-Match — immer eindeutig (längster gewinnt)
+        # Match on display name, not room_id key
         best_key = best_name = None
         best_len = 0
         for key, name in self._rooms.items():
-            norm_key = _normalize(key)
-            if norm_key in norm_text and len(norm_key) > best_len:
-                best_key, best_name, best_len = key, name, len(norm_key)
+            norm_name = _normalize(name)
+            if norm_name in norm_text and len(norm_name) > best_len:
+                best_key, best_name, best_len = key, name, len(norm_name)
         if best_key:
             return best_key, best_name, []
 
@@ -416,8 +417,8 @@ class NLU:
         scored: list[tuple[str, str, int]] = []  # (key, name, score)
         best_score = 0
         for key, name in self._rooms.items():
-            norm_key = _normalize(key)
-            score = sum(1 for w in norm_key.split() if w in text_words)
+            norm_name = _normalize(name)
+            score = sum(1 for w in norm_name.split() if w in text_words)
             if score > 0:
                 scored.append((key, name, score))
                 if score > best_score:
@@ -428,8 +429,8 @@ class NLU:
 
         tied = [(k, n) for k, n, s in scored if s == best_score]
 
-        # Eindeutig oder Tiebreak per Key-Länge
-        best = max(tied, key=lambda x: len(_normalize(x[0])))
+        # Eindeutig oder Tiebreak per Namenslänge
+        best = max(tied, key=lambda x: len(_normalize(x[1])))
         log.debug(f"NLU: Raum-Match '{best[1]}' (score={best_score}, ties={len(tied)})")
         candidates = tied if len(tied) > 1 else []
         return best[0], best[1], candidates

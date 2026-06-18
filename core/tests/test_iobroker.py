@@ -76,7 +76,7 @@ class TestGetStateRaw:
         dev = Device(
             id="virtualDevice.Licht.EG.Wohnzimmer.Decke",
             name="Decke", key="decke",
-            room="Wohnzimmer", floor="EG", category="Licht",
+            room="wohnzimmer", room_display_name="Wohnzimmer", floor="EG", category="Licht",
         )
         dev.current["on"] = True
         client._devices_by_id["virtualDevice.Licht.EG.Wohnzimmer.Decke"] = dev
@@ -86,7 +86,7 @@ class TestGetStateRaw:
         dev = Device(
             id="virtualDevice.Licht.EG.Wohnzimmer.Decke",
             name="Decke", key="decke",
-            room="Wohnzimmer", floor="EG", category="Licht",
+            room="wohnzimmer", room_display_name="Wohnzimmer", floor="EG", category="Licht",
         )
         client._devices_by_id["virtualDevice.Licht.EG.Wohnzimmer.Decke"] = dev
         assert client.get_state_raw("virtualDevice.Licht.EG.Wohnzimmer.Decke.level") is None
@@ -96,7 +96,7 @@ class TestGetStateRaw:
         dev = Device(
             id="virtualDevice.Licht.EG.Wohnzimmer.Decke",
             name="Decke", key="decke",
-            room="Wohnzimmer", floor="EG", category="Licht",
+            room="wohnzimmer", room_display_name="Wohnzimmer", floor="EG", category="Licht",
         )
         dev.current["on"] = True
         client._devices_by_id["virtualDevice.Licht.EG.Wohnzimmer.Decke"] = dev

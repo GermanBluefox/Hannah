@@ -5,6 +5,19 @@
 -->
 
 
+## 0.33.0
+### Hannah Core
+* Changed: `AgentDevice.room` now carries the enum ID segment (e.g. `wohnzimmer`) instead of the German display name; `room_names` map added with all available languages for NLU matching (Refs #33)
+* Changed: `IoBrokerClient` keys rooms by enum ID; `Device.room_display_name` carries the German display name for spoken responses (Refs #33)
+* Changed: `NLU._find_room` matches on display name (`room_names["de"]`) instead of the enum key — NLU behaviour unchanged, but now stable when enum IDs differ from German names (Refs #33)
+* Changed: `GrpcServer` resolves `room_id` from `RoomManager` on satellite registration; `AgentSatelliteUpdate.room` now carries the enum ID so the adapter can use it as a language-neutral ioBroker path segment (Refs #33)
+* Changed: proto — `AgentDevice.room_names: map<string, string>` added (field 8); comments updated on `AgentSatelliteUpdate.room` and `AgentSatelliteControl.room` to clarify room_id semantics (Refs #33)
+
+### Hannah Proxy
+* Changed: proto updated — `AgentDevice.room_names` map added (field 8) (Refs #33)
+
+### Telegram
+* Changed: proto updated — `AgentDevice.room_names` map added (field 8) (Refs #33)
 
 ## 0.32.0
 ### Hannah Core

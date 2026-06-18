@@ -12,9 +12,9 @@ def _make_iobroker(devices: list[Device] | None = None) -> MagicMock:
     """Helper: IoBrokerClient-Mock mit optionaler Device-Liste."""
     iobroker = MagicMock()
     devs = devices or []
-    iobroker.rooms = {d.room.lower(): d.room for d in devs}
+    iobroker.rooms = {d.room: d.room_display_name for d in devs}
     by_key = {d.key: d for d in devs}
-    iobroker.devices = {d.room.lower(): by_key for d in devs}
+    iobroker.devices = {d.room: by_key for d in devs}
     iobroker._devices_by_id = {d.id: d for d in devs}
     return iobroker
 
@@ -22,7 +22,8 @@ def _make_iobroker(devices: list[Device] | None = None) -> MagicMock:
 def _make_device(
     device_id: str = "javascript.0.virtualDevice.Licht.EG.Wohnzimmer.Decke",
     name: str = "Decke",
-    room: str = "Wohnzimmer",
+    room: str = "wohnzimmer",
+    room_display_name: str = "Wohnzimmer",
     floor: str = "EG",
     category: str = "Licht",
     states: dict | None = None,
@@ -33,6 +34,7 @@ def _make_device(
         name=name,
         key=name.lower(),
         room=room,
+        room_display_name=room_display_name,
         floor=floor,
         category=category,
         states=states if states is not None else {"on": f"{device_id}.on"},

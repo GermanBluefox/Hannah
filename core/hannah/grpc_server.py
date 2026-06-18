@@ -90,6 +90,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         provision_satellite: Optional[Callable[[str, str, str], bool]] = None,   # (seed, display_name, room_id) → bool
         pair_satellite: Optional[Callable[[str, str], bool]] = None,             # (device_id, seed) → bool
         resolve_satellite_name: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → display_name | None
+        resolve_satellite_room: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → room_id | None
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -125,6 +126,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._provision_satellite     = provision_satellite or (lambda *_: False)
         self._pair_satellite          = pair_satellite or (lambda *_: False)
         self._resolve_satellite_name  = resolve_satellite_name or (lambda *_: None)
+        self._resolve_satellite_room  = resolve_satellite_room or (lambda *_: None)
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -557,7 +559,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 target=self._on_satellite_change, args=(snapshot,), daemon=True
             ).start()
         display_name = self._resolve_satellite_name(device) or ""
-        self.agent_satellite_update(device, room, "", online=True, display_name=display_name)
+        room_id = self._resolve_satellite_room(device) or room
+        self.agent_satellite_update(device, room_id, "", online=True, display_name=display_name)
         return pb.StatusResponse(ok=True, message="paired" if paired else "registered")
 
     def NotifySatelliteGone(self, request, _context):

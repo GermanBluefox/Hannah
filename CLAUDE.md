@@ -45,7 +45,7 @@ hannah/                          ← Mono-Repo
 │   └── routines.yaml            ← hot-reload
 │
 ├── proxy/                       ← Go gRPC-Proxy (UDP-Satelliten → gRPC → Core)
-│   └── proto/hannah.proto       ← Einzige Source of Truth für das Protokoll
+│   └── proto/hannah.proto       ← Kopie des Protokolls (Source of Truth: core/proto/hannah.proto)
 │
 ├── satellite-esp/               ← ESP32-S3 Firmware (ESP-IDF, C)
 │   ├── main/main.c
@@ -64,6 +64,7 @@ hannah/                          ← Mono-Repo
 │
 ├── satellite-pi/                ← Raspberry Pi Satellit (Python, Legacy)
 ├── telegram/                    ← Telegram-Bot Microservice (Python)
+│   └── proto/hannah.proto       ← Kopie des Protokolls (Source of Truth: core/proto/hannah.proto)
 ├── voiceid/                     ← Speaker-ID Service (Python)
 ├── audiolib/                    ← C-Audio-Bibliothek (frühe Phase)
 ├── iobroker.hannah/             ← ioBroker-Adapter (TypeScript)
@@ -138,7 +139,7 @@ Kein TLS auf UDP (zu teuer für ESP32, im LAN akzeptabel).
 
 ### gRPC (Hannah Core ↔ externe Services)
 
-- **Proto:** `core/proto/hannah.proto` — einzige Source of Truth. Bei Änderungen manuell in alle Konsumenten kopieren (`proxy/proto/`, `iobroker.hannah/src/proto/`), dann Stubs neu generieren via `core/proto/gen_proto.sh`.
+- **Proto:** `core/proto/hannah.proto` — einzige Source of Truth. Bei Änderungen manuell in alle Konsumenten kopieren (`proxy/proto/`, `iobroker.hannah/src/proto/`, `telegram/proto/`), dann Stubs neu generieren via `core/proto/gen_proto.sh`.
 - **Port:** 50051 (lokal)
 
 | Methode | Funktion |

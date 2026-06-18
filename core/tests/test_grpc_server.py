@@ -25,10 +25,11 @@ def test_device_snapshot_dispatched():
     devices = [
         AgentDevice(
             state_id="javascript.0.virtualDevice.Licht.EG.Wohnzimmer.Decke.on",
-            room="Wohnzimmer",
+            room="wohnzimmer",
             device="Decke",
             functions=["Licht"],
             value=AgentStateValue(value="true", ack=True),
+            room_names={"de": "Wohnzimmer", "en": "Living Room"},
         )
     ]
     servicer._on_agent_device_snapshot(devices)

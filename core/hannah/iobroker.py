@@ -54,12 +54,13 @@ def _camel_to_words(s: str) -> str:
 
 @dataclass
 class Device:
-    id: str          # javascript.0.virtualDevice.Licht.EG.Wohnzimmer.DeckeSeite
-    name: str        # DeckeSeite (Originalname)
-    key: str         # decke seite (normalisiert für NLU-Matching)
-    room: str        # Wohnzimmer
-    floor: str       # EG
-    category: str    # Licht
+    id: str                # javascript.0.virtualDevice.Licht.EG.Wohnzimmer.DeckeSeite
+    name: str              # DeckeSeite (Originalname)
+    key: str               # decke seite (normalisiert für NLU-Matching)
+    room: str              # room_id: enum ID segment, z.B. "wohnzimmer" oder "living_room"
+    room_display_name: str # Anzeigename für Ansagen, z.B. "Wohnzimmer"
+    floor: str             # EG
+    category: str          # Licht
     states: dict = field(default_factory=dict)         # canon-key → state_id
     current: dict = field(default_factory=dict)        # canon-key → aktueller Wert (Cache)
 
@@ -155,11 +156,13 @@ class IoBrokerClient:
                 device_id = ".".join(parts[:-1])
 
                 if device_id not in new_device_map:
+                    room_display_name = dict(device.room_names).get("de") or device.room
                     new_device_map[device_id] = Device(
                         id=device_id,
                         name=device.device,
                         key=_camel_to_words(device.device),
                         room=device.room,
+                        room_display_name=room_display_name,
                         floor=device.floor,
                         category=device.device_type,
                     )
@@ -187,8 +190,8 @@ class IoBrokerClient:
         filled_states = 0
 
         for device in device_map.values():
-            room_key = device.room.lower()
-            self.rooms[room_key] = device.room
+            room_key = device.room  # already the enum ID (e.g. "wohnzimmer")
+            self.rooms[room_key] = device.room_display_name
             self._devices_by_id[device.id] = device
 
             if room_key not in self.devices:
@@ -265,7 +268,7 @@ class IoBrokerClient:
                 count += 1
                 # Bestätigung registrieren wenn Feedback gewünscht
                 if satellite_device and self._feedback_cb:
-                    label = f"{dev.name} im {dev.room}"
+                    label = f"{dev.name} im {dev.room_display_name}"
                     with self._pending_lock:
                         self._pending[state_id] = {
                             "expected":  value,
@@ -393,7 +396,7 @@ class IoBrokerClient:
 
         if qs == "on" or qs is None:
             # Räume mit eingeschalteten Geräten nennen (nur Raumnamen, keine Geräteliste)
-            rooms_on = sorted({dev.room for dev in targets if dev.current.get("on") is True})
+            rooms_on = sorted({dev.room_display_name for dev in targets if dev.current.get("on") is True})
 
             if not rooms_on:
                 return f"Keine {_category_label(category_filter)} sind eingeschaltet."
@@ -406,7 +409,7 @@ class IoBrokerClient:
             for dev in sorted(targets, key=lambda d: d.room):
                 val = dev.current.get("level")
                 if val is not None:
-                    lines.append(f"{dev.name} im {dev.room}: {int(val)} Prozent")
+                    lines.append(f"{dev.name} im {dev.room_display_name}: {int(val)} Prozent")
             return ("Helligkeit: " + ", ".join(lines) + ".") if lines \
                 else "Keine Helligkeitsdaten verfügbar."
 
@@ -498,7 +501,7 @@ class IoBrokerClient:
 
     def _describe_device(self, dev: "Device", qs: Optional[str]) -> str:
         name = dev.name
-        room = dev.room
+        room = dev.room_display_name
 
         if dev.category == "climate":
             parts = []

@@ -652,22 +652,24 @@ def main():
         nonlocal _known_satellites, _prev_satellite_map
         current = set(satellite_map.keys())
         ble_macs = ble_engine.get_all_macs()
-        for device in current - _known_satellites:
-            grpc_servicer.agent_satellite_update(device, satellite_map[device], "", True)
-            if not grpc_servicer.is_captured(device):
+        for device_key in current - _known_satellites:
+            device_id, serial = grpc_servicer.get_proxy_satellite_info(device_key)
+            grpc_servicer.agent_satellite_update(device_id, satellite_map[device_key], "", True, serial=serial)
+            if not grpc_servicer.is_captured(device_id):
                 # Stelle sicher, dass kein retained Capture-Modus aus einer
                 # vorherigen Hannah-Session am Satelliten hängen geblieben ist.
-                mqtt_handler.publish_sampling_mode(device, False)
+                mqtt_handler.publish_sampling_mode(device_id, False)
             if ble_macs:
-                mqtt_handler.publish_ble_watchlist(device, ble_macs)
+                mqtt_handler.publish_ble_watchlist(device_id, ble_macs)
             if _connect_pcm:
                 threading.Thread(
                     target=_send_audio,
-                    args=(device, _connect_pcm, _connect_rate),
+                    args=(device_id, _connect_pcm, _connect_rate),
                     daemon=True,
                 ).start()
-        for device in _known_satellites - current:
-            grpc_servicer.agent_satellite_update(device, _prev_satellite_map.get(device, ""), "", False)
+        for device_key in _known_satellites - current:
+            device_id, _ = grpc_servicer.get_proxy_satellite_info(device_key)
+            grpc_servicer.agent_satellite_update(device_id, _prev_satellite_map.get(device_key, ""), "", False)
         _known_satellites = current
         _prev_satellite_map = dict(satellite_map)
     def _rephrase_text(text: str) -> str:
@@ -1079,6 +1081,8 @@ def main():
         on_set_capture=_on_set_capture,
         on_trigger_plink=_on_trigger_plink,
         on_agent_ask_resident=_on_agent_ask_resident,
+        provision_satellite=room_manager.provision_satellite,
+        pair_satellite=room_manager.pair_satellite,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)

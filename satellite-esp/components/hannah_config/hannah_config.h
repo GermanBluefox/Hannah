@@ -20,6 +20,7 @@ typedef struct {
     char     asset_url[128];
     char     asset_token[128];
     bool     tls_skip_verify;  /* Skip TLS certificate validation (insecure, for self-signed certs) */
+    char     seed[64];         /* one-time pairing token written by WebFlash; cleared after "paired" ACK */
 } hannah_config_t;
 
 /* Lädt Einstellungen aus NVS — sdkconfig-Werte als Fallback beim Erststart. */
@@ -33,3 +34,6 @@ const hannah_config_t *hannah_config_get(void);
 
 /* Speichert neue Konfiguration in NVS und aktualisiert den In-Memory-Cache. */
 void hannah_config_save(const hannah_config_t *cfg);
+
+/* Löscht den Pairing-Seed aus NVS und RAM (nach erfolgreichem Pairing aufrufen). */
+void hannah_config_clear_seed(void);

@@ -87,6 +87,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_set_capture: Optional[Callable[[str, bool, str], None]] = None,     # (device_id, enabled, sample_type) — set DND + satellite MQTT
         on_trigger_plink: Optional[Callable[[str, float], None]] = None,       # (device_id, record_duration_s)
         on_agent_ask_resident: Optional[Callable[[str, str, str], None]] = None,  # (correlation_id, room, question)
+        provision_satellite: Optional[Callable[[str, str, str], bool]] = None,   # (seed, display_name, room_id) → bool
+        pair_satellite: Optional[Callable[[str, str, str], bool]] = None,        # (device_id, serial, seed) → bool
     ):
         self._registry              = registry
         self._handle_text           = handle_text
@@ -119,6 +121,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_set_capture          = on_set_capture or (lambda *_: None)
         self._on_trigger_plink        = on_trigger_plink or (lambda *_: None)
         self._on_agent_ask_resident   = on_agent_ask_resident
+        self._provision_satellite     = provision_satellite or (lambda *_: False)
+        self._pair_satellite          = pair_satellite or (lambda *_: False)
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -176,9 +180,13 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             for q in list(self._proxy_queues):
                 q.put(cmd)
 
-    def stream_audio_to_proxy(self, device_id: str, pcm: bytes, sample_rate: int,
+    def stream_audio_to_proxy(self, target: str, pcm: bytes, sample_rate: int,
                                chunk_size: int = 4800):
         """Slice PCM into chunks and push one PlayAudioCommand per chunk.
+
+        target may be a serial (for paired satellites) or a device_id (for unpaired).
+        The actual device_id used in PlayAudioCommand is looked up from _proxy_satellites
+        so the proxy can route TTS to the correct satellite.
 
         Chunks arrive at the proxy in order; the proxy forwards each to the satellite
         immediately so playback can start before the full TTS response is sent.
@@ -186,6 +194,9 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         """
         if not pcm:
             return
+        with self._proxy_sat_lock:
+            info = self._proxy_satellites.get(target, {})
+        proxy_device_id = info.get("device_id", target)
         with self._proxy_lock:
             queues = list(self._proxy_queues)
         if not queues:
@@ -198,7 +209,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             is_last = end >= total
             cmd = pb.ProxyCommand(
                 play_audio=pb.PlayAudioCommand(
-                    device_id=device_id,
+                    device_id=proxy_device_id,
                     audio_pcm=chunk,
                     sample_rate=sample_rate,
                     is_last=is_last,
@@ -489,9 +500,14 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         )
         if self._on_satellite_change and request.device_id:
             with self._proxy_sat_lock:
-                known = self._proxy_satellites.get(request.device_id)
+                # Satellit kann per Serial gekennt sein — per device_id-Feld suchen
+                key = next(
+                    (k for k, v in self._proxy_satellites.items() if v.get("device_id", k) == request.device_id),
+                    request.device_id,
+                )
+                known = self._proxy_satellites.get(key)
                 if known is None or known.get("room") != request.room:
-                    self._proxy_satellites[request.device_id] = {"room": request.room, "addr": known.get("addr", "") if known else ""}
+                    self._proxy_satellites[key] = {"room": request.room, "device_id": request.device_id, "addr": known.get("addr", "") if known else ""}
                     snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
             if known is None or known.get("room") != request.room:
                 threading.Thread(
@@ -518,25 +534,50 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             sample_rate=sample_rate,
         )
 
+    def ProvisionSatellite(self, request, _context):
+        """Adapter pre-registriert einen Satelliten vor dem WebFlash."""
+        ok = self._provision_satellite(request.seed, request.display_name, request.room_id or None)
+        return pb.StatusResponse(ok=ok, message="provisioned" if ok else "failed")
+
     def NotifySatelliteRegistered(self, request, _context):
         """Proxy meldet: Satellit hat sich via UDP registriert."""
         device, room, address = request.device_id, request.room, request.address
+
+        # Seed-basiertes Pairing: Serial + Seed verknüpfen
+        paired = False
+        if request.serial and request.seed:
+            paired = self._pair_satellite(device, request.serial, request.seed)
+            if paired:
+                log.info("Satellite %s paired (serial=%s)", device, request.serial)
+            else:
+                log.warning("Satellite %s: seed not found, proceeding without pairing", device)
+
+        # Serial als stabiler Routing-Key; device_id wird im Dict-Value gespeichert
+        # damit stream_audio_to_proxy() den Proxy-seitigen Namen für PlayAudioCommand kennt.
+        key = request.serial if request.serial else device
         with self._proxy_sat_lock:
-            self._proxy_satellites[device] = {"room": room, "addr": address}
+            if request.serial and request.serial != device:
+                self._proxy_satellites.pop(device, None)  # alten device_id-Key entfernen
+            self._proxy_satellites[key] = {"room": room, "device_id": device, "addr": address}
             snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
-        log.info(f"[grpc] Satellit registriert via Proxy: '{device}' (Raum: '{room}')")
+        log.info(f"[grpc] Satellit registriert via Proxy: '{device}' serial={request.serial or '—'} (Raum: '{room}')")
         if self._on_satellite_change:
             threading.Thread(
                 target=self._on_satellite_change, args=(snapshot,), daemon=True
             ).start()
-        self.agent_satellite_update(device, room, "", online=True)
-        return pb.StatusResponse(ok=True, message="registered")
+        self.agent_satellite_update(device, room, "", online=True, serial=request.serial)
+        return pb.StatusResponse(ok=True, message="paired" if paired else "registered")
 
     def NotifySatelliteGone(self, request, _context):
         """Proxy meldet: Satellit hat sich abgemeldet."""
         device = request.device_id
         with self._proxy_sat_lock:
-            self._proxy_satellites.pop(device, None)
+            # Satellit kann per Serial oder device_id gekennt sein — per device_id-Feld suchen
+            key = next(
+                (k for k, v in self._proxy_satellites.items() if v.get("device_id", k) == device),
+                device,
+            )
+            self._proxy_satellites.pop(key, None)
             snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
         log.info(f"[grpc] Satellit abgemeldet via Proxy: '{device}'")
         if self._on_satellite_change:
@@ -582,14 +623,28 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 q.put(cmd)
             return len(self._agent_queues) > 0
 
+    def get_proxy_satellite_info(self, key: str) -> tuple[str, str]:
+        """Resolves (device_id, serial) for a key from a proxy-satellite snapshot.
+
+        The snapshot key is serial for paired satellites and device_id for unpaired ones.
+        Returns (device_id, serial). For UDP satellites (not in _proxy_satellites) returns (key, "").
+        """
+        with self._proxy_sat_lock:
+            info = self._proxy_satellites.get(key, {})
+        device_id = info.get("device_id", key)
+        serial = key if (info and key != info.get("device_id", key)) else ""
+        return device_id, serial
+
     def agent_satellite_update(self, device_id: str, room: str, address: str, online: bool,
-                               volume: int = None, mute: bool = None) -> bool:
+                               volume: int = None, mute: bool = None, serial: str = "") -> bool:
         """Push a satellite online/offline or state update to all connected adapters."""
         kwargs = dict(device_id=device_id, room=room, address=address, online=online)
         if volume is not None:
             kwargs["volume"] = volume
         if mute is not None:
             kwargs["mute"] = mute
+        if serial:
+            kwargs["serial"] = serial
         cmd = pb.AgentCommand(satellite_update=pb.AgentSatelliteUpdate(**kwargs))
         with self._agent_lock:
             for q in self._agent_queues:

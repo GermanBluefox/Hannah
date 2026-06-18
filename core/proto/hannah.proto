@@ -91,6 +91,11 @@ service HannahService {
   rpc NotifySatelliteRegistered(SatelliteRegistration)         returns (StatusResponse);
   rpc NotifySatelliteGone      (SatelliteRegistration)         returns (StatusResponse);
 
+  // --- Satellite Provisioning ---
+  // Called by the ioBroker adapter before WebFlash to pre-register a seed + display name + room.
+  // When the satellite first connects with that seed, Hannah links serial → pre-config and clears the seed.
+  rpc ProvisionSatellite  (ProvisionSatelliteRequest)          returns (StatusResponse);
+
   // --- Speaker Enrollment ---
   rpc EnrollVoiceprint    (EnrollVoiceprintRequest)            returns (StatusResponse);
 
@@ -221,6 +226,7 @@ message Satellite {
   string device_id = 1;
   string room      = 2;   // room name as registered
   string address   = 3;   // IP:port of the UDP satellite
+  string serial    = 4;   // ESP32 hardware serial (empty if not yet paired)
 }
 
 message GetSatellitesResponse {
@@ -396,6 +402,19 @@ message ControlDeviceRequest {
 }
 
 // ============================================================
+//  Satellite Provisioning messages
+// ============================================================
+
+// Sent by the ioBroker adapter (WebFlasher) before flashing a satellite.
+// Hannah stores the seed + pre-config; when the satellite first connects with
+// this seed, Hannah links the hardware serial to the pre-config and clears the seed.
+message ProvisionSatelliteRequest {
+  string seed         = 1;  // random UUID, also written to NVS during flash
+  string display_name = 2;  // pre-configured display name
+  string room_id      = 3;  // optional: pre-configured room (room_id from ioBroker)
+}
+
+// ============================================================
 //  Speaker Enrollment messages
 // ============================================================
 
@@ -410,9 +429,11 @@ message EnrollVoiceprintRequest {
 // ============================================================
 
 message SatelliteRegistration {
-  string device_id = 1;  // satellite device name, e.g. "sat-wohnzimmer"
+  string device_id = 1;  // satellite device name (display name), e.g. "sat-wohnzimmer"
   string room      = 2;  // room name as reported by satellite, e.g. "Wohnzimmer"
   string address   = 3;  // IP of the UDP satellite as seen by the proxy, e.g. "192.168.8.42"
+  string serial    = 4;  // ESP32 MAC from eFuse, e.g. "e072a1d01adc" (empty if not provisioned)
+  string seed      = 5;  // one-time pairing token from NVS (empty after successful pairing)
 }
 
 // ============================================================
@@ -525,6 +546,7 @@ message AgentSatelliteUpdate {
   bool   online       = 4;  // true = registered/online, false = gone/offline
   optional int32 volume = 5;  // current volume level (0–100); absent = no change
   optional bool  mute   = 6;  // current mute state; absent = no change
+  string serial       = 7;  // ESP32 hardware serial (empty if not paired); adapter uses as ioBroker object-ID
 }
 
 // Hannah sends the answer to a text command back to the adapter.

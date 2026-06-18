@@ -13,7 +13,7 @@ Hannah ist ein **lokal betriebener, deutschsprachiger Sprachassistent** für das
 ## Repository-Struktur
 
 ```
-hannah/                          ← Mono-Repo (Branch: DanielDuesentrieb)
+hannah/                          ← Mono-Repo
 ├── core/                        ← Hannah Core (Python, Raspberry Pi)
 │   ├── hannah/
 │   │   ├── main.py              ← Einstiegspunkt, Orchestrierung
@@ -32,6 +32,11 @@ hannah/                          ← Mono-Repo (Branch: DanielDuesentrieb)
 │   │   ├── memory.py            ← Langzeit-Erinnerungen (SQLite)
 │   │   ├── trigger_engine.py    ← Proaktive Trigger
 │   │   ├── routines.py          ← Geplante Routinen (routines.yaml)
+│   │   ├── room_manager.py      ← Räume/Gruppen/Satellit-Zuordnung (SQLite)
+│   │   ├── webui.py             ← Flask-WebUI (Räume/Gruppen-Verwaltung); soll laut #27 in eigene Komponente wandern
+│   │   ├── timers.py            ← Timer + Wecker (AlarmManager)
+│   │   ├── ble_location.py      ← BLE-Indoor-Lokalisierung
+│   │   ├── tool_agent.py        ← LLM-Tool-Calling-Agent (ioBroker-Aktionen)
 │   │   ├── weather.py           ← Wetter (OpenWeatherMap)
 │   │   ├── audio.py             ← Audio-Utilities (Resampling, VAD)
 │   │   └── proto/               ← Generierte gRPC-Stubs
@@ -46,13 +51,13 @@ hannah/                          ← Mono-Repo (Branch: DanielDuesentrieb)
 │   ├── main/main.c
 │   ├── components/
 │   │   ├── hannah_net/          ← WiFi, MQTT-Discovery, UDP-Streaming
-│   │   ├── hannah_audio/        ← I2S Mic (INMP441×2), Speaker (MAX98357A)
+│   │   ├── hannah_audio/        ← PDM-Mic (SPH0641 ×2), Speaker (MAX98357A), VAD (WebRTC/libfvad via AudioLib)
 │   │   ├── hannah_led/          ← WS2812B LED-Ring State-Machine
-│   │   ├── hannah_sensors/      ← BME680 (Temp, Feuchte, Luftdruck, Gas, I2C)
-│   │   ├── hannah_wakeword/     ← microWakeWord / ESP-SR (in Arbeit)
+│   │   ├── hannah_sensors/      ← BME680 + BSEC2 (IAQ, CO₂eq, VOCeq), I2C
+│   │   ├── hannah_wakeword/     ← microWakeWord (TFLite Micro)
 │   │   └── microfrontend/       ← Audio-Frontend (Spektrogramm für WW)
 │   └── hardware/
-│       ├── Phase2/              ← KiCad PCB Rev. 3 (aktuelle Entwicklung)
+│       ├── Phase2/              ← KiCad PCB Rev. 4 (aktuell verbaut)
 │       └── Enclosure/           ← FreeCAD Gehäuse
 │           ├── Enclosure.FCStd
 │           └── Enclosure-Deckel.step
@@ -102,10 +107,10 @@ ESP-IDF (C), FreeRTOS, **ESP32-S3** (AI-Beschleuniger + mehr RAM benötigt).
 | Komponente | Funktion |
 |---|---|
 | `hannah_net` | WiFi STA, MQTT-Discovery via `hannah/server` (retained), UDP-Registrierung + Heartbeat (30s) |
-| `hannah_audio` | I2S0 (INMP441 Mono), I2S1 (MAX98357A). PTT: halten → streamen, loslassen → audio_end |
+| `hannah_audio` | I2S0 PDM-Mic (SPH0641 ×2), I2S1 (MAX98357A). PTT: halten → streamen, loslassen → audio_end. VAD (WebRTC/libfvad, AudioLib) für Silence-Erkennung im Stream |
 | `hannah_led` | WS2812B, 7 Zustände: BOOT / IDLE / WAKE / STREAM / SPEAK / MUTE / ERROR |
-| `hannah_sensors` | BME680 (Temp, Feuchte, Luftdruck, Gas-Widerstand), I2C |
-| `hannah_wakeword` | microWakeWord / ESP-SR — **6 offene Kompilierfehler** (IDF 6.0 API-Änderungen) |
+| `hannah_sensors` | BME680 + BSEC2 (IAQ, Static IAQ, CO₂eq, VOCeq, Accuracy), I2C |
+| `hannah_wakeword` | microWakeWord (TFLite Micro) — produktiv seit v0.6.0 |
 
 **ESP-IDF Umgebung aktivieren:**
 ```powershell
@@ -139,19 +144,44 @@ Kein TLS auf UDP (zu teuer für ESP32, im LAN akzeptabel).
 | Methode | Funktion |
 |---|---|
 | `SubmitText` / `SubmitVoice` | Text/Voice-Befehl → Intent + Antwort |
-| `SubmitSatelliteAudio` | Proxy reicht Audio durch → STT+NLU+TTS in einer Transaktion |
+| `Announce` / `Notify` | TTS-Ansage an Satellit(en) / System-Notification von ioBroker |
+| `GetDevices` / `ControlDevice` | Geräteliste für Steuer-Menüs / direktes Setzen eines State (umgeht NLU) |
+| `GetUsers` / `GetUser` / `LinkAccount` / `UnlinkAccount` / `SetTrustLevel` / `SetSystemMessages` | User-Registry-Verwaltung |
+| `GetSatellites` | Liste aller registrierten Satelliten inkl. Hardware-Serial |
+| `GetCarState` / `GetAllCarStates` | Live-Autostatus (VW Connect) |
+| `SubscribeEvents` | Server-Side Stream für Events (`car.parked`, `resident.arrived`, `satellite.firmware`, …) |
+| `TriggerFirmwareUpdate` | Erzwingt sofortiges OTA-Update für einen Satelliten |
+| `RequestSatelliteCapture` / `ReleaseSatelliteCapture` / `StreamSatelliteAudio` / `TriggerPlink` | Wakeword-Trainingsdaten-Sammlung: Satellit in Capture-Modus versetzen, Rohaudio durchreichen, geführtes Plink+PTT für hey-hannah-Aufnahmen |
 | `RegisterProxy` | Bidirektionaler Keep-alive-Stream. Proxy sendet Heartbeats, Hannah sendet `PlayAudioCommand` zurück. Solange offen: UDP-Server deaktiviert; bei Disconnect: UDP reaktiviert. |
-| `SubscribeEvents` | Server-Side Stream für Events (`car.parked`, `resident.arrived`, …) |
+| `SubmitSatelliteAudio` | Proxy reicht Audio durch → STT+NLU+TTS in einer Transaktion |
+| `NotifySatelliteRegistered` / `NotifySatelliteGone` | Proxy meldet Satellit-Connect/Disconnect |
+| `ProvisionSatellite` | Adapter pre-registriert Seed + Displayname + Raum vor dem WebFlash (Issue #26) |
 | `EnrollVoiceprint` | Sprach-Enrollment für Speaker-ID |
+| `TimerConnect` | Bidirektionaler Stream zum Timer-Service (Timer/Wecker-Events) |
+| `AgentConnect` | Bidirektionaler Stream zum ioBroker-Adapter — State-Updates rein, Control-Commands + `resident_answered`-Events raus |
 
-### MQTT (Hannah Core ↔ ioBroker / Satelliten)
+### MQTT (Hannah Core ↔ Satelliten)
+
+**Steuerkommandos laufen grundsätzlich über MQTT, nicht UDP** — einziger Kanal, der sowohl UDP-direkte als auch Proxy-verbundene Satelliten erreicht (siehe Architektur-Entscheidung 9, entstanden aus Issue #18).
 
 | Topic | Zweck |
 |---|---|
-| `hannah/server` (retained) | Discovery: Proxy-IP:Port |
-| `hannah/{device}/audio` | Audio (Legacy) |
-| `hannah/{device}/answer` | TTS-Antwort |
-| `hannah/{device}/intent` | Erkannter Intent |
+| `hannah/server` (retained) | Discovery: Proxy-Host:Port |
+| `hannah/announce` / `hannah/announceSSML` | Extern → Core: Raum-Announcement (Text/SSML) |
+| `hannah/notification` | Extern → Core: System-Notification (severity: alert/notify/info) |
+| `hannah/volume` (+ `/state`) | Globale Lautstärke setzen/lesen |
+| `hannah/satellite/{device}/announcement` | Extern → Core: Text-Announcement an einen einzelnen Satelliten |
+| `hannah/satellite/{device}/volume/set` (+ `/state`) | Lautstärke pro Satellit |
+| `hannah/satellite/{device}/mute/set` (+ `/state`) | Mute pro Satellit |
+| `hannah/satellite/{device}/dnd` (+ `/state`) | Do-Not-Disturb |
+| `hannah/satellite/{device}/listen` | Core → Satellit: virtuelles PTT aktivieren (nach TTS-Frage, Issue #18) |
+| `hannah/satellite/{device}/ptt` | Core → Satellit: virtuelles PTT an/aus |
+| `hannah/satellite/{device}/sampling` | Core → Satellit: Wakeword-Trainingsdaten-Sammelmodus |
+| `hannah/satellite/{device}/play_asset` | Core → Satellit: Sound-Asset abspielen |
+| `hannah/satellite/{device}/ota/pending` / `/ok` | OTA-Update-Anfrage/-Freigabe |
+| `hannah/satellite/{device}/firmware` | Satellit → Core: aktuelle Firmware-Version |
+| `hannah/satellite/{device}/ble/watchlist` / `/report` | BLE-Scanner-Konfiguration / Scan-Treffer |
+| `hannah/satellite/{device}/sensors` | Satellit → Core: BME680/BSEC2-Sensordaten |
 
 ### Asset-Server (Hannah Core ↔ ESP-Satelliten)
 
@@ -196,8 +226,8 @@ HTTP-API für Sound-Assets. Authentifizierung per Token.
 
 Hannah bekommt die Geräte über gRPC von dem Adapter über gRPC gemeldet. Sämtliche ioBroker-Integration läuft über den Adapter.
 
-**Wichtige gRPC-Methoden:**
-- `AgentMessage`: Bi-direktionaler Stream zwischen Adapter und Hannah
+**Wichtige gRPC-Methode:**
+- `AgentConnect`: Bidirektionaler Stream zwischen Adapter und Hannah (Nachrichtentyp `AgentMessage` rein, `AgentCommand` raus)
 
 ---
 
@@ -210,7 +240,7 @@ Hannah bekommt die Geräte über gRPC von dem Adapter über gRPC gemeldet. Sämt
 | Rev. 1 | Prototyp (nicht bestellt) | — | Machbarkeitsstudie |
 | Rev. 2 | Geleifert| 114mm rund | Maßfehler (57mm Radius statt 75mm Durchmesser); nur Elektrtest |
 | Rev. 3 | Geliefert, enthält Bugs | 88mm rund | Zieldesign; nicht nutzbar |
-| Rev. 4 | Bestellt (JLCBCB, 01.06.2026) | 88mm rund | Zieldesign |
+| Rev. 4 | Geliefert | 88mm rund | Zieldesign |
 
 ### PCB Rev. 4 (`satellite-esp/hardware/Phase2/`)
 
@@ -287,37 +317,23 @@ Zweiteilig: **Topf (Unterteil) + Deckel (Oberteil)**, eigenes FreeCAD-Design ori
 6. **LLM optional via Ollama** — Fallback: DummyLLM. Regelbasiertes NLU funktioniert ohne LLM.
 7. **Virtuelle Devices statt Enum-API** — drei-gliedriges Matching (Raum + Gerät + Aktion), Sensor-States pro Gerät.
 8. **16kHz Mono, kein TLS auf UDP** — Modell-Anforderung (Whisper, OWW); UDP ohne TLS spart RAM/CPU auf ESP32.
+9. **MQTT als universeller Steuerkanal** — alle Steuerkommandos (mute, volume, ptt, sampling, listen, …) laufen über MQTT statt UDP, weil UDP nur direkt verbundene Satelliten erreicht, MQTT aber auch Proxy-verbundene. TTS-Audio wird weiterhin korrekt je nach Verbindungstyp geroutet. Erkannt durch Issue #18.
 
 ---
 
-## Aktueller Stand (2026-06-03)
+## Status
 
-**Läuft:**
-- Hannah Core vollständig funktionsfähig (STT/NLU/TTS/ioBroker-Steuerung)
-- gRPC-Server mit allen definierten Methoden
-- Go-Proxy (RegisterProxy, SubmitSatelliteAudio)
-- Telegram-Microservice
-- ESP32-S3 Firmware Phase 1: WiFi/MQTT/UDP (getestet auf DevKit)
-- Update-Server, Asset-Server, Timer Service
-
-**Geparkte Ideen (Roadmap):**
-- **Satellite-Light** — abgespeckte Firmware nur mit `hannah_net` + `hannah_sensors` + optional BLE, ohne Audio/Wakeword/LED. Protokollseitig vollständig kompatibel. Ziel: günstige Miniplatine für Sensordaten.
-- **Hannah Android-App** — Soft-Satellit als App (Sprachsteuerung/Announcements), gleiche MQTT-Topics wie Hardware-Satelliten.
-- **Satellit-Ownership + personalisiertes Routing** — Satelliten werden Roomies zugeordnet. Announcements an eine Person spielen auf deren Satelliten. Trigger/Routinen werden per-Person konfigurierbar.
+Aktueller Versionsstand und Änderungshistorie: siehe `CHANGELOG.md`. Offene Bugs/Features/Ideen: siehe GitLab Issues (project 319, `mcp__gitlab-private-voice__*`) — nicht hier duplizieren, GitLab ist die live abrufbare Quelle.
 
 ---
 
 ## Bekannte Probleme & Workarounds
 
 ### ESP Firmware (IDF 6.0)
-- `hannah_wakeword`: 6 Kompilierfehler (API-Änderungen). Fixes in `memory/project_wakeword_build_status.md`.
 - `Phase2/.history` enthält eingebettetes Git-Repo (KiCad History) — nicht committen, `.gitignore` deckt ab.
 
 ### Protokoll
 - Nach `protoc`: absoluten Import in `hannah_pb2_grpc.py` manuell auf relativen korrigieren (`from . import hannah_pb2`). `scripts/gen_proto.sh` erledigt das bereits.
-
-### Audio
-- Weißes Rauschen auf PDM-Mikrofonen (offenes Problem).
 
 ### FreeCAD
 - Sketch vollständig geschlossen + bestimmt vor Pad/Pocket (keine roten Linien).

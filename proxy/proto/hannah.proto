@@ -65,6 +65,18 @@ service HannahService {
   // Trigger an immediate OTA update for a satellite (bypasses residents check).
   rpc TriggerFirmwareUpdate (TriggerFirmwareUpdateRequest) returns (StatusResponse);
 
+  // --- Wakeword Capture ---
+  // Put a satellite in audio-capture mode for wakeword training data collection.
+  // While captured: wakeword detection is suspended, speaker is muted, DND is active.
+  // Hannah relays raw PCM chunks from the satellite to the collector via StreamSatelliteAudio.
+  // The stream stays open until the collector disconnects; Hannah then auto-releases the satellite.
+  rpc RequestSatelliteCapture (SatelliteCaptureRequest) returns (SatelliteCaptureResponse);
+  rpc ReleaseSatelliteCapture (SatelliteCaptureRequest) returns (StatusResponse);
+  rpc StreamSatelliteAudio    (SatelliteCaptureRequest) returns (stream SatelliteAudioChunk);
+  // Play a plink sound on the satellite, then hold virtual PTT for record_duration seconds.
+  // Returns after PTT is released — Collector calls this in a loop for guided hey-hannah collection.
+  rpc TriggerPlink (TriggerPlinkRequest) returns (StatusResponse);
+
   // --- Satellite Proxy (Go gRPC proxy) ---
   // Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
   // audio commands back (for announcements). While this stream is open, Hannah
@@ -79,8 +91,19 @@ service HannahService {
   rpc NotifySatelliteRegistered(SatelliteRegistration)         returns (StatusResponse);
   rpc NotifySatelliteGone      (SatelliteRegistration)         returns (StatusResponse);
 
+  // --- Satellite Provisioning ---
+  // Called by the ioBroker adapter before WebFlash to pre-register a seed + display name + room.
+  // When the satellite first connects with that seed, Hannah links serial → pre-config and clears the seed.
+  rpc ProvisionSatellite  (ProvisionSatelliteRequest)          returns (StatusResponse);
+
   // --- Speaker Enrollment ---
   rpc EnrollVoiceprint    (EnrollVoiceprintRequest)            returns (StatusResponse);
+
+  // --- Timer Service ---
+  // Bidirectional stream between the Hannah Timer Service and Hannah Core.
+  // The Timer Service initiates the connection; if Hannah restarts, the service reconnects.
+  // Hannah sends timer commands (create, cancel, list); the service fires events when timers expire.
+  rpc TimerConnect (stream TimerMessage) returns (stream TimerCommand);
 
   // --- ioBroker Agent ---
   // Single bidirectional stream between the HannahAgent ioBroker adapter and Hannah Core.
@@ -203,6 +226,7 @@ message Satellite {
   string device_id = 1;
   string room      = 2;   // room name as registered
   string address   = 3;   // IP:port of the UDP satellite
+  string serial    = 4;   // ESP32 hardware serial (empty if not yet paired)
 }
 
 message GetSatellitesResponse {
@@ -378,6 +402,19 @@ message ControlDeviceRequest {
 }
 
 // ============================================================
+//  Satellite Provisioning messages
+// ============================================================
+
+// Sent by the ioBroker adapter (WebFlasher) before flashing a satellite.
+// Hannah stores the seed + pre-config; when the satellite first connects with
+// this seed, Hannah links the hardware serial to the pre-config and clears the seed.
+message ProvisionSatelliteRequest {
+  string seed         = 1;  // random UUID, also written to NVS during flash
+  string display_name = 2;  // pre-configured display name
+  string room_id      = 3;  // optional: pre-configured room (room_id from ioBroker)
+}
+
+// ============================================================
 //  Speaker Enrollment messages
 // ============================================================
 
@@ -392,9 +429,11 @@ message EnrollVoiceprintRequest {
 // ============================================================
 
 message SatelliteRegistration {
-  string device_id = 1;  // satellite device name, e.g. "sat-wohnzimmer"
+  string device_id = 1;  // satellite device name (display name), e.g. "sat-wohnzimmer"
   string room      = 2;  // room name as reported by satellite, e.g. "Wohnzimmer"
   string address   = 3;  // IP of the UDP satellite as seen by the proxy, e.g. "192.168.8.42"
+  string serial    = 4;  // ESP32 MAC from eFuse, e.g. "e072a1d01adc" (empty if not provisioned)
+  string seed      = 5;  // one-time pairing token from NVS (empty after successful pairing)
 }
 
 // ============================================================
@@ -410,6 +449,7 @@ message AgentMessage {
     AgentSatelliteControl satellite_control = 4;  // satellite control command
     AgentDeviceSnapshot   send_snapshot     = 5;  // initial snapshot with all states
     AgentResidentSnapshot send_residents    = 6;  // initial snapshot with all residents
+    AgentAskResident      ask_resident      = 7;  // ask Resident via Hannah
   }
 }
 
@@ -461,8 +501,9 @@ message AgentCommand {
     AgentSatelliteUpdate satellite_update = 4;  // a satellite registered or disconnected
     AgentTextAnswer      text_answer      = 5;  // Hannah's answer to a text command
     AgentFirmwareEvent   firmware_event   = 6;  // satellite firmware version update
-    AgentBleUpdate       ble_update       = 7;  // BLE tag location changed
-    AgentSensorUpdate    sensor_update    = 8;  // satellite sensor reading
+    AgentBleUpdate          ble_update          = 7;  // BLE tag location changed
+    AgentSensorUpdate       sensor_update       = 8;  // satellite sensor reading
+    AgentResidentAnswered   resident_answered   = 9;  // answer to an ask_resident request
   }
 }
 
@@ -556,6 +597,17 @@ message AgentResidentSnapshot {
   repeated AgentResident residents = 1;
 }
 
+message AgentAskResident {
+  string correlation_id = 3;
+  string room           = 1;
+  string question       = 2;
+}
+
+message AgentResidentAnswered {
+  string correlation_id = 1;
+  string answer         = 2;
+}
+
 // Hannah notifies the adapter that a BLE tag's location has changed.
 // The adapter creates/updates states under hannah.<instance>.ble.<label>.*.
 // room and satellite are empty when the tag is no longer visible.
@@ -581,4 +633,115 @@ message AgentSensorUpdate {
   uint32 iaq_accuracy    = 7;  // 0=uncertain 1=low 2=medium 3=high
   float  co2_equiv       = 8;  // CO₂ equivalent ppm (BSEC2); 0 when not available
   float  voc_equiv       = 9;  // breath VOC equivalent ppm (BSEC2); 0 when not available
+}
+
+// ============================================================
+//  Wakeword Capture messages (Wakeword Collector ↔ Hannah Core)
+// ============================================================
+
+message SatelliteCaptureRequest {
+  string device_id   = 1;
+  // "noise" (default) or "hey_hannah" — controls ESP streaming behaviour.
+  // noise: continuous auto-flush every 5 s.
+  // hey_hannah: stream only while PTT is held, flush on PTT release.
+  string sample_type = 2;
+}
+
+message TriggerPlinkRequest {
+  string device_id       = 1;
+  float  record_duration = 2;  // seconds to hold virtual PTT after plink (default 3.0)
+}
+
+// ok=false when the satellite is unknown or already captured by another client.
+message SatelliteCaptureResponse {
+  bool   ok    = 1;
+  string error = 2;
+}
+
+// A single audio chunk streamed from a captured satellite to the collector.
+// end_of_utterance=true marks a PTT-release boundary — the collector should
+// finalise and save the accumulated audio as a labelled sample at that point.
+message SatelliteAudioChunk {
+  bytes pcm              = 1;  // raw PCM, 16-bit signed mono
+  int32 sample_rate      = 2;  // Hz, typically 16000
+  bool  end_of_utterance = 3;  // true = PTT released, utterance boundary
+}
+
+// ============================================================
+//  Timer Service messages (Hannah Timer Service ↔ Hannah Core)
+// ============================================================
+
+// Sent by Hannah Core over the TimerConnect stream.
+message TimerCommand {
+  oneof command {
+    TimerCreate      create    = 1;  // create a new timer
+    TimerCancel      cancel    = 2;  // cancel an existing timer
+    TimerListRequest list      = 3;  // request current timer list
+    TimerReady       ready     = 4;  // Hannah is ready to receive pending fired events
+    TimerNotReady    not_ready = 5;  // Hannah is temporarily unable to process timer firings
+  }
+}
+
+// Hannah signals that she is ready to receive queued TimerFired events.
+// Sent after startup once ioBroker states are loaded. The service flushes
+// any TimerFired events that occurred while Hannah was offline, in order.
+message TimerReady {}
+
+// Hannah signals a temporary degraded state — the Timer Service should hold
+// any TimerFired events in its queue until a subsequent TimerReady is received.
+// Hannah sends this when core subsystems are unavailable (e.g. ioBroker disconnected).
+message TimerNotReady {
+  optional string reason = 1;  // human-readable reason, e.g. "ioBroker disconnected"
+}
+
+// Hannah instructs the timer service to create a new timer.
+message TimerCreate {
+  string           timer_id  = 1;  // UUID assigned by Hannah
+  string           label     = 2;  // human-readable label, e.g. "Spazieren gehen"
+  int64            fire_at   = 3;  // Unix timestamp (seconds) when to fire
+  string           room      = 4;  // room to announce in, or "all"
+  optional string  roomie_id = 5;  // optional: which user set the timer
+}
+
+// Hannah instructs the timer service to cancel a timer.
+message TimerCancel {
+  string timer_id = 1;
+}
+
+// Hannah requests the current list of active timers (e.g. "welche Timer habe ich?").
+message TimerListRequest {}
+
+// Sent by the Timer Service over the TimerConnect stream.
+message TimerMessage {
+  oneof payload {
+    TimerAck          ack   = 1;  // initial confirmation when stream is established
+    TimerFired        fired = 2;  // a timer has expired
+    TimerListResponse list  = 3;  // response to TimerListRequest
+  }
+}
+
+// Sent once by the Timer Service after TimerConnect stream is established.
+message TimerAck {
+  string message       = 1;  // human-readable status
+  int32  active_timers = 2;  // number of timers currently tracked
+}
+
+// Timer Service notifies Hannah that a timer has expired.
+// Hannah looks up the timer_id in its own store to determine what to announce and where.
+message TimerFired {
+  string timer_id = 1;
+  string label    = 2;  // convenience copy for logging; Hannah has it in its own store
+}
+
+// Response to TimerListRequest — used for sync and "welche Timer habe ich?" queries.
+message TimerListResponse {
+  repeated TimerInfo timers = 1;
+}
+
+message TimerInfo {
+  string           timer_id  = 1;
+  string           label     = 2;
+  int64            fire_at   = 3;  // Unix timestamp (seconds)
+  string           room      = 4;
+  optional string  roomie_id = 5;
 }

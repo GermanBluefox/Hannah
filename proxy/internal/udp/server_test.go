@@ -56,7 +56,7 @@ func TestRegister_CallsCallback(t *testing.T) {
 	s := makeServer()
 
 	done := make(chan struct{}, 1)
-	s.OnSatelliteChange(func(device, room, address string, registered bool) {
+	s.OnSatelliteChange(func(device, room, address, serial, seed string, registered bool) {
 		if device == "wohnzimmer-esp" && room == "Wohnzimmer" && registered {
 			done <- struct{}{}
 		}
@@ -153,7 +153,7 @@ func TestCheckTimeouts_CallsCallbackWithFalse(t *testing.T) {
 	addr := makeAddr("192.168.1.100", 7776)
 
 	done := make(chan bool, 1)
-	s.OnSatelliteChange(func(device, room, address string, registered bool) {
+	s.OnSatelliteChange(func(device, room, address, serial, seed string, registered bool) {
 		done <- registered
 	})
 

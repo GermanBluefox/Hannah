@@ -22,6 +22,7 @@
 #include <stdio.h>
 
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -103,15 +104,33 @@ static void send_control(const char *json_str)
 static void send_register(void)
 {
     const hannah_config_t *cfg = hannah_config_get();
-    char msg[256];
-    snprintf(msg, sizeof(msg),
-             "{\"type\":\"register\",\"device\":\"%s\","
-             "\"room\":\"%s\",\"listen_port\":%d}",
-             cfg->device_id, cfg->room,
-             CONFIG_HANNAH_UDP_LISTEN_PORT);
+
+    uint8_t mac[6];
+    esp_efuse_mac_get_default(mac);
+    char serial[13];
+    snprintf(serial, sizeof(serial), "%02x%02x%02x%02x%02x%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    char msg[400];
+    if (cfg->seed[0]) {
+        snprintf(msg, sizeof(msg),
+                 "{\"type\":\"register\",\"device\":\"%s\","
+                 "\"room\":\"%s\",\"listen_port\":%d,"
+                 "\"serial\":\"%s\",\"seed\":\"%s\"}",
+                 cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
+                 serial, cfg->seed);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "{\"type\":\"register\",\"device\":\"%s\","
+                 "\"room\":\"%s\",\"listen_port\":%d,"
+                 "\"serial\":\"%s\"}",
+                 cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
+                 serial);
+    }
     send_control(msg);
-    ESP_LOGI(TAG, "Register: device=%s room=%s port=%d",
-             cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT);
+    ESP_LOGI(TAG, "Register: device=%s room=%s port=%d serial=%s%s",
+             cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
+             serial, cfg->seed[0] ? " (mit Seed)" : "");
 }
 
 /* ── UDP ─────────────────────────────────────────────────────────────────── */
@@ -207,6 +226,10 @@ static void udp_receive_task(void *arg)
 
             } else if (strcmp(jtype->valuestring, "start_listening") == 0) {
                 if (s_start_listening_cb) s_start_listening_cb();
+
+            } else if (strcmp(jtype->valuestring, "paired") == 0) {
+                ESP_LOGI(TAG, "Pairing bestätigt.");
+                hannah_config_clear_seed();
 
             } else if (strcmp(jtype->valuestring, "reregister") == 0) {
                 ESP_LOGW(TAG, "Re-Registrierung angefordert.");

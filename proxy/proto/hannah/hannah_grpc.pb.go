@@ -44,6 +44,7 @@ const (
 	HannahService_SubmitSatelliteAudio_FullMethodName      = "/hannah.HannahService/SubmitSatelliteAudio"
 	HannahService_NotifySatelliteRegistered_FullMethodName = "/hannah.HannahService/NotifySatelliteRegistered"
 	HannahService_NotifySatelliteGone_FullMethodName       = "/hannah.HannahService/NotifySatelliteGone"
+	HannahService_ProvisionSatellite_FullMethodName        = "/hannah.HannahService/ProvisionSatellite"
 	HannahService_EnrollVoiceprint_FullMethodName          = "/hannah.HannahService/EnrollVoiceprint"
 	HannahService_TimerConnect_FullMethodName              = "/hannah.HannahService/TimerConnect"
 	HannahService_AgentConnect_FullMethodName              = "/hannah.HannahService/AgentConnect"
@@ -114,6 +115,10 @@ type HannahServiceClient interface {
 	// Hannah updates its room registry (hannah/rooms MQTT) immediately.
 	NotifySatelliteRegistered(ctx context.Context, in *SatelliteRegistration, opts ...grpc.CallOption) (*StatusResponse, error)
 	NotifySatelliteGone(ctx context.Context, in *SatelliteRegistration, opts ...grpc.CallOption) (*StatusResponse, error)
+	// --- Satellite Provisioning ---
+	// Called by the ioBroker adapter before WebFlash to pre-register a seed + display name + room.
+	// When the satellite first connects with that seed, Hannah links serial → pre-config and clears the seed.
+	ProvisionSatellite(ctx context.Context, in *ProvisionSatelliteRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	// --- Speaker Enrollment ---
 	EnrollVoiceprint(ctx context.Context, in *EnrollVoiceprintRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	// --- Timer Service ---
@@ -408,6 +413,16 @@ func (c *hannahServiceClient) NotifySatelliteGone(ctx context.Context, in *Satel
 	return out, nil
 }
 
+func (c *hannahServiceClient) ProvisionSatellite(ctx context.Context, in *ProvisionSatelliteRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatusResponse)
+	err := c.cc.Invoke(ctx, HannahService_ProvisionSatellite_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *hannahServiceClient) EnrollVoiceprint(ctx context.Context, in *EnrollVoiceprintRequest, opts ...grpc.CallOption) (*StatusResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StatusResponse)
@@ -509,6 +524,10 @@ type HannahServiceServer interface {
 	// Hannah updates its room registry (hannah/rooms MQTT) immediately.
 	NotifySatelliteRegistered(context.Context, *SatelliteRegistration) (*StatusResponse, error)
 	NotifySatelliteGone(context.Context, *SatelliteRegistration) (*StatusResponse, error)
+	// --- Satellite Provisioning ---
+	// Called by the ioBroker adapter before WebFlash to pre-register a seed + display name + room.
+	// When the satellite first connects with that seed, Hannah links serial → pre-config and clears the seed.
+	ProvisionSatellite(context.Context, *ProvisionSatelliteRequest) (*StatusResponse, error)
 	// --- Speaker Enrollment ---
 	EnrollVoiceprint(context.Context, *EnrollVoiceprintRequest) (*StatusResponse, error)
 	// --- Timer Service ---
@@ -606,6 +625,9 @@ func (UnimplementedHannahServiceServer) NotifySatelliteRegistered(context.Contex
 }
 func (UnimplementedHannahServiceServer) NotifySatelliteGone(context.Context, *SatelliteRegistration) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method NotifySatelliteGone not implemented")
+}
+func (UnimplementedHannahServiceServer) ProvisionSatellite(context.Context, *ProvisionSatelliteRequest) (*StatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProvisionSatellite not implemented")
 }
 func (UnimplementedHannahServiceServer) EnrollVoiceprint(context.Context, *EnrollVoiceprintRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnrollVoiceprint not implemented")
@@ -1062,6 +1084,24 @@ func _HannahService_NotifySatelliteGone_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HannahService_ProvisionSatellite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvisionSatelliteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HannahServiceServer).ProvisionSatellite(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HannahService_ProvisionSatellite_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HannahServiceServer).ProvisionSatellite(ctx, req.(*ProvisionSatelliteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HannahService_EnrollVoiceprint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EnrollVoiceprintRequest)
 	if err := dec(in); err != nil {
@@ -1188,6 +1228,10 @@ var HannahService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NotifySatelliteGone",
 			Handler:    _HannahService_NotifySatelliteGone_Handler,
+		},
+		{
+			MethodName: "ProvisionSatellite",
+			Handler:    _HannahService_ProvisionSatellite_Handler,
 		},
 		{
 			MethodName: "EnrollVoiceprint",

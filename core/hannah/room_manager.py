@@ -46,12 +46,26 @@ class RoomManager:
 
                 CREATE TABLE IF NOT EXISTS satellites (
                     device_id    TEXT PRIMARY KEY,
+                    serial       TEXT UNIQUE,
+                    seed         TEXT,
                     display_name TEXT,
                     room_id      TEXT REFERENCES rooms(room_id),
                     last_seen    TEXT,
+                    paired_at    TEXT,
                     created_at   TEXT NOT NULL DEFAULT (datetime('now'))
                 );
             """)
+            self._migrate_db(conn)
+
+    def _migrate_db(self, conn: sqlite3.Connection) -> None:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(satellites)")}
+        for col, definition in [
+            ("serial",    "TEXT UNIQUE"),
+            ("seed",      "TEXT"),
+            ("paired_at", "TEXT"),
+        ]:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE satellites ADD COLUMN {col} {definition}")
 
     # ------------------------------------------------------------------
     # Räume
@@ -178,6 +192,70 @@ class RoomManager:
     # ------------------------------------------------------------------
     # Satelliten
 
+    def provision_satellite(self, seed: str, display_name: str, room_id: Optional[str]) -> bool:
+        """Pre-registers a satellite before flash. seed is a one-time pairing token."""
+        try:
+            with self._lock, self._connect() as conn:
+                conn.execute(
+                    """INSERT INTO satellites (device_id, seed, display_name, room_id)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT(device_id) DO UPDATE
+                           SET seed=excluded.seed, display_name=excluded.display_name,
+                               room_id=excluded.room_id""",
+                    (seed, seed, display_name, room_id),
+                )
+            log.info("RoomManager: provisioned satellite seed=%s name=%s", seed[:8], display_name)
+            return True
+        except Exception as e:
+            log.error("RoomManager: provision_satellite failed: %s", e)
+            return False
+
+    def pair_satellite(self, device_id: str, serial: str, seed: str) -> bool:
+        """Links a hardware serial to a pre-provisioned seed entry.
+
+        If the seed matches a pre-provisioned record, the serial is stored and
+        the seed is cleared. The device_id is updated to the final identifier.
+        Returns True if pairing succeeded, False if seed not found.
+        """
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT device_id, display_name, room_id FROM satellites WHERE seed = ?",
+                (seed,),
+            ).fetchone()
+            if row is None:
+                return False
+            old_device_id = row[0]
+            if old_device_id != device_id:
+                # Rename: update device_id to the one the proxy uses
+                try:
+                    conn.execute(
+                        "UPDATE satellites SET device_id=?, serial=?, seed=NULL, paired_at=datetime('now') WHERE seed=?",
+                        (device_id, serial, seed),
+                    )
+                except sqlite3.IntegrityError:
+                    # device_id already exists under a different record; just update serial
+                    conn.execute("DELETE FROM satellites WHERE seed = ?", (seed,))
+                    conn.execute(
+                        "UPDATE satellites SET serial=?, seed=NULL, paired_at=datetime('now') WHERE device_id=?",
+                        (serial, device_id),
+                    )
+            else:
+                conn.execute(
+                    "UPDATE satellites SET serial=?, seed=NULL, paired_at=datetime('now') WHERE seed=?",
+                    (serial, seed),
+                )
+        log.info("RoomManager: paired serial=%s → device_id=%s", serial, device_id)
+        return True
+
+    def get_satellite_by_serial(self, serial: str) -> Optional[dict]:
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT device_id, serial, display_name, room_id FROM satellites WHERE serial = ?",
+                (serial,),
+            ).fetchone()
+        return dict(row) if row else None
+
     def upsert_satellite(self, device_id: str) -> None:
         with self._lock, self._connect() as conn:
             conn.execute(
@@ -204,12 +282,22 @@ class RoomManager:
         return c.rowcount > 0
 
     def get_satellite_room_map(self) -> dict[str, str]:
-        """Gibt {device_id: room_id} für alle Satelliten mit DB-Raum-Zuweisung zurück."""
+        """Gibt {device_id: room_id, serial: room_id} für alle Satelliten mit DB-Raum-Zuweisung zurück.
+
+        Sowohl device_id als auch serial (wenn vorhanden) werden als Keys eingetragen, damit
+        _resolve_targets() mit beiden Routing-Keys (serials für gepaarte, device_ids für
+        ungepaarte Satelliten) korrekt auflöst.
+        """
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT device_id, room_id FROM satellites WHERE room_id IS NOT NULL"
+                "SELECT device_id, serial, room_id FROM satellites WHERE room_id IS NOT NULL"
             ).fetchall()
-        return {r[0]: r[1] for r in rows}
+        result: dict[str, str] = {}
+        for device_id, serial, room_id in rows:
+            result[device_id] = room_id
+            if serial:
+                result[serial] = room_id
+        return result
 
     def get_satellite_room(self, device_id: str) -> Optional[str]:
         """Gibt die zugewiesene room_id zurück oder None."""

@@ -137,10 +137,14 @@ func main() {
 		udpServer.SendStatus(device, "listening")
 	})
 
-	udpServer.OnSatelliteChange(func(device, room, address string, registered bool) {
+	udpServer.OnSatelliteChange(func(device, room, address, serial, seed string, registered bool) {
 		if registered {
-			if err := hannahClient.NotifySatelliteRegistered(ctx, device, room, address); err != nil {
+			paired, err := hannahClient.NotifySatelliteRegistered(ctx, device, room, address, serial, seed)
+			if err != nil {
 				slog.Warn("NotifySatelliteRegistered failed", "device", device, "err", err)
+			} else if paired {
+				udpServer.SendPaired(device)
+				slog.Info("satellite paired", "device", device, "serial", serial)
 			}
 		} else {
 			if err := hannahClient.NotifySatelliteGone(ctx, device, room); err != nil {
@@ -170,7 +174,7 @@ func main() {
 			// Re-notify Hannah about all satellites already connected to the proxy
 			// (handles Hannah restarts where _proxy_satellites is wiped).
 			for device, info := range udpServer.RegisteredDevicesFull() {
-				if err := hannahClient.NotifySatelliteRegistered(ctx, device, info.Room, info.Address); err != nil {
+				if _, err := hannahClient.NotifySatelliteRegistered(ctx, device, info.Room, info.Address, info.Serial, ""); err != nil {
 					slog.Warn("re-notify satellite failed", "device", device, "err", err)
 				} else {
 					slog.Info("re-notified Hannah about existing satellite", "device", device, "room", info.Room)

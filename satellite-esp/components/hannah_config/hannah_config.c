@@ -81,6 +81,8 @@ void hannah_config_init(void)
     nvs_get_u8(h, "tls_skip", &tls_skip);
     s_cfg.tls_skip_verify = (bool)tls_skip;
 
+    NVS_STR(h, "seed", seed, "");
+
     nvs_close(h);
 
     ESP_LOGI(TAG, "Config: device=%s room=%s wifi=%s mqtt=%s:%u",
@@ -125,9 +127,22 @@ void hannah_config_save(const hannah_config_t *cfg)
     nvs_set_str(h, "asset_url",    cfg->asset_url);
     nvs_set_str(h, "asset_token",  cfg->asset_token);
     nvs_set_u8 (h, "tls_skip",    (uint8_t)cfg->tls_skip_verify);
+    nvs_set_str(h, "seed",        cfg->seed);
 
     nvs_commit(h);
     nvs_close(h);
 
     ESP_LOGI(TAG, "Config gespeichert.");
+}
+
+void hannah_config_clear_seed(void)
+{
+    if (s_cfg.seed[0] == '\0') return;
+    s_cfg.seed[0] = '\0';
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_str(h, "seed", "");
+    nvs_commit(h);
+    nvs_close(h);
+    ESP_LOGI(TAG, "Pairing-Seed gelöscht.");
 }

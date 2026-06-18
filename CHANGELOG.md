@@ -5,6 +5,33 @@
 -->
 
 
+
+## 0.31.0
+### Hannah Core
+* Added: `satellites` table extended with `serial`, `seed`, `paired_at` columns; auto-migrates existing DBs (Refs #26)
+* Added: `provision_satellite(seed, display_name, room_id)` — pre-registers a satellite before WebFlash (Refs #26)
+* Added: `pair_satellite(device_id, serial, seed)` — links hardware serial to pre-provisioned seed entry on first connect (Refs #26)
+* Added: `get_satellite_by_serial(serial)` — lookup by hardware serial (Refs #26)
+* Added: `ProvisionSatellite` RPC + `ProvisionSatelliteRequest` message — adapter pre-provisions before flash (Refs #26)
+* Added: `SatelliteRegistration.serial` (field 4) and `SatelliteRegistration.seed` (field 5) — sent by satellite on first connect (Refs #26)
+* Added: `Satellite.serial` (field 4) — hardware serial in `GetSatellites` response (Refs #26)
+* Changed: `NotifySatelliteRegistered` now returns `message="paired"` when seed pairing succeeds (Refs #26)
+* Changed: `_proxy_satellites` keyed by serial for paired satellites; `device_id` stored in dict value for proxy routing (Refs #26)
+* Changed: `stream_audio_to_proxy` resolves `proxy_device_id` from sat info — works with serial or device_id as `target` (Refs #26)
+* Changed: `get_satellite_room_map()` returns both `device_id` and `serial` as keys so `_resolve_targets()` resolves rooms for paired satellites (Refs #26)
+* Added: `AgentSatelliteUpdate.serial` (field 7) — hardware serial sent to adapter on registration; adapter uses as ioBroker object-ID (Refs #26)
+* Added: `get_proxy_satellite_info(key)` helper on `HannahServicer` — resolves `(device_id, serial)` from a snapshot key (which may be serial or device_id) (Refs #26)
+* Fixed: `_on_satellite_change` in `main.py` now resolves correct `device_id`/`serial` for paired satellites via `get_proxy_satellite_info()` instead of passing serial as device_id (Refs #26)
+
+### Hannah Proxy
+* Updated: `proto/hannah.proto` synced with Core — `ProvisionSatellite` RPC, `serial`/`seed` fields in `SatelliteRegistration` (Refs #26)
+* Changed: `NotifySatelliteRegistered` now forwards `serial` and `seed` from the satellite register payload to Core; sends `{"type":"paired"}` to satellite if Core confirms pairing (Refs #26)
+* Fixed: `SatelliteChangeCallback` signature in unit tests updated to match new `serial, seed` parameters (Refs #26)
+
+### Satellite Firmware
+* Added: hardware serial read from eFuse MAC (`esp_efuse_mac_get_default`) and sent in every Register message as `serial` field (Refs #26)
+* Added: `seed` NVS key — one-time pairing token written during WebFlash; included in Register if present, cleared from NVS on `{"type":"paired"}` ACK from proxy (Refs #26)
+
 ## 0.30.0
 ### Hannah Core
 * Added: `RoomManager` — SQLite persistence for rooms (synced from ioBroker), n:n room groups, and satellite-to-room assignment (`core/hannah/room_manager.py`) (Refs #25)

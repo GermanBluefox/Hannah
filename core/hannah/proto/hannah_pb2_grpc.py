@@ -172,6 +172,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.SatelliteRegistration.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.ProvisionSatellite = channel.unary_unary(
+                '/hannah.HannahService/ProvisionSatellite',
+                request_serializer=hannah__pb2.ProvisionSatelliteRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.EnrollVoiceprint = channel.unary_unary(
                 '/hannah.HannahService/EnrollVoiceprint',
                 request_serializer=hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
@@ -391,6 +396,15 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ProvisionSatellite(self, request, context):
+        """--- Satellite Provisioning ---
+        Called by the ioBroker adapter before WebFlash to pre-register a seed + display name + room.
+        When the satellite first connects with that seed, Hannah links serial → pre-config and clears the seed.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def EnrollVoiceprint(self, request, context):
         """--- Speaker Enrollment ---
         """
@@ -545,6 +559,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
             'NotifySatelliteGone': grpc.unary_unary_rpc_method_handler(
                     servicer.NotifySatelliteGone,
                     request_deserializer=hannah__pb2.SatelliteRegistration.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'ProvisionSatellite': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProvisionSatellite,
+                    request_deserializer=hannah__pb2.ProvisionSatelliteRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
             'EnrollVoiceprint': grpc.unary_unary_rpc_method_handler(
@@ -1250,6 +1269,33 @@ class HannahService(object):
             target,
             '/hannah.HannahService/NotifySatelliteGone',
             hannah__pb2.SatelliteRegistration.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ProvisionSatellite(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/ProvisionSatellite',
+            hannah__pb2.ProvisionSatelliteRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
             options,
             channel_credentials,

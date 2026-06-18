@@ -41,7 +41,6 @@ void hannah_config_init(void)
         ESP_LOGE(TAG, "NVS open fehlgeschlagen — nutze sdkconfig-Defaults");
         snprintf(s_cfg.wifi_ssid,   sizeof(s_cfg.wifi_ssid),   "%s", CONFIG_HANNAH_WIFI_SSID);
         snprintf(s_cfg.wifi_pass,   sizeof(s_cfg.wifi_pass),   "%s", CONFIG_HANNAH_WIFI_PASS);
-        snprintf(s_cfg.room,        sizeof(s_cfg.room),        "%s", CONFIG_HANNAH_ROOM_NAME);
         snprintf(s_cfg.mqtt_broker, sizeof(s_cfg.mqtt_broker), "%s", CONFIG_HANNAH_MQTT_BROKER);
         s_cfg.mqtt_port = CONFIG_HANNAH_MQTT_PORT;
         snprintf(s_cfg.mqtt_user,   sizeof(s_cfg.mqtt_user),   "%s", CONFIG_HANNAH_MQTT_USER);
@@ -60,7 +59,6 @@ void hannah_config_init(void)
 
     NVS_STR(h, "wifi_ssid",   wifi_ssid,   CONFIG_HANNAH_WIFI_SSID);
     NVS_STR(h, "wifi_pass",   wifi_pass,   CONFIG_HANNAH_WIFI_PASS);
-    NVS_STR(h, "room",        room,        CONFIG_HANNAH_ROOM_NAME);
     NVS_STR(h, "mqtt_broker", mqtt_broker, CONFIG_HANNAH_MQTT_BROKER);
     NVS_STR(h, "mqtt_user",   mqtt_user,   CONFIG_HANNAH_MQTT_USER);
     NVS_STR(h, "mqtt_pass",   mqtt_pass,   CONFIG_HANNAH_MQTT_PASS);
@@ -95,8 +93,8 @@ void hannah_config_init(void)
 
     nvs_close(h);
 
-    ESP_LOGI(TAG, "Config: device=%s room=%s wifi=%s mqtt=%s:%u (device_id from eFuse)",
-             s_cfg.device_id, s_cfg.room,
+    ESP_LOGI(TAG, "Config: device=%s wifi=%s mqtt=%s:%u (device_id from eFuse)",
+             s_cfg.device_id,
              s_cfg.wifi_ssid[0] ? s_cfg.wifi_ssid : "(leer)",
              s_cfg.mqtt_broker, s_cfg.mqtt_port);
 }
@@ -124,7 +122,6 @@ void hannah_config_save(const hannah_config_t *cfg)
 
     nvs_set_str(h, "wifi_ssid",   cfg->wifi_ssid);
     nvs_set_str(h, "wifi_pass",   cfg->wifi_pass);
-    nvs_set_str(h, "room",        cfg->room);
     nvs_set_str(h, "mqtt_broker", cfg->mqtt_broker);
     nvs_set_u16(h, "mqtt_port",   cfg->mqtt_port);
     nvs_set_str(h, "mqtt_user",   cfg->mqtt_user);

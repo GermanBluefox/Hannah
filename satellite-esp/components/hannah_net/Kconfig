@@ -31,13 +31,6 @@ menu "Hannah Network"
         string "MQTT Passwort"
         default ""
 
-    config HANNAH_ROOM_NAME
-        string "Raum-Name"
-        default "Wohnzimmer"
-        help
-            Anzeigename des Raums in dem sich dieser Satellit befindet.
-            Wird beim UDP-Register an Hannah Core übermittelt.
-
     config HANNAH_UDP_LISTEN_PORT
         int "UDP Empfangsport (TTS)"
         default 7776

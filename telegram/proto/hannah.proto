@@ -432,7 +432,8 @@ message EnrollVoiceprintRequest {
 
 message SatelliteRegistration {
   string device_id = 1;  // satellite device_id (== eFuse MAC since v0.34), e.g. "e072a1d01adc"
-  string room      = 2;  // room name as reported by satellite, e.g. "Wohnzimmer"
+  reserved 2;
+  reserved "room";       // removed: RoomManager is the sole authority for room assignment
   string address   = 3;  // IP of the UDP satellite as seen by the proxy, e.g. "192.168.8.42"
   reserved 4;
   reserved "serial";     // removed: device_id is the hardware serial since v0.34

@@ -7,7 +7,6 @@ typedef struct {
     char     wifi_ssid[64];
     char     wifi_pass[64];
     char     device_id[32];
-    char     room[32];
     char     mqtt_broker[64];
     uint16_t mqtt_port;
     char     mqtt_user[32];

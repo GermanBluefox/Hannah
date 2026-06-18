@@ -306,7 +306,6 @@ static esp_err_t settings_post_handler(httpd_req_t *req)
     /* Felder auslesen — leere Passwörter = unverändert */
     form_get(body, "ssid",        new_cfg.wifi_ssid,   sizeof(new_cfg.wifi_ssid));
     form_get(body, "device_id",   new_cfg.device_id,   sizeof(new_cfg.device_id));
-    form_get(body, "room",        new_cfg.room,        sizeof(new_cfg.room));
     form_get(body, "mqtt_broker", new_cfg.mqtt_broker, sizeof(new_cfg.mqtt_broker));
     form_get(body, "mqtt_user",   new_cfg.mqtt_user,   sizeof(new_cfg.mqtt_user));
 

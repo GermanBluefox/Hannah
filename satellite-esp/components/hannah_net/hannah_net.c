@@ -109,19 +109,18 @@ static void send_register(void)
     if (cfg->seed[0]) {
         snprintf(msg, sizeof(msg),
                  "{\"type\":\"register\",\"device\":\"%s\","
-                 "\"room\":\"%s\",\"listen_port\":%d,"
-                 "\"seed\":\"%s\"}",
-                 cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
+                 "\"listen_port\":%d,\"seed\":\"%s\"}",
+                 cfg->device_id, CONFIG_HANNAH_UDP_LISTEN_PORT,
                  cfg->seed);
     } else {
         snprintf(msg, sizeof(msg),
                  "{\"type\":\"register\",\"device\":\"%s\","
-                 "\"room\":\"%s\",\"listen_port\":%d}",
-                 cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT);
+                 "\"listen_port\":%d}",
+                 cfg->device_id, CONFIG_HANNAH_UDP_LISTEN_PORT);
     }
     send_control(msg);
-    ESP_LOGI(TAG, "Register: device=%s room=%s port=%d%s",
-             cfg->device_id, cfg->room, CONFIG_HANNAH_UDP_LISTEN_PORT,
+    ESP_LOGI(TAG, "Register: device=%s port=%d%s",
+             cfg->device_id, CONFIG_HANNAH_UDP_LISTEN_PORT,
              cfg->seed[0] ? " (mit Seed)" : "");
 }
 

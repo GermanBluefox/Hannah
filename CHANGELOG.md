@@ -5,6 +5,29 @@
 -->
 
 
+
+## 0.34.0
+### Hannah Core
+* Changed: `GrpcServer.NotifySatelliteRegistered` no longer uses the satellite-reported room as fallback; `RoomManager` is now the sole authority for room assignment (Refs #35)
+* Changed: `GrpcServer.SubmitSatelliteAudio` resolves room from `_proxy_satellites` / `RoomManager` instead of `request.room` (Refs #35)
+* Changed: proto — `SatelliteRegistration.room` (field 2) reserved; room assignment is now a server-side concern only (Refs #35)
+
+### Hannah Proxy
+* Changed: proto updated — `SatelliteRegistration.room` (field 2) reserved (Refs #35)
+* Note: proxy Go code still passes `room` in callbacks/RPCs — full cleanup pending proxy refactoring
+
+### Telegram
+* Changed: proto updated — `SatelliteRegistration.room` (field 2) reserved (Refs #35)
+
+### Firmware (satellite-esp)
+* Changed: removed `room` field from `hannah_config_t`, NVS, and register JSON message (Refs #35)
+* Changed: removed `HANNAH_ROOM_NAME` from Kconfig (Refs #35)
+
+### ioBroker Adapter
+* Changed: `NvsDialog` — removed `room` field; re-flashing NVS no longer requires room selection; `provisionSatellite` call no longer passes `roomId` (Refs #35)
+* Changed: `FlashDialog` — room free-text field replaced with dropdown populated from `enum.rooms.*`; `provisionSatellite` now called before flash with `seed` + `roomId`; `seed` written to NVS partition (Refs #35)
+* Changed: `provisionSatellite` sendTo handler — `roomId` is now optional; enables seed-only re-provisioning without changing the satellite's room assignment (Refs #35)
+
 ## 0.33.0
 ### Hannah Core
 * Changed: `AgentDevice.room` now carries the enum ID segment (e.g. `wohnzimmer`) instead of the German display name; `room_names` map added with all available languages for NLU matching (Refs #33)

@@ -497,21 +497,21 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             return pb.SubmitSatelliteAudioResponse()
 
         speaker = request.speaker_roomie_id or ""
+        with self._proxy_sat_lock:
+            known = self._proxy_satellites.get(request.device_id)
+        room_id = (known or {}).get("room") or self._resolve_satellite_room(request.device_id) or ""
         log.info(
             f"[grpc] SubmitSatelliteAudio: device={request.device_id!r}"
-            f" room={request.room!r} bytes={len(request.audio_pcm)}"
+            f" room={room_id!r} bytes={len(request.audio_pcm)}"
             + (f" speaker={speaker!r}" if speaker else " speaker=anonymous")
         )
-        if self._on_satellite_change and request.device_id:
+        if self._on_satellite_change and request.device_id and known is None:
             with self._proxy_sat_lock:
-                known = self._proxy_satellites.get(request.device_id)
-                if known is None or known.get("room") != request.room:
-                    self._proxy_satellites[request.device_id] = {"room": request.room, "addr": known.get("addr", "") if known else ""}
-                    snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
-            if known is None or known.get("room") != request.room:
-                threading.Thread(
-                    target=self._on_satellite_change, args=(snapshot,), daemon=True
-                ).start()
+                self._proxy_satellites[request.device_id] = {"room": room_id, "addr": ""}
+                snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
+            threading.Thread(
+                target=self._on_satellite_change, args=(snapshot,), daemon=True
+            ).start()
         if self.is_captured(request.device_id):
             self.push_capture_audio(
                 request.device_id, request.audio_pcm,
@@ -540,7 +540,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def NotifySatelliteRegistered(self, request, _context):
         """Proxy meldet: Satellit hat sich via UDP registriert."""
-        device, room, address = request.device_id, request.room, request.address
+        device, address = request.device_id, request.address
 
         paired = False
         if request.seed:
@@ -550,16 +550,16 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             else:
                 log.warning("Satellite %s: seed not found, proceeding without pairing", device)
 
+        room_id = self._resolve_satellite_room(device) or ""
         with self._proxy_sat_lock:
-            self._proxy_satellites[device] = {"room": room, "addr": address}
+            self._proxy_satellites[device] = {"room": room_id, "addr": address}
             snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
-        log.info(f"[grpc] Satellit registriert via Proxy: '{device}' (Raum: '{room}')")
+        log.info(f"[grpc] Satellit registriert via Proxy: '{device}' (Raum: '{room_id or 'unbekannt'}')")
         if self._on_satellite_change:
             threading.Thread(
                 target=self._on_satellite_change, args=(snapshot,), daemon=True
             ).start()
         display_name = self._resolve_satellite_name(device) or ""
-        room_id = self._resolve_satellite_room(device) or room
         self.agent_satellite_update(device, room_id, "", online=True, display_name=display_name)
         return pb.StatusResponse(ok=True, message="paired" if paired else "registered")
 

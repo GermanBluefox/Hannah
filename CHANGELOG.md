@@ -5,6 +5,11 @@
 -->
 
 
+## 0.36.2
+### Satellite Firmware
+* Fixed: `bsec_set_configuration` returned `BSEC_E_CONFIG_VERSIONMISMATCH` (-34) — `libalgobsec.a` (esp32s3) was linked from the BSEC2 "Selectivity" algorithm variant, while `bme680_iaq_33v_3s_4d.bin` is a config for the classic "IAQ" variant; replaced both with the matching `bsec_IAQ` build (BSEC 2.6.1.0 generic release) and stripped a 4-byte length header that the source `.config` file carries in front of the raw 492-byte config blob (closes #24)
+* Fixed: unused variable `cfg` in `status_handler` (`hannah_webserver.c`) — leftover from the device-ID/room removal in #26/#32, never read (closes #46)
+
 ## 0.36.1
 ### Hannah Core
 * Added: `RoomManager` cleans up provisioned-but-never-paired satellite seeds older than `seed_ttl_days` (default 7) via a background thread, configurable in `config.yaml` (Refs #41)

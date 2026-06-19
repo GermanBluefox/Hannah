@@ -141,7 +141,6 @@ static bool form_get(const char *body, const char *key, char *out, size_t out_le
 
 static esp_err_t status_handler(httpd_req_t *req)
 {
-    const hannah_config_t *cfg = hannah_config_get();
     char ip[24];
     hannah_net_get_ip_str(ip, sizeof(ip));
 

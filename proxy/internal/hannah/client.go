@@ -44,10 +44,9 @@ func (c *Client) Close() {
 // the pipeline result (STT → NLU → TTS).
 // pcm must be raw 16-bit signed mono at 16000 Hz.
 // speakerRoomieID is the result of a prior Voice-ID lookup; pass "" if unknown.
-func (c *Client) SubmitSatelliteAudio(ctx context.Context, deviceID, room string, pcm []byte, speakerRoomieID string) (*pb.SubmitSatelliteAudioResponse, error) {
+func (c *Client) SubmitSatelliteAudio(ctx context.Context, deviceID string, pcm []byte, speakerRoomieID string) (*pb.SubmitSatelliteAudioResponse, error) {
 	return c.stub.SubmitSatelliteAudio(ctx, &pb.SubmitSatelliteAudioRequest{
 		DeviceId:        deviceID,
-		Room:            room,
 		AudioPcm:        pcm,
 		SampleRate:      16000,
 		SpeakerRoomieId: speakerRoomieID,
@@ -57,10 +56,9 @@ func (c *Client) SubmitSatelliteAudio(ctx context.Context, deviceID, room string
 // NotifySatelliteRegistered tells Hannah Core that a satellite has connected via the proxy.
 // deviceID is the satellite's eFuse MAC (e.g. "e072a1d01adc"); seed is the one-time pairing
 // token (empty if not provisioned). Returns paired=true if Core confirmed pairing of the seed.
-func (c *Client) NotifySatelliteRegistered(ctx context.Context, deviceID, room, address, seed string) (paired bool, err error) {
+func (c *Client) NotifySatelliteRegistered(ctx context.Context, deviceID, address, seed string) (paired bool, err error) {
 	resp, err := c.stub.NotifySatelliteRegistered(ctx, &pb.SatelliteRegistration{
 		DeviceId: deviceID,
-		Room:     room,
 		Address:  address,
 		Seed:     seed,
 	})
@@ -71,10 +69,9 @@ func (c *Client) NotifySatelliteRegistered(ctx context.Context, deviceID, room, 
 }
 
 // NotifySatelliteGone tells Hannah Core that a satellite has disconnected from the proxy.
-func (c *Client) NotifySatelliteGone(ctx context.Context, deviceID, room string) error {
+func (c *Client) NotifySatelliteGone(ctx context.Context, deviceID string) error {
 	_, err := c.stub.NotifySatelliteGone(ctx, &pb.SatelliteRegistration{
 		DeviceId: deviceID,
-		Room:     room,
 	})
 	return err
 }

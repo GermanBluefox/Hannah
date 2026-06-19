@@ -93,7 +93,7 @@ func main() {
 	defer udpServer.Close()
 
 	// Wire: audio session complete → [Voice-ID] → Hannah gRPC pipeline → TTS back to satellite
-	udpServer.OnAudio(func(device, room string, pcm []byte) {
+	udpServer.OnAudio(func(device string, pcm []byte) {
 		udpServer.SendStatus(device, "processing")
 
 		// Speaker identification — runs before STT so Hannah can personalise the response.
@@ -109,7 +109,7 @@ func main() {
 			}
 		}
 
-		resp, err := hannahClient.SubmitSatelliteAudio(ctx, device, room, pcm, speakerID)
+		resp, err := hannahClient.SubmitSatelliteAudio(ctx, device, pcm, speakerID)
 		if err != nil {
 			slog.Error("SubmitSatelliteAudio failed", "device", device, "err", err)
 			udpServer.SendStatus(device, "idle")
@@ -137,9 +137,9 @@ func main() {
 		udpServer.SendStatus(device, "listening")
 	})
 
-	udpServer.OnSatelliteChange(func(device, room, address, seed string, registered bool) {
+	udpServer.OnSatelliteChange(func(device, address, seed string, registered bool) {
 		if registered {
-			paired, err := hannahClient.NotifySatelliteRegistered(ctx, device, room, address, seed)
+			paired, err := hannahClient.NotifySatelliteRegistered(ctx, device, address, seed)
 			if err != nil {
 				slog.Warn("NotifySatelliteRegistered failed", "device", device, "err", err)
 			} else if paired {
@@ -147,7 +147,7 @@ func main() {
 				slog.Info("satellite paired", "device", device)
 			}
 		} else {
-			if err := hannahClient.NotifySatelliteGone(ctx, device, room); err != nil {
+			if err := hannahClient.NotifySatelliteGone(ctx, device); err != nil {
 				slog.Warn("NotifySatelliteGone failed", "device", device, "err", err)
 			}
 		}
@@ -174,10 +174,10 @@ func main() {
 			// Re-notify Hannah about all satellites already connected to the proxy
 			// (handles Hannah restarts where _proxy_satellites is wiped).
 			for device, info := range udpServer.RegisteredDevicesFull() {
-				if _, err := hannahClient.NotifySatelliteRegistered(ctx, device, info.Room, info.Address, ""); err != nil {
+				if _, err := hannahClient.NotifySatelliteRegistered(ctx, device, info.Address, ""); err != nil {
 					slog.Warn("re-notify satellite failed", "device", device, "err", err)
 				} else {
-					slog.Info("re-notified Hannah about existing satellite", "device", device, "room", info.Room)
+					slog.Info("re-notified Hannah about existing satellite", "device", device)
 				}
 			}
 		},

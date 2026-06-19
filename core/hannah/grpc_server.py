@@ -551,10 +551,13 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 log.warning("Satellite %s: seed not found, proceeding without pairing", device)
 
         room_id = self._resolve_satellite_room(device) or ""
+        if not room_id:
+            log.warning(f"[grpc] Satellit '{device}' hat keinen Raum in RoomManager — nicht an Adapter weitergeleitet")
+            return pb.StatusResponse(ok=True, message="registered without room")
         with self._proxy_sat_lock:
             self._proxy_satellites[device] = {"room": room_id, "addr": address}
             snapshot = {d: info["room"] for d, info in self._proxy_satellites.items()}
-        log.info(f"[grpc] Satellit registriert via Proxy: '{device}' (Raum: '{room_id or 'unbekannt'}')")
+        log.info(f"[grpc] Satellit registriert via Proxy: '{device}' (Raum: '{room_id}')")
         if self._on_satellite_change:
             threading.Thread(
                 target=self._on_satellite_change, args=(snapshot,), daemon=True

@@ -8,7 +8,7 @@
 //
 // Control messages from satellite:
 //
-//	{"type":"register",  "device":"rpi-test", "room":"Wohnzimmer", "listen_port":7776}
+//	{"type":"register",  "device":"rpi-test", "listen_port":7776}
 //	{"type":"audio_end", "device":"rpi-test"}
 //	{"type":"heartbeat", "device":"rpi-test"}
 //
@@ -40,9 +40,8 @@ const (
 )
 
 // AudioCallback is called when a complete audio session has been received.
-// device is the satellite name; room is as reported at registration.
-// pcm is raw 16-bit signed mono at 16000 Hz.
-type AudioCallback func(device, room string, pcm []byte)
+// device is the satellite name; pcm is raw 16-bit signed mono at 16000 Hz.
+type AudioCallback func(device string, pcm []byte)
 
 // SessionStartCallback is called when the first audio chunk of a new session arrives.
 type SessionStartCallback func(device string)
@@ -51,14 +50,13 @@ type SessionStartCallback func(device string)
 // On connect (registered=true): address is the satellite's IP, seed is the one-time pairing
 // token (empty after pairing or if not provisioned).
 // On disconnect (registered=false): address and seed are both "".
-type SatelliteChangeCallback func(device, room, address, seed string, registered bool)
+type SatelliteChangeCallback func(device, address, seed string, registered bool)
 
 const heartbeatTimeout = 30 * time.Second // 3 × 10s heartbeat interval
 
 type satellite struct {
 	audioAddr     *net.UDPAddr // source address of audio packets
 	ttsAddr       *net.UDPAddr // destination for TTS + control (may differ from audioAddr port)
-	room          string
 	lastHeartbeat time.Time
 }
 
@@ -219,20 +217,19 @@ func (s *Server) SendTTS(device string, pcm []byte, sampleRate int) {
 	slog.Info("TTS sent", "device", device, "bytes", len(pcm), "sample_rate", sampleRate)
 }
 
-// RegisteredDevices returns a snapshot of {device: room} for all registered satellites.
-func (s *Server) RegisteredDevices() map[string]string {
+// RegisteredDevices returns the device IDs of all registered satellites.
+func (s *Server) RegisteredDevices() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make(map[string]string, len(s.satellites))
-	for d, sat := range s.satellites {
-		out[d] = sat.room
+	out := make([]string, 0, len(s.satellites))
+	for d := range s.satellites {
+		out = append(out, d)
 	}
 	return out
 }
 
-// SatelliteInfo holds room and address for a registered satellite.
+// SatelliteInfo holds the address for a registered satellite.
 type SatelliteInfo struct {
-	Room    string
 	Address string
 }
 
@@ -242,7 +239,7 @@ func (s *Server) RegisteredDevicesFull() map[string]SatelliteInfo {
 	defer s.mu.Unlock()
 	out := make(map[string]SatelliteInfo, len(s.satellites))
 	for d, sat := range s.satellites {
-		out[d] = SatelliteInfo{Room: sat.room, Address: sat.audioAddr.IP.String()}
+		out[d] = SatelliteInfo{Address: sat.audioAddr.IP.String()}
 	}
 	return out
 }
@@ -307,7 +304,6 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 
 	switch t {
 	case "register":
-		room, _ := msg["room"].(string)
 		seed, _ := msg["seed"].(string)
 		listenPort := addr.Port
 		if lp, ok := msg["listen_port"].(float64); ok {
@@ -315,34 +311,28 @@ func (s *Server) handleControl(payload []byte, addr *net.UDPAddr) {
 		}
 		ttsAddr := &net.UDPAddr{IP: addr.IP, Port: listenPort}
 		s.mu.Lock()
-		s.satellites[device] = &satellite{audioAddr: addr, ttsAddr: ttsAddr, room: room, lastHeartbeat: time.Now()}
+		s.satellites[device] = &satellite{audioAddr: addr, ttsAddr: ttsAddr, lastHeartbeat: time.Now()}
 		delete(s.sessions, device) // verwaiste Session verwerfen (z.B. nach ESP-Neustart ohne audio_end)
 		s.mu.Unlock()
-		slog.Info("satellite registered", "device", device, "room", room,
-			"audio_from", addr, "tts_to_port", listenPort)
+		slog.Info("satellite registered", "device", device, "audio_from", addr, "tts_to_port", listenPort)
 		s.sendControl(map[string]any{"type": "registered", "ok": true}, addr)
 		if s.onSatelliteChange != nil {
-			go s.onSatelliteChange(device, room, addr.IP.String(), seed, true)
+			go s.onSatelliteChange(device, addr.IP.String(), seed, true)
 		}
 
 	case "audio_end":
 		s.mu.Lock()
 		sess := s.sessions[device]
 		delete(s.sessions, device)
-		sat := s.satellites[device]
 		s.mu.Unlock()
 		if sess == nil {
 			slog.Debug("audio_end without active session", "device", device)
 			return
 		}
-		room := ""
-		if sat != nil {
-			room = sat.room
-		}
 		pcm := sess.pcm()
 		slog.Info("audio session complete", "device", device, "bytes", len(pcm))
 		if s.onAudio != nil {
-			go s.onAudio(device, room, pcm)
+			go s.onAudio(device, pcm)
 		}
 
 	case "heartbeat":
@@ -400,20 +390,19 @@ func (s *Server) sendControl(msg map[string]any, addr *net.UDPAddr) {
 
 func (s *Server) checkTimeouts() {
 	now := time.Now()
-	type gone struct{ device, room string }
-	var timedOut []gone
+	var timedOut []string
 	s.mu.Lock()
 	for device, sat := range s.satellites {
 		if now.Sub(sat.lastHeartbeat) > heartbeatTimeout {
-			timedOut = append(timedOut, gone{device, sat.room})
+			timedOut = append(timedOut, device)
 			delete(s.satellites, device)
 		}
 	}
 	s.mu.Unlock()
-	for _, t := range timedOut {
-		slog.Warn("satellite heartbeat timeout — marking offline", "device", t.device, "room", t.room)
+	for _, device := range timedOut {
+		slog.Warn("satellite heartbeat timeout — marking offline", "device", device)
 		if s.onSatelliteChange != nil {
-			s.onSatelliteChange(t.device, t.room, "", "", false)
+			s.onSatelliteChange(device, "", "", false)
 		}
 	}
 }

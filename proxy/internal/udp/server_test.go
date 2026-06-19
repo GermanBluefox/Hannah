@@ -37,18 +37,14 @@ func TestRegister_AddsSatellite(t *testing.T) {
 	s.handleControl(controlPayload(t, map[string]any{
 		"type":   "register",
 		"device": "wohnzimmer-esp",
-		"room":   "Wohnzimmer",
 	}), addr)
 
 	s.mu.Lock()
-	sat, ok := s.satellites["wohnzimmer-esp"]
+	_, ok := s.satellites["wohnzimmer-esp"]
 	s.mu.Unlock()
 
 	if !ok {
 		t.Fatal("satellite was not registered")
-	}
-	if sat.room != "Wohnzimmer" {
-		t.Errorf("room = %q, want %q", sat.room, "Wohnzimmer")
 	}
 }
 
@@ -56,8 +52,8 @@ func TestRegister_CallsCallback(t *testing.T) {
 	s := makeServer()
 
 	done := make(chan struct{}, 1)
-	s.OnSatelliteChange(func(device, room, address, seed string, registered bool) {
-		if device == "wohnzimmer-esp" && room == "Wohnzimmer" && registered {
+	s.OnSatelliteChange(func(device, address, seed string, registered bool) {
+		if device == "wohnzimmer-esp" && registered {
 			done <- struct{}{}
 		}
 	})
@@ -65,7 +61,6 @@ func TestRegister_CallsCallback(t *testing.T) {
 	s.handleControl(controlPayload(t, map[string]any{
 		"type":   "register",
 		"device": "wohnzimmer-esp",
-		"room":   "Wohnzimmer",
 	}), makeAddr("192.168.1.100", 7776))
 
 	select {
@@ -82,7 +77,6 @@ func TestRegister_SetsLastHeartbeat(t *testing.T) {
 	s.handleControl(controlPayload(t, map[string]any{
 		"type":   "register",
 		"device": "wohnzimmer-esp",
-		"room":   "Wohnzimmer",
 	}), makeAddr("192.168.1.100", 7776))
 
 	s.mu.Lock()
@@ -104,7 +98,6 @@ func TestHeartbeat_UpdatesTimestamp(t *testing.T) {
 	s.mu.Lock()
 	s.satellites["wohnzimmer-esp"] = &satellite{
 		audioAddr: addr, ttsAddr: addr,
-		room:          "Wohnzimmer",
 		lastHeartbeat: old,
 	}
 	s.mu.Unlock()
@@ -132,7 +125,6 @@ func TestCheckTimeouts_RemovesStale(t *testing.T) {
 	s.mu.Lock()
 	s.satellites["stale-sat"] = &satellite{
 		audioAddr: addr, ttsAddr: addr,
-		room:          "Wohnzimmer",
 		lastHeartbeat: time.Now().Add(-31 * time.Second),
 	}
 	s.mu.Unlock()
@@ -153,14 +145,13 @@ func TestCheckTimeouts_CallsCallbackWithFalse(t *testing.T) {
 	addr := makeAddr("192.168.1.100", 7776)
 
 	done := make(chan bool, 1)
-	s.OnSatelliteChange(func(device, room, address, seed string, registered bool) {
+	s.OnSatelliteChange(func(device, address, seed string, registered bool) {
 		done <- registered
 	})
 
 	s.mu.Lock()
 	s.satellites["stale-sat"] = &satellite{
 		audioAddr: addr, ttsAddr: addr,
-		room:          "Wohnzimmer",
 		lastHeartbeat: time.Now().Add(-31 * time.Second),
 	}
 	s.mu.Unlock()
@@ -184,7 +175,6 @@ func TestCheckTimeouts_FreshNotRemoved(t *testing.T) {
 	s.mu.Lock()
 	s.satellites["fresh-sat"] = &satellite{
 		audioAddr: addr, ttsAddr: addr,
-		room:          "Wohnzimmer",
 		lastHeartbeat: time.Now(),
 	}
 	s.mu.Unlock()
@@ -207,13 +197,11 @@ func TestCheckTimeouts_PartialTimeout(t *testing.T) {
 	s.mu.Lock()
 	s.satellites["stale-sat"] = &satellite{
 		audioAddr: addr, ttsAddr: addr,
-		room:          "Wohnzimmer",
 		lastHeartbeat: time.Now().Add(-31 * time.Second),
 	}
 	s.satellites["fresh-sat"] = &satellite{
-		audioAddr: makeAddr("192.168.1.101", 7776),
-		ttsAddr:   makeAddr("192.168.1.101", 7776),
-		room:      "Küche",
+		audioAddr:     makeAddr("192.168.1.101", 7776),
+		ttsAddr:       makeAddr("192.168.1.101", 7776),
 		lastHeartbeat: time.Now(),
 	}
 	s.mu.Unlock()

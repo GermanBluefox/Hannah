@@ -7,6 +7,14 @@
 
 
 
+
+## 0.35.0
+### Hannah Core
+* Fixed: `NotifySatelliteRegistered` now skips satellites with no room in RoomManager instead of propagating empty `room_id` to the adapter — prevents ghost registrations from unpaired MAC-based device IDs (Refs #37)
+
+### Hannah Proxy
+* Refactor: removed `room` from all Go callbacks and gRPC calls — `AudioCallback`, `SatelliteChangeCallback`, `SubmitSatelliteAudio`, `NotifySatelliteRegistered`, `NotifySatelliteGone`; `SatelliteInfo.Room` removed; `RegisteredDevices()` now returns `[]string` (Refs #38)
+
 ## 0.34.1
 ### Hannah Core
 * Fixed: `_on_agent_satellite_control` (mute/dnd/volume/announcement/announcement_ssml/announcement_rephrase via the adapter) matched only against the satellite's self-reported room, which is always empty since #35 removed room reporting from firmware — now uses `_resolve_targets()` like all other room-based routing, so `RoomManager` assignments are honored (closes #39)

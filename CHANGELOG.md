@@ -5,6 +5,10 @@
 -->
 
 
+## 0.36.1
+### Hannah Core
+* Added: `RoomManager` cleans up provisioned-but-never-paired satellite seeds older than `seed_ttl_days` (default 7) via a background thread, configurable in `config.yaml` (Refs #41)
+
 ## 0.36.0
 ### Hannah Core
 * Added: `AgentRoomSnapshot`/`AgentRoom` proto message + `AgentMessage.send_rooms` — adapter now sends the full `enum.rooms.*` catalog (independent of devices) on connect and on enum change; `RoomManager.sync_rooms()` is fed from it via a new `on_agent_room_snapshot` callback, so provisioning a satellite into a brand-new room with no devices yet no longer fails with `FOREIGN KEY constraint failed` (Refs #40)

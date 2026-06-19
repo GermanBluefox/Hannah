@@ -9,16 +9,23 @@ SQLite-Persistenz für:
 import logging
 import sqlite3
 import threading
+import time
 from typing import Optional
 
 log = logging.getLogger(__name__)
 
 
 class RoomManager:
+    _CLEANUP_INTERVAL_S = 3600  # Prüfintervall für veraltete unpaired Seeds
+
     def __init__(self, cfg: dict):
         self._db_path = cfg.get("db_path", "rooms.db")
+        self._seed_ttl_days = int(cfg.get("seed_ttl_days", 7))
         self._lock = threading.Lock()
         self._init_db()
+        threading.Thread(
+            target=self._cleanup_loop, daemon=True, name="hannah-roommanager-cleanup"
+        ).start()
 
     # ------------------------------------------------------------------
     # Schema
@@ -314,6 +321,28 @@ class RoomManager:
                 (device_id,),
             ).fetchone()
         return dict(row) if row else None
+
+    def cleanup_stale_seeds(self) -> int:
+        """Löscht provisionierte, aber nie gepairte Satelliten (seed gesetzt) älter als seed_ttl_days."""
+        with self._lock, self._connect() as conn:
+            c = conn.execute(
+                "DELETE FROM satellites WHERE seed IS NOT NULL AND created_at < datetime('now', ?)",
+                (f"-{self._seed_ttl_days} days",),
+            )
+        if c.rowcount:
+            log.info(
+                "RoomManager: %d veraltete unpaired Seed(s) gelöscht (>%dd)",
+                c.rowcount, self._seed_ttl_days,
+            )
+        return c.rowcount
+
+    def _cleanup_loop(self) -> None:
+        while True:
+            time.sleep(self._CLEANUP_INTERVAL_S)
+            try:
+                self.cleanup_stale_seeds()
+            except Exception as e:
+                log.error("RoomManager: cleanup_stale_seeds fehlgeschlagen: %s", e)
 
     # ------------------------------------------------------------------
 

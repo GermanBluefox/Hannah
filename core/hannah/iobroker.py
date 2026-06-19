@@ -26,6 +26,16 @@ _CATEGORY_LABELS: dict[str, str] = {
 def _category_label(cat: Optional[str]) -> str:
     return _CATEGORY_LABELS.get(cat, cat) if cat else "Geräte"
 
+def _iaq_label(value: float) -> str:
+    """Übersetzt den BSEC2-IAQ-Index (0–500) in eine Klartext-Bewertung."""
+    if value <= 50:
+        return "gut"
+    if value <= 100:
+        return "okay"
+    if value <= 150:
+        return "leicht belastet"
+    return "schlecht"
+
 def _normalize_umlauts(s: str) -> str:
     """Ersetzt ae/oe/ue durch Umlaute: Buero → Büro, Sued → Süd."""
     return re.sub(r"[AaOoUu]e", lambda m: _UMLAUT_MAP.get(m.group(), m.group()), s)
@@ -452,6 +462,11 @@ class IoBrokerClient:
             ("expected", "°C Soll", None),
             ("fanSpeed", "", None),
         ],
+        "air_quality_sensor": [
+            ("iaq",       "",    "iaq_label"),
+            ("co2_equiv", "ppm", None),
+            ("voc_equiv", "ppm", None),
+        ],
     }
 
     def _describe_category(self, category: str, targets: list, room: str) -> Optional[str]:
@@ -473,6 +488,8 @@ class IoBrokerClient:
                     parts.append("an" if val else "aus")
                 elif fmt == "bool_bewegung":
                     parts.append("Bewegung erkannt" if val else "keine Bewegung")
+                elif fmt == "iaq_label":
+                    parts.append(_iaq_label(float(val)))
                 elif isinstance(val, float):
                     parts.append(f"{val:.1f} {unit}".strip())
                 else:

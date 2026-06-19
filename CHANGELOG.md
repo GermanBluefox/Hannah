@@ -5,6 +5,11 @@
 -->
 
 
+## 0.37.0
+### Hannah Core
+* Added: `air_quality_sensor` sensor category — `_CATEGORY_STATES["air_quality_sensor"]` with `iaq` (rendered as plain-text assessment via new `_iaq_label()`: 0–50 good, 51–100 okay, 101–150 slightly polluted, >150 bad), `co2_equiv` and `voc_equiv` (ppm); reuses the existing generic category-query mechanism instead of a Hannah-specific cache, so any ioBroker-known air quality sensor works, not just Hannah's own satellites (Refs #21)
+* Added: `category_words` for air quality (luftqualitaet, iaq, co2, voc, luftguete, luft, raumluft) in `config.yaml`/`config.example.yaml` (Refs #21)
+
 ## 0.36.2
 ### Satellite Firmware
 * Fixed: `bsec_set_configuration` returned `BSEC_E_CONFIG_VERSIONMISMATCH` (-34) — `libalgobsec.a` (esp32s3) was linked from the BSEC2 "Selectivity" algorithm variant, while `bme680_iaq_33v_3s_4d.bin` is a config for the classic "IAQ" variant; replaced both with the matching `bsec_IAQ` build (BSEC 2.6.1.0 generic release) and stripped a 4-byte length header that the source `.config` file carries in front of the raw 492-byte config blob (closes #24)

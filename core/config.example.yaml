@@ -201,6 +201,13 @@ nlu:
     tuer:         "door"
     tueren:       "door"
     rollladen:    "blind"
+    luftqualitaet: "air_quality_sensor"
+    iaq:          "air_quality_sensor"
+    co2:          "air_quality_sensor"
+    voc:          "air_quality_sensor"
+    luftguete:    "air_quality_sensor"
+    luft:         "air_quality_sensor"
+    raumluft:     "air_quality_sensor"
   # Fragewörter (lösen Query-Intent aus)
   query_words:
     - "ist"

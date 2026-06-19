@@ -1,5 +1,5 @@
 import pytest
-from hannah.iobroker import _camel_to_words, IoBrokerClient, Device
+from hannah.iobroker import _camel_to_words, _iaq_label, IoBrokerClient, Device
 
 
 class TestCamelToWords:
@@ -54,6 +54,56 @@ class TestParsePayload:
 
     def test_empty_string(self):
         assert IoBrokerClient._parse_payload("") == ""
+
+
+class TestIaqLabel:
+    def test_good(self):
+        assert _iaq_label(50) == "gut"
+
+    def test_okay(self):
+        assert _iaq_label(75) == "okay"
+        assert _iaq_label(100) == "okay"
+
+    def test_slightly_polluted(self):
+        assert _iaq_label(101) == "leicht belastet"
+        assert _iaq_label(150) == "leicht belastet"
+
+    def test_bad(self):
+        assert _iaq_label(151) == "schlecht"
+        assert _iaq_label(286) == "schlecht"
+
+
+class TestDescribeCategoryAirQuality:
+    @pytest.fixture
+    def client(self):
+        return IoBrokerClient({"host": "localhost", "port": 8093})
+
+    def _device(self, **current):
+        return Device(
+            id="hannah.0.satellites.sensors.kueche-esp",
+            name="Kueche",
+            key="kueche",
+            room="kueche",
+            room_display_name="Küche",
+            floor="EG",
+            category="air_quality_sensor",
+            current=current,
+        )
+
+    def test_full_reading(self, client):
+        dev = self._device(iaq=286.0, co2_equiv=1654.0, voc_equiv=6.85)
+        result = client._describe_category("air_quality_sensor", [dev], "Küche")
+        assert "schlecht" in result
+        assert "1654.0 ppm" in result
+        assert "6.8 ppm" in result or "6.9 ppm" in result
+
+    def test_uncalibrated_defaults(self, client):
+        dev = self._device(iaq=50.0, co2_equiv=500.0, voc_equiv=0.5)
+        result = client._describe_category("air_quality_sensor", [dev], "Küche")
+        assert "gut" in result
+
+    def test_unknown_category_returns_none(self, client):
+        assert client._describe_category("does_not_exist", [], "Küche") is None
 
 
 class TestGetStateRaw:

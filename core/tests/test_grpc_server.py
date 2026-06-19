@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 from hannah.grpc_server import HannahServicer
 from hannah.user_registry import UserRegistry
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom
 
-def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None):
+def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None):
     return HannahServicer(
         registry=registry or MagicMock(),
         handle_text=handle_text or MagicMock(),
@@ -15,7 +15,8 @@ def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites
         get_satellites=get_satellites or MagicMock(),
         get_car_state=get_car_state or MagicMock(),
         on_agent_device_snapshot=on_agent_device_snapshot,
-        on_agent_send_residents = on_agent_send_residents
+        on_agent_send_residents = on_agent_send_residents,
+        on_agent_room_snapshot=on_agent_room_snapshot,
     )
 
 def test_device_snapshot_dispatched():
@@ -52,3 +53,12 @@ def test_resident_snapshot_dispatched():
     ]
     servicer._on_agent_send_residents(residents)
     registry.sync.assert_called_once_with(residents)
+
+def test_room_snapshot_dispatched():
+    sync_rooms = MagicMock()
+    servicer = _make_server(on_agent_room_snapshot=sync_rooms)
+    rooms = [
+        AgentRoom(room_id="wohnzimmer", display_names={"de": "Wohnzimmer", "en": "Living Room"}),
+    ]
+    servicer._on_agent_room_snapshot(rooms)
+    sync_rooms.assert_called_once_with(rooms)

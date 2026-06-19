@@ -5,8 +5,15 @@
 -->
 
 
+## 0.36.0
+### Hannah Core
+* Added: `AgentRoomSnapshot`/`AgentRoom` proto message + `AgentMessage.send_rooms` — adapter now sends the full `enum.rooms.*` catalog (independent of devices) on connect and on enum change; `RoomManager.sync_rooms()` is fed from it via a new `on_agent_room_snapshot` callback, so provisioning a satellite into a brand-new room with no devices yet no longer fails with `FOREIGN KEY constraint failed` (Refs #40)
 
+### Hannah Proxy
+* Changed: proto updated — `AgentRoomSnapshot`/`AgentRoom` added (Refs #40)
 
+### Telegram
+* Changed: proto updated — `AgentRoomSnapshot`/`AgentRoom` added (Refs #40)
 
 ## 0.35.0
 ### Hannah Core

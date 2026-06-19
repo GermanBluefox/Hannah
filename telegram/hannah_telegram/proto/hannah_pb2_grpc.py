@@ -132,6 +132,26 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.RequestSatelliteCapture = channel.unary_unary(
+                '/hannah.HannahService/RequestSatelliteCapture',
+                request_serializer=hannah__pb2.SatelliteCaptureRequest.SerializeToString,
+                response_deserializer=hannah__pb2.SatelliteCaptureResponse.FromString,
+                _registered_method=True)
+        self.ReleaseSatelliteCapture = channel.unary_unary(
+                '/hannah.HannahService/ReleaseSatelliteCapture',
+                request_serializer=hannah__pb2.SatelliteCaptureRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.StreamSatelliteAudio = channel.unary_stream(
+                '/hannah.HannahService/StreamSatelliteAudio',
+                request_serializer=hannah__pb2.SatelliteCaptureRequest.SerializeToString,
+                response_deserializer=hannah__pb2.SatelliteAudioChunk.FromString,
+                _registered_method=True)
+        self.TriggerPlink = channel.unary_unary(
+                '/hannah.HannahService/TriggerPlink',
+                request_serializer=hannah__pb2.TriggerPlinkRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.RegisterProxy = channel.stream_stream(
                 '/hannah.HannahService/RegisterProxy',
                 request_serializer=hannah__pb2.ProxyHeartbeat.SerializeToString,
@@ -152,10 +172,20 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.SatelliteRegistration.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.ProvisionSatellite = channel.unary_unary(
+                '/hannah.HannahService/ProvisionSatellite',
+                request_serializer=hannah__pb2.ProvisionSatelliteRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.EnrollVoiceprint = channel.unary_unary(
                 '/hannah.HannahService/EnrollVoiceprint',
                 request_serializer=hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.TimerConnect = channel.stream_stream(
+                '/hannah.HannahService/TimerConnect',
+                request_serializer=hannah__pb2.TimerMessage.SerializeToString,
+                response_deserializer=hannah__pb2.TimerCommand.FromString,
                 _registered_method=True)
         self.AgentConnect = channel.stream_stream(
                 '/hannah.HannahService/AgentConnect',
@@ -302,6 +332,37 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RequestSatelliteCapture(self, request, context):
+        """--- Wakeword Capture ---
+        Put a satellite in audio-capture mode for wakeword training data collection.
+        While captured: wakeword detection is suspended, speaker is muted, DND is active.
+        Hannah relays raw PCM chunks from the satellite to the collector via StreamSatelliteAudio.
+        The stream stays open until the collector disconnects; Hannah then auto-releases the satellite.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReleaseSatelliteCapture(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StreamSatelliteAudio(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def TriggerPlink(self, request, context):
+        """Play a plink sound on the satellite, then hold virtual PTT for record_duration seconds.
+        Returns after PTT is released — Collector calls this in a loop for guided hey-hannah collection.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def RegisterProxy(self, request_iterator, context):
         """--- Satellite Proxy (Go gRPC proxy) ---
         Bidirectional keepalive stream. Proxy sends heartbeats; Hannah sends TTS
@@ -335,8 +396,27 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ProvisionSatellite(self, request, context):
+        """--- Satellite Provisioning ---
+        Called by the ioBroker adapter before WebFlash to pre-register a seed + display name + room.
+        When the satellite first connects with that seed, Hannah links serial → pre-config and clears the seed.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def EnrollVoiceprint(self, request, context):
         """--- Speaker Enrollment ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def TimerConnect(self, request_iterator, context):
+        """--- Timer Service ---
+        Bidirectional stream between the Hannah Timer Service and Hannah Core.
+        The Timer Service initiates the connection; if Hannah restarts, the service reconnects.
+        Hannah sends timer commands (create, cancel, list); the service fires events when timers expire.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -441,6 +521,26 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.TriggerFirmwareUpdateRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
+            'RequestSatelliteCapture': grpc.unary_unary_rpc_method_handler(
+                    servicer.RequestSatelliteCapture,
+                    request_deserializer=hannah__pb2.SatelliteCaptureRequest.FromString,
+                    response_serializer=hannah__pb2.SatelliteCaptureResponse.SerializeToString,
+            ),
+            'ReleaseSatelliteCapture': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReleaseSatelliteCapture,
+                    request_deserializer=hannah__pb2.SatelliteCaptureRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'StreamSatelliteAudio': grpc.unary_stream_rpc_method_handler(
+                    servicer.StreamSatelliteAudio,
+                    request_deserializer=hannah__pb2.SatelliteCaptureRequest.FromString,
+                    response_serializer=hannah__pb2.SatelliteAudioChunk.SerializeToString,
+            ),
+            'TriggerPlink': grpc.unary_unary_rpc_method_handler(
+                    servicer.TriggerPlink,
+                    request_deserializer=hannah__pb2.TriggerPlinkRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
             'RegisterProxy': grpc.stream_stream_rpc_method_handler(
                     servicer.RegisterProxy,
                     request_deserializer=hannah__pb2.ProxyHeartbeat.FromString,
@@ -461,10 +561,20 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.SatelliteRegistration.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
+            'ProvisionSatellite': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProvisionSatellite,
+                    request_deserializer=hannah__pb2.ProvisionSatelliteRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
             'EnrollVoiceprint': grpc.unary_unary_rpc_method_handler(
                     servicer.EnrollVoiceprint,
                     request_deserializer=hannah__pb2.EnrollVoiceprintRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'TimerConnect': grpc.stream_stream_rpc_method_handler(
+                    servicer.TimerConnect,
+                    request_deserializer=hannah__pb2.TimerMessage.FromString,
+                    response_serializer=hannah__pb2.TimerCommand.SerializeToString,
             ),
             'AgentConnect': grpc.stream_stream_rpc_method_handler(
                     servicer.AgentConnect,
@@ -955,6 +1065,114 @@ class HannahService(object):
             _registered_method=True)
 
     @staticmethod
+    def RequestSatelliteCapture(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/RequestSatelliteCapture',
+            hannah__pb2.SatelliteCaptureRequest.SerializeToString,
+            hannah__pb2.SatelliteCaptureResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReleaseSatelliteCapture(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/ReleaseSatelliteCapture',
+            hannah__pb2.SatelliteCaptureRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StreamSatelliteAudio(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/hannah.HannahService/StreamSatelliteAudio',
+            hannah__pb2.SatelliteCaptureRequest.SerializeToString,
+            hannah__pb2.SatelliteAudioChunk.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def TriggerPlink(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/TriggerPlink',
+            hannah__pb2.TriggerPlinkRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def RegisterProxy(request_iterator,
             target,
             options=(),
@@ -1063,6 +1281,33 @@ class HannahService(object):
             _registered_method=True)
 
     @staticmethod
+    def ProvisionSatellite(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/ProvisionSatellite',
+            hannah__pb2.ProvisionSatelliteRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def EnrollVoiceprint(request,
             target,
             options=(),
@@ -1079,6 +1324,33 @@ class HannahService(object):
             '/hannah.HannahService/EnrollVoiceprint',
             hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def TimerConnect(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            '/hannah.HannahService/TimerConnect',
+            hannah__pb2.TimerMessage.SerializeToString,
+            hannah__pb2.TimerCommand.FromString,
             options,
             channel_credentials,
             insecure,

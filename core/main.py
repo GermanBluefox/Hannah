@@ -1027,6 +1027,12 @@ def main():
         grpc_servicer.timer_send_ready()
         grpc_servicer.timer_list_request()
 
+    def _on_agent_room_snapshot(rooms):
+        # Full enum.rooms.* catalog, independent of devices — keeps RoomManager
+        # aware of rooms that don't have any device (and thus no AgentDeviceSnapshot
+        # entry) yet, e.g. right before provisioning the first satellite into them.
+        room_manager.sync_rooms({r.room_id: dict(r.display_names).get("de") or r.room_id for r in rooms})
+
     def _on_agent_connect():
         state_ids = trigger_engine.get_referenced_state_ids()
         if state_ids:
@@ -1072,6 +1078,7 @@ def main():
         on_agent_satellite_control=_on_agent_satellite_control,
         on_agent_device_snapshot=_on_agent_device_snapshot,
         on_agent_send_residents=registry.sync,
+        on_agent_room_snapshot=_on_agent_room_snapshot,
         on_trigger_firmware_update=lambda device: mqtt_handler.publish_ota_ok(device),
         on_timer_fired=_on_timer_fired,
         on_timer_list=_on_timer_list,

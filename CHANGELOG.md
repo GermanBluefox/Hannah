@@ -6,6 +6,11 @@
 
 
 
+
+## 0.34.1
+### Hannah Core
+* Fixed: `_on_agent_satellite_control` (mute/dnd/volume/announcement/announcement_ssml/announcement_rephrase via the adapter) matched only against the satellite's self-reported room, which is always empty since #35 removed room reporting from firmware — now uses `_resolve_targets()` like all other room-based routing, so `RoomManager` assignments are honored (closes #39)
+
 ## 0.34.0
 ### Hannah Core
 * Changed: `GrpcServer.NotifySatelliteRegistered` no longer uses the satellite-reported room as fallback; `RoomManager` is now the sole authority for room assignment (Refs #35)

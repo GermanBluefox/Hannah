@@ -929,7 +929,7 @@ def main():
         if device_id:
             targets = [device_id] if device_id in all_devices else []
         else:
-            targets = [d for d, r in all_devices.items() if room == "all" or r.lower() == room.lower()]
+            targets = _resolve_targets(room, label="[satellite_control] ")
         if key == "mute":
             for d in targets:
                 _device_mute[d] = bool(value)

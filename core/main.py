@@ -653,7 +653,8 @@ def main():
         current = set(satellite_map.keys())
         ble_macs = ble_engine.get_all_macs()
         for device_id in current - _known_satellites:
-            grpc_servicer.agent_satellite_update(device_id, satellite_map[device_id], "", True)
+            display_name = room_manager.resolve_satellite_name(device_id) or ""
+            grpc_servicer.agent_satellite_update(device_id, satellite_map[device_id], "", True, display_name=display_name)
             if not grpc_servicer.is_captured(device_id):
                 # Stelle sicher, dass kein retained Capture-Modus aus einer
                 # vorherigen Hannah-Session am Satelliten hängen geblieben ist.
@@ -1019,7 +1020,9 @@ def main():
     def _on_agent_device_snapshot(devices):
         nonlocal _iobroker_ready
         iobroker.handle_device_snapshot(devices)
-        room_manager.sync_rooms(iobroker.rooms)
+        orphaned = room_manager.sync_rooms(iobroker.rooms)
+        for device_id, room_id in orphaned:
+            grpc_servicer.agent_satellite_deleted(device_id, room_id)
         db_group_rooms = {g["group_id"]: g["display_name"] for g in room_manager.get_groups()}
         nlu._rooms = {**iobroker.rooms, **_group_pseudo_rooms, **db_group_rooms}
         nlu._devices = iobroker.devices
@@ -1031,7 +1034,9 @@ def main():
         # Full enum.rooms.* catalog, independent of devices — keeps RoomManager
         # aware of rooms that don't have any device (and thus no AgentDeviceSnapshot
         # entry) yet, e.g. right before provisioning the first satellite into them.
-        room_manager.sync_rooms({r.room_id: dict(r.display_names).get("de") or r.room_id for r in rooms})
+        orphaned = room_manager.sync_rooms({r.room_id: dict(r.display_names).get("de") or r.room_id for r in rooms})
+        for device_id, room_id in orphaned:
+            grpc_servicer.agent_satellite_deleted(device_id, room_id)
 
     def _on_agent_connect():
         state_ids = trigger_engine.get_referenced_state_ids()
@@ -1308,6 +1313,8 @@ def main():
         cfg.get("udp", {}),
         process_audio_udp,
         on_satellite_change=_on_satellite_change,
+        resolve_satellite_room=room_manager.get_satellite_room,
+        upsert_satellite=room_manager.upsert_satellite,
     )
     udp_server.start()
 

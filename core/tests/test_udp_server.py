@@ -1,15 +1,23 @@
+import json
 import time
 from unittest.mock import MagicMock
 
 from hannah.udp_server import UDPServer
 
 
-def _make_server(callback=None):
+def _make_server(callback=None, resolve_satellite_room=None, upsert_satellite=None):
     return UDPServer(
         cfg={"host": "127.0.0.1", "port": 0},
         on_audio=MagicMock(),
         on_satellite_change=callback or MagicMock(),
+        resolve_satellite_room=resolve_satellite_room,
+        upsert_satellite=upsert_satellite,
     )
+
+
+def _register(server, device, addr=("192.168.1.50", 7776)):
+    payload = json.dumps({"type": "register", "device": device}).encode("utf-8")
+    server._handle_control(payload, addr)
 
 
 class TestHeartbeatWatchdog:
@@ -90,3 +98,32 @@ class TestHeartbeatWatchdog:
         snapshot = callback.call_args[0][0]
         assert "stale-sat" not in snapshot
         assert "fresh-sat" in snapshot
+
+
+class TestRegisterRoomCheck:
+    def test_register_without_room_not_tracked(self):
+        callback = MagicMock()
+        upsert = MagicMock()
+        server = _make_server(callback, resolve_satellite_room=lambda _d: None, upsert_satellite=upsert)
+
+        _register(server, "roomless-sat")
+
+        with server._lock:
+            assert "roomless-sat" not in server._satellites
+        upsert.assert_called_once_with("roomless-sat")
+        callback.assert_not_called()
+
+    def test_register_with_room_tracked(self):
+        callback = MagicMock()
+        upsert = MagicMock()
+        server = _make_server(callback, resolve_satellite_room=lambda _d: "wohnzimmer", upsert_satellite=upsert)
+
+        _register(server, "wz-sat")
+        time.sleep(0.1)  # callback runs in daemon thread
+
+        with server._lock:
+            assert server._satellites["wz-sat"]["room"] == "wohnzimmer"
+        upsert.assert_called_once_with("wz-sat")
+        callback.assert_called_once()
+        snapshot = callback.call_args[0][0]
+        assert snapshot.get("wz-sat") == "wohnzimmer"

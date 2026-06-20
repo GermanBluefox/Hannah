@@ -7,7 +7,7 @@ Protokoll (ein Port, 1-Byte Type-Prefix):
   0x03 + PCM   = TTS-Audio          (Server → Satellit, gleiches Format)
 
 Control-Nachrichten (Satellit → Server):
-  {"type": "register",   "device": "rpi-test", "room": "Wohnzimmer"}
+  {"type": "register",   "device": "rpi-test"}  -- Raum kommt aus RoomManager, nicht vom Satelliten
   {"type": "audio_end",  "device": "rpi-test"}
   {"type": "heartbeat",  "device": "rpi-test"}
 
@@ -61,18 +61,28 @@ class UDPServer:
         on_audio: Callable[[str, bytes], None],
         on_session_start: Optional[Callable[[str], None]] = None,
         on_satellite_change: Optional[Callable[[dict], None]] = None,
+        resolve_satellite_room: Optional[Callable[[str], Optional[str]]] = None,
+        upsert_satellite: Optional[Callable[[str], None]] = None,
     ):
         """
-        cfg                 : udp-Abschnitt aus config.yaml
-        on_audio            : Callback(device, raw_pcm_bytes) — aufgerufen wenn eine
-                              Aufnahme vollständig ist (nach audio_end)
-        on_satellite_change : Callback({device: room, ...}) — bei Register/Abmeldung
+        cfg                    : udp-Abschnitt aus config.yaml
+        on_audio               : Callback(device, raw_pcm_bytes) — aufgerufen wenn eine
+                                 Aufnahme vollständig ist (nach audio_end)
+        on_satellite_change    : Callback({device: room, ...}) — bei Register/Abmeldung
+        resolve_satellite_room : Callback(device_id) → room_id|None — RoomManager-Lookup.
+                                 Ohne zugewiesenen Raum gilt ein Satellit als nicht
+                                 funktional: kein Tracking, keine Weiterleitung an den Adapter.
+        upsert_satellite       : Callback(device_id) — trägt den Satelliten in die
+                                 RoomManager-DB ein (auch ohne Raum), damit er in der
+                                 Raum-Zuweisung in der Web UI auftaucht.
         """
         self._host = cfg.get("host", "0.0.0.0")
         self._port = cfg.get("port", 7775)
         self._on_audio = on_audio
         self._on_session_start = on_session_start
         self._on_satellite_change = on_satellite_change
+        self._resolve_satellite_room = resolve_satellite_room or (lambda *_: None)
+        self._upsert_satellite = upsert_satellite or (lambda *_: None)
 
         # { device_name: {"addr": (ip, port), "room": str, "last_heartbeat": float} }
         self._satellites: dict[str, dict] = {}
@@ -242,7 +252,14 @@ class UDPServer:
         device = msg.get("device", "")
 
         if t == "register":
-            room = msg.get("room", "")
+            self._upsert_satellite(device)
+            room = self._resolve_satellite_room(device) or ""
+            if not room:
+                log.warning(
+                    f"Satellit '{device}' hat keinen Raum in RoomManager — "
+                    f"nicht funktional (kein Tracking, keine Weiterleitung an Adapter)."
+                )
+                return
             # Satellit meldet seinen Empfangsport für TTS; Fallback: Absender-Port
             listen_port = msg.get("listen_port", addr[1])
             tts_addr = (addr[0], listen_port)

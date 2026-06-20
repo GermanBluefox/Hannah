@@ -75,14 +75,21 @@ class RoomManager:
     # ------------------------------------------------------------------
     # Räume
 
-    def sync_rooms(self, rooms: dict[str, str]) -> None:
+    def sync_rooms(self, rooms: dict[str, str]) -> list[tuple[str, str]]:
         """
         Übernimmt den Raum-Katalog aus ioBroker.
         rooms = {room_key: display_name}  (z.B. {"wohnzimmer": "Wohnzimmer"})
-        Bereits vorhandene Räume werden nicht gelöscht (Gruppen-Referenzen bleiben erhalten).
+        Räume, die nicht mehr in rooms enthalten sind, werden gelöscht; Satelliten,
+        die noch auf einen solchen Raum zeigten, werden auf room_id=NULL gesetzt
+        (sie existieren weiter in der DB, sind aber logisch ohne Raum — siehe
+        execute()/agent_satellite_update: Satelliten ohne room_id werden nicht
+        an den Adapter weitergeleitet).
+        Gibt [(device_id, room_id), ...] der davon betroffenen Satelliten zurück,
+        damit der Aufrufer den Adapter per agent_satellite_deleted() informieren kann.
         """
         if not rooms:
-            return
+            return []
+        orphaned: list[tuple[str, str]] = []
         with self._lock, self._connect() as conn:
             for room_id, display_name in rooms.items():
                 conn.execute(
@@ -93,7 +100,19 @@ class RoomManager:
                     "UPDATE rooms SET display_name = ? WHERE room_id = ?",
                     (display_name, room_id),
                 )
+            existing_room_ids = {row[0] for row in conn.execute("SELECT room_id FROM rooms")}
+            vanished = existing_room_ids - set(rooms.keys())
+            for room_id in vanished:
+                rows = conn.execute(
+                    "SELECT device_id FROM satellites WHERE room_id = ?", (room_id,)
+                ).fetchall()
+                orphaned.extend((device_id, room_id) for (device_id,) in rows)
+                conn.execute("UPDATE satellites SET room_id = NULL WHERE room_id = ?", (room_id,))
+                conn.execute("DELETE FROM rooms WHERE room_id = ?", (room_id,))
         log.debug(f"RoomManager: {len(rooms)} Räume synchronisiert")
+        if vanished:
+            log.info(f"RoomManager: {len(vanished)} Raum/Räume entfernt, {len(orphaned)} Satellit(en) verwaist: {orphaned}")
+        return orphaned
 
     def get_rooms(self) -> list[dict]:
         with self._connect() as conn:

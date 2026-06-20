@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 from hannah.grpc_server import HannahServicer
 from hannah.user_registry import UserRegistry
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration
 
-def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None):
+def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None):
     return HannahServicer(
         registry=registry or MagicMock(),
         handle_text=handle_text or MagicMock(),
@@ -17,6 +17,8 @@ def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites
         on_agent_device_snapshot=on_agent_device_snapshot,
         on_agent_send_residents = on_agent_send_residents,
         on_agent_room_snapshot=on_agent_room_snapshot,
+        on_satellite_change=on_satellite_change,
+        resolve_satellite_room=resolve_satellite_room,
     )
 
 def test_device_snapshot_dispatched():
@@ -62,3 +64,29 @@ def test_room_snapshot_dispatched():
     ]
     servicer._on_agent_room_snapshot(rooms)
     sync_rooms.assert_called_once_with(rooms)
+
+def test_notify_satellite_registered_does_not_double_send():
+    on_satellite_change = MagicMock()
+    servicer = _make_server(on_satellite_change=on_satellite_change, resolve_satellite_room=lambda _d: "wohnzimmer")
+    servicer.agent_satellite_update = MagicMock()
+
+    request = SatelliteRegistration(device_id="wz-sat", address="192.168.1.50")
+    response = servicer.NotifySatelliteRegistered(request, None)
+
+    assert response.ok
+    servicer.agent_satellite_update.assert_not_called()
+    on_satellite_change.assert_called_once_with({"wz-sat": "wohnzimmer"})
+
+def test_notify_satellite_gone_does_not_double_send():
+    on_satellite_change = MagicMock()
+    servicer = _make_server(on_satellite_change=on_satellite_change, resolve_satellite_room=lambda _d: "wohnzimmer")
+    servicer.agent_satellite_update = MagicMock()
+    servicer.NotifySatelliteRegistered(SatelliteRegistration(device_id="wz-sat", address="192.168.1.50"), None)
+    on_satellite_change.reset_mock()
+
+    request = SatelliteRegistration(device_id="wz-sat")
+    response = servicer.NotifySatelliteGone(request, None)
+
+    assert response.ok
+    servicer.agent_satellite_update.assert_not_called()
+    on_satellite_change.assert_called_once_with({})

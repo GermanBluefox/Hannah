@@ -564,8 +564,6 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             threading.Thread(
                 target=self._on_satellite_change, args=(snapshot,), daemon=True
             ).start()
-        display_name = self._resolve_satellite_name(device) or ""
-        self.agent_satellite_update(device, room_id, "", online=True, display_name=display_name)
         return pb.StatusResponse(ok=True, message="paired" if paired else "registered")
 
     def NotifySatelliteGone(self, request, _context):
@@ -579,7 +577,6 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             threading.Thread(
                 target=self._on_satellite_change, args=(snapshot,), daemon=True
             ).start()
-        self.agent_satellite_update(device, "", "", online=False)
         return pb.StatusResponse(ok=True, message="gone")
 
     # ------------------------------------------------------------------

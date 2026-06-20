@@ -5,6 +5,12 @@
 -->
 
 
+## 0.38.1
+### Hannah Core
+* Added: `RoomManager.sync_rooms()` now detects rooms that disappeared from the ioBroker enum catalog and removes them; satellites that were assigned to a vanished room have their `room_id` nulled (kept in the DB, not deleted) and are reported back to the caller, which pushes `agent_satellite_deleted()` to the adapter so the now-roomless satellite's object tree is cleaned up there too (Refs #51)
+* Fixed: `NotifySatelliteRegistered`/`NotifySatelliteGone` pushed `agent_satellite_update()` to the adapter twice per connect/disconnect — once directly, once via the `_on_satellite_change` online/offline diff in `main.py`; the direct calls are removed, `_on_satellite_change` now resolves `display_name` itself via `RoomManager.resolve_satellite_name()` (Refs #53)
+* Fixed: the UDP-direct satellite path (fallback when no proxy is connected) took its room straight from the satellite's own registration payload, completely bypassing `RoomManager` — a satellite has had no way to know its own room since the room/group management rework (#25); it now resolves the room via `RoomManager` like the proxy path already does, and isn't tracked/forwarded to the adapter at all without one (Refs #53)
+
 ## 0.38.0
 ### Hannah Core
 * Added: `humidity_sensor` sensor category — `_CATEGORY_STATES["humidity_sensor"]` with `current` (%); reuses the existing generic category-query mechanism, same pattern as `temperature_sensor` (Refs #47)

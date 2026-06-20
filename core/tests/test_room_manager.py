@@ -56,3 +56,42 @@ class TestCleanupStaleSeeds:
 
         assert removed == 0
         assert manager.get_satellite("paired-sat") is not None
+
+
+class TestSyncRooms:
+    def test_empty_snapshot_is_noop(self, manager):
+        manager.sync_rooms({"wohnzimmer": "Wohnzimmer"})
+
+        orphaned = manager.sync_rooms({})
+
+        assert orphaned == []
+        assert manager.get_rooms() == [{"room_id": "wohnzimmer", "display_name": "Wohnzimmer"}]
+
+    def test_vanished_room_orphans_its_satellite(self, manager):
+        manager.sync_rooms({"wohnzimmer": "Wohnzimmer"})
+        _insert_satellite(manager, "wz-esp", "seed-1", days_old=0)
+        manager.set_satellite_room("wz-esp", "wohnzimmer")
+
+        orphaned = manager.sync_rooms({"kueche": "Küche"})
+
+        assert orphaned == [("wz-esp", "wohnzimmer")]
+        assert manager.get_satellite_room("wz-esp") is None
+        assert manager.get_rooms() == [{"room_id": "kueche", "display_name": "Küche"}]
+
+    def test_vanished_room_without_satellites_just_removed(self, manager):
+        manager.sync_rooms({"keller": "Keller"})
+
+        orphaned = manager.sync_rooms({"kueche": "Küche"})
+
+        assert orphaned == []
+        assert manager.get_rooms() == [{"room_id": "kueche", "display_name": "Küche"}]
+
+    def test_room_still_present_keeps_its_satellite(self, manager):
+        manager.sync_rooms({"wohnzimmer": "Wohnzimmer"})
+        _insert_satellite(manager, "wz-esp", "seed-1", days_old=0)
+        manager.set_satellite_room("wz-esp", "wohnzimmer")
+
+        orphaned = manager.sync_rooms({"wohnzimmer": "Wohnzimmer"})
+
+        assert orphaned == []
+        assert manager.get_satellite_room("wz-esp") == "wohnzimmer"

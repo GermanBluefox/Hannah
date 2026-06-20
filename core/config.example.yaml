@@ -187,7 +187,7 @@ nlu:
     - "deaktiviere"
   # Kategorie-Filter: Wort im Befehl → nur Geräte dieser Kategorie schalten
   # Werte müssen den device_type-Keys entsprechen: light, socket, thermostat,
-  # temperature_sensor, window, door, blind
+  # temperature_sensor, window, door, blind, air_quality_sensor, humidity_sensor
   category_words:
     licht:        "light"
     lichter:      "light"
@@ -211,6 +211,10 @@ nlu:
     luftguete:    "air_quality_sensor"
     luft:         "air_quality_sensor"
     raumluft:     "air_quality_sensor"
+    luftfeuchtigkeit: "humidity_sensor"
+    luftfeuchte:  "humidity_sensor"
+    feuchtigkeit: "humidity_sensor"
+    feuchte:      "humidity_sensor"
   # Fragewörter (lösen Query-Intent aus)
   query_words:
     - "ist"

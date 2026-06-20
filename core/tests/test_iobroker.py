@@ -106,6 +106,29 @@ class TestDescribeCategoryAirQuality:
         assert client._describe_category("does_not_exist", [], "Küche") is None
 
 
+class TestDescribeCategoryHumidity:
+    @pytest.fixture
+    def client(self):
+        return IoBrokerClient({"host": "localhost", "port": 8093})
+
+    def _device(self, **current):
+        return Device(
+            id="javascript.0.virtualDevice.Luftfeuchtigkeit.OG.Schlafzimmer.Raumfeuchte",
+            name="Raumfeuchte",
+            key="raumfeuchte",
+            room="schlafzimmer",
+            room_display_name="Schlafzimmer",
+            floor="OG",
+            category="humidity_sensor",
+            current=current,
+        )
+
+    def test_reading(self, client):
+        dev = self._device(current=54.3)
+        result = client._describe_category("humidity_sensor", [dev], "Schlafzimmer")
+        assert "54.3 %" in result
+
+
 class TestHandleStateUpdate:
     """Regression: live updates go through state_names reverse-lookup, the initial
     gRPC snapshot does not — a suffix missing from state_names freezes that field

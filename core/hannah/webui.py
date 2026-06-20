@@ -30,6 +30,7 @@ def _slugify(s: str) -> str:
 def create_app(
     room_manager: RoomManager,
     get_connected_satellites: Callable[[], dict[str, str]],
+    notify_satellite_deleted: Callable[[str, str], bool],
 ) -> Flask:
     app = Flask(__name__, template_folder=_TEMPLATES)
     app.secret_key = os.urandom(24)
@@ -144,6 +145,13 @@ def create_app(
         room_manager.upsert_satellite(device_id)
         if display_name:
             room_manager.set_satellite_display_name(device_id, display_name)
+        return redirect(url_for("satellites"))
+
+    @app.route("/satellites/<device_id>/delete", methods=["POST"])
+    def delete_satellite(device_id: str):
+        room_id = room_manager.get_satellite_room(device_id) or ""
+        room_manager.delete_satellite(device_id)
+        notify_satellite_deleted(device_id, room_id)
         return redirect(url_for("satellites"))
 
     return app

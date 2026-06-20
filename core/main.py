@@ -1334,6 +1334,7 @@ def main():
                 **udp_server.registered_devices(),
                 **grpc_servicer.proxy_satellites(),
             },
+            notify_satellite_deleted=grpc_servicer.agent_satellite_deleted,
         )
         web_host = web_cfg.get("host", "0.0.0.0")
         web_port = int(web_cfg.get("port", 8080))

@@ -5,6 +5,18 @@
 -->
 
 
+## 0.38.0
+### Hannah Core
+* Added: `humidity_sensor` sensor category — `_CATEGORY_STATES["humidity_sensor"]` with `current` (%); reuses the existing generic category-query mechanism, same pattern as `temperature_sensor` (Refs #47)
+* Added: `category_words` for humidity (luftfeuchtigkeit, luftfeuchte, feuchtigkeit, feuchte) in `config.yaml`/`config.example.yaml` (Refs #47)
+* Changed: satellite deletion moved fully into Hannah Core — `RoomManager.delete_satellite()` + new Web UI "Löschen" button on `/satellites` (only shown for offline satellites) replace the old AdminUI-only path that never touched Core's DB, leaving ghost entries behind; `HannahServicer.agent_satellite_deleted()` pushes the new `AgentSatelliteDeleted` command (`AgentCommand.satellite_deleted`) to tell the adapter to remove the object tree (Refs #42)
+
+### Hannah Proxy
+* Changed: proto updated — `AgentSatelliteDeleted` added (Refs #42)
+
+### Telegram
+* Changed: proto updated — `AgentSatelliteDeleted` added (Refs #42)
+
 ## 0.37.1
 ### Hannah Core
 * Fixed: `IoBrokerClient.handle_state_update` silently dropped live updates for state suffixes missing from `config.yaml`'s `iobroker.state_names` — affected `iaq`/`co2_equiv`/`voc_equiv` (added in the `air_quality_sensor` category) since they were never added there; the initial gRPC snapshot writes the raw suffix directly (no `state_names` translation), so affected values froze at whatever the last snapshot held instead of updating live (Refs #21)

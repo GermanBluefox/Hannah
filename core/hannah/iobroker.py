@@ -467,6 +467,9 @@ class IoBrokerClient:
             ("co2_equiv", "ppm CO₂", None),
             ("voc_equiv", "ppm VOC", None),
         ],
+        "humidity_sensor": [
+            ("current", "%", None),
+        ],
     }
 
     def _describe_category(self, category: str, targets: list, room: str) -> Optional[str]:

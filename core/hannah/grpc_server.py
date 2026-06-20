@@ -680,6 +680,14 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             log.debug(f"agent_sensor_update({device}): pushed to {n} adapter(s)")
             return n > 0
 
+    def agent_satellite_deleted(self, device_id: str, room: str) -> bool:
+        """Push a satellite-deleted command to all connected adapters."""
+        cmd = pb.AgentCommand(satellite_deleted=pb.AgentSatelliteDeleted(device_id=device_id, room=room))
+        with self._agent_lock:
+            for q in self._agent_queues:
+                q.put(cmd)
+            return len(self._agent_queues) > 0
+
     def agent_resident_answered(self, correlation_id: str, answer: str) -> bool:
         """Push AgentResidentAnswered to all connected adapters."""
         cmd = pb.AgentCommand(resident_answered=pb.AgentResidentAnswered(

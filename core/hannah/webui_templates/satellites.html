@@ -73,7 +73,15 @@
             {{ sat.last_seen or '–' }}
           </td>
 
-          <td></td>
+          <td class="align-middle">
+            {% if not sat.connected %}
+            <form method="post"
+                  action="{{ url_for('delete_satellite', device_id=sat.device_id) }}"
+                  onsubmit="return confirm('Satellit {{ sat.display_name or sat.device_id }} löschen?')">
+              <button class="btn btn-sm btn-outline-danger">Löschen</button>
+            </form>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

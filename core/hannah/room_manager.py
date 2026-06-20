@@ -322,6 +322,12 @@ class RoomManager:
             ).fetchone()
         return dict(row) if row else None
 
+    def delete_satellite(self, device_id: str) -> bool:
+        with self._lock, self._connect() as conn:
+            c = conn.execute("DELETE FROM satellites WHERE device_id = ?", (device_id,))
+        log.info(f"RoomManager: Satellit '{device_id}' gelöscht")
+        return c.rowcount > 0
+
     def cleanup_stale_seeds(self) -> int:
         """Löscht provisionierte, aber nie gepairte Satelliten (seed gesetzt) älter als seed_ttl_days."""
         with self._lock, self._connect() as conn:

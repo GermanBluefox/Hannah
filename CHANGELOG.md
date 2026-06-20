@@ -5,6 +5,10 @@
 -->
 
 
+## 0.38.2
+### Satellite Firmware
+* Added: WiFi AP-Setup-Modus verlässt sich nicht mehr endgültig — ein periodischer Timer (alle 10 Minuten, gleiches Muster wie der bestehende SNTP-Retry) versucht im Hintergrund das ursprüngliche Netz wiederzufinden, parallel zum laufenden AP (kein Scan-/Konfigurations-Unterbruch). Bei Erfolg wird der AP nur sofort abgeworfen, wenn kein Client mehr am Captive Portal hängt — sonst wartet der Cutover bis zur letzten Trennung, damit eine laufende Konfiguration (z.B. neuer PSK bei Netz-Umzug) nicht durch einen verschwindenden AP unterbrochen wird. Kein Retry bei unkonfigurierten Geräten ohne hinterlegtes WiFi (Refs #52)
+
 ## 0.38.1
 ### Hannah Core
 * Added: `RoomManager.sync_rooms()` now detects rooms that disappeared from the ioBroker enum catalog and removes them; satellites that were assigned to a vanished room have their `room_id` nulled (kept in the DB, not deleted) and are reported back to the caller, which pushes `agent_satellite_deleted()` to the adapter so the now-roomless satellite's object tree is cleaned up there too (Refs #51)

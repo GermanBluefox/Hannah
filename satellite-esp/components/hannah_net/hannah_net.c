@@ -50,6 +50,7 @@ static const char *TAG = "hannah_net";
 #define WIFI_CONNECTED_BIT  BIT0
 #define WIFI_FAIL_BIT       BIT1
 #define NET_SNTP_SYNCED_BIT BIT0
+#define AP_RECOVERY_INTERVAL_MS (10 * 60 * 1000)  /* Retry-Intervall fürs Original-Netz im AP-Setup-Modus */
 
 /* ── Zustand ─────────────────────────────────────────────────────────────── */
 
@@ -62,11 +63,13 @@ static int                     s_wifi_retry  = 0;
 static char                    s_proxy_host[64] = {0};
 static int                     s_proxy_port     = 0;
 static volatile bool           s_ap_mode        = false;
+static volatile bool           s_ap_pending_exit = false;  /* Recovery erfolgreich, wartet auf letzten AP-Client */
 static bool                    s_sntp_started   = false;
 
 static EventGroupHandle_t        s_wifi_event_group;
 static EventGroupHandle_t        s_net_events  = NULL;
 static TimerHandle_t             s_sntp_retry  = NULL;
+static TimerHandle_t             s_ap_recovery_retry = NULL;
 static esp_mqtt_client_handle_t  s_mqtt_client = NULL;
 static esp_netif_t              *s_sta_netif   = NULL;
 static esp_netif_t              *s_ap_netif    = NULL;
@@ -465,6 +468,33 @@ static void mqtt_init(void)
 
 static void wifi_start_ap(void);
 
+/* Periodischer Versuch, das Original-Netz aus dem AP-Setup-Modus heraus
+ * wiederzufinden — läuft parallel zum AP weiter (APSTA), damit eine laufende
+ * Konfiguration über das Captive Portal nicht durch einen verschwindenden AP
+ * unterbrochen wird. Bei Erfolg übernimmt IP_EVENT_STA_GOT_IP den Cutover. */
+static void ap_recovery_retry_cb(TimerHandle_t t)
+{
+    if (!s_ap_mode) { xTimerStop(t, 0); return; }
+    ESP_LOGI(TAG, "AP-Modus: Versuche Original-Netz wiederzufinden...");
+    esp_wifi_connect();
+}
+
+/* True wenn aktuell jemand mit dem Setup-AP verbunden ist — verhindert, dass
+ * der AP mitten in einer laufenden Konfiguration verschwindet. */
+static bool ap_has_clients(void)
+{
+    wifi_sta_list_t sta_list;
+    if (esp_wifi_ap_get_sta_list(&sta_list) != ESP_OK) return false;
+    return sta_list.num > 0;
+}
+
+static void ap_exit_setup_mode(void)
+{
+    ESP_LOGW(TAG, "AP-Modus: kein Client mehr verbunden — verlasse Setup-Modus.");
+    s_ap_pending_exit = false;
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+}
+
 /* Task zum Wechsel in den AP-Modus (nicht direkt aus Event-Handler aufrufen). */
 static void ap_switch_task(void *arg)
 {
@@ -501,10 +531,28 @@ static void on_wifi_event(void *arg, esp_event_base_t base,
         }
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
 
+    } else if (base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        if (s_ap_pending_exit && !ap_has_clients()) ap_exit_setup_mode();
+
     } else if (base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *ev = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&ev->ip_info.ip));
         s_wifi_retry = 0;
+        if (s_ap_mode) {
+            /* Recovery aus dem AP-Setup-Modus: Original-Netz wieder da. AP-Rolle
+             * nur sofort abwerfen, wenn niemand mehr am Captive Portal hängt —
+             * sonst würde eine laufende Konfiguration (z.B. neuer PSK für einen
+             * Netz-Umzug) durch den verschwindenden AP unterbrochen. */
+            ESP_LOGW(TAG, "AP-Modus: Original-Netz wiedergefunden.");
+            if (s_ap_recovery_retry) xTimerStop(s_ap_recovery_retry, 0);
+            s_ap_mode = false;
+            if (ap_has_clients()) {
+                ESP_LOGW(TAG, "AP-Modus: Client verbunden — AP bleibt bestehen bis Verbindung endet.");
+                s_ap_pending_exit = true;
+            } else {
+                ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+            }
+        }
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         mqtt_init();
         if (s_sntp_retry) xTimerStart(s_sntp_retry, 0);
@@ -571,6 +619,17 @@ static void wifi_start_ap(void)
 
     ESP_LOGW(TAG, "AP-Modus: SSID=%s  IP=192.168.4.1", (char *)ap_cfg.ap.ssid);
     ESP_LOGW(TAG, "Webinterface: http://192.168.4.1/");
+
+    /* Nur retrien wenn überhaupt ein Original-Netz bekannt ist — bei
+     * Erstinbetriebnahme ohne Credentials wäre das sinnlos. */
+    if (hannah_config_has_wifi()) {
+        if (!s_ap_recovery_retry) {
+            s_ap_recovery_retry = xTimerCreate(
+                "ap_recovery", pdMS_TO_TICKS(AP_RECOVERY_INTERVAL_MS),
+                pdTRUE, NULL, ap_recovery_retry_cb);
+        }
+        if (s_ap_recovery_retry) xTimerStart(s_ap_recovery_retry, 0);
+    }
 }
 
 /* ── Öffentliche API ─────────────────────────────────────────────────────── */

@@ -463,9 +463,9 @@ class IoBrokerClient:
             ("fanSpeed", "", None),
         ],
         "air_quality_sensor": [
-            ("iaq",       "",    "iaq_label"),
-            ("co2_equiv", "ppm", None),
-            ("voc_equiv", "ppm", None),
+            ("iaq",       "",        "iaq_label"),
+            ("co2_equiv", "ppm CO₂", None),
+            ("voc_equiv", "ppm VOC", None),
         ],
     }
 
@@ -495,7 +495,10 @@ class IoBrokerClient:
                 else:
                     parts.append(f"{val} {unit}".strip())
             if parts:
-                lines.append(f"{dev.name}: {', '.join(parts)}")
+                if len(targets) > 1:
+                    lines.append(f"{dev.name}: {', '.join(parts)}")
+                else:
+                    lines.append(", ".join(parts))
 
         if not lines:
             return None

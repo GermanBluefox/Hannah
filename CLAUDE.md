@@ -230,6 +230,29 @@ Hannah bekommt die Geräte über gRPC von dem Adapter über gRPC gemeldet. Sämt
 **Wichtige gRPC-Methode:**
 - `AgentConnect`: Bidirektionaler Stream zwischen Adapter und Hannah (Nachrichtentyp `AgentMessage` rein, `AgentCommand` raus)
 
+#### Sensor-/Geräte-Datenfluss (Debugging-Referenz)
+
+Vollständiger Pfad von einem Satelliten-Sensorwert bis zur Sprachantwort — als Referenz, weil der Pfad durch mehrere Repos/Prozesse läuft und Debugging sonst sehr lange dauert (Bug-Suche zum Air-Quality-Feature, 2026-06-20, hat zwei unabhängige Bugs über diesen Pfad zutage gefördert).
+
+1. **Satellit → MQTT**: Sensor-Task published periodisch auf `hannah/satellite/{device}/sensors`.
+2. **MQTT → Hannah Core**: Core ist Subscriber, leitet weiter per gRPC `AgentSensorUpdate` an den Adapter.
+3. **Adapter → ioBroker (Rohdaten)**: `iobroker.hannah/src/sensors.ts` (`SensorWatcher.handleSensorUpdate`) schreibt die Rohwerte nach `hannah.<instance>.satellites.sensors.<device>.*` (`temperature`, `humidity`, `pressure`, `iaq`, `iaq_accuracy`, `co2_equiv`, `voc_equiv`).
+4. **Optional: VirtualDevice-Mirror**: eigene ioBroker-Scripte (z.B. `javascript.0.virtualDevice.AirQuality.*`, `Temperaturen.*`) spiegeln diese Rohwerte in die `virtualDevice`-Struktur, damit sie über das normale Enum-System (Schritt 5) für Hannah sichtbar werden. Nur nötig, wenn der Wert über die generische Kategorie-Abfrage (NLU) erreichbar sein soll.
+5. **Enum-Discovery (Adapter)**: `state-watcher.ts` → `_subscribeEnumStates()` liest `enum.rooms.*`/`enum.functions.*` **einmalig beim Adapter-Start** (kein Live-Listener auf Enum-Änderungen!). Neue Geräte/Funktionen, die angelegt werden während der Adapter schon läuft, werden nie abonniert — **Adapter-Neustart nötig**, damit neue States überhaupt live ankommen.
+6. **Device-Type-Erkennung**: `_resolveDeviceMeta()`/`resolveType()` ermittelt die Hannah-Kategorie pro State: zuerst `common.custom["<adapter-namespace>"]` (z.B. `"hannah.0": {enabled: true, type: "..."}` — offizielle ioBroker-Doku-Konvention, **nicht** ein loses `common.hannah`-Feld, das nicht garantiert persistiert wird), dann `common.role` (feste Liste), dann Function-Namen-Keywords als Fallback.
+7. **Live-Updates (Adapter)**: `onStateChange()` prüft `ack` — bei Enum-discovered Device-States (`subscribedIds`) wird `ack:false` verworfen (Schutz vor Feedback-Schleifen, da Hannah selbst Befehle mit `ack:false` schreibt, siehe `handleSetState`). Bei `AgentWatchMore`-States (`watchMoreIds`, trigger_engine) wird jede Änderung weitergeleitet, unabhängig von `ack` — Hannah schreibt diese nie selbst. Manuell gesetzte Flags ohne bestätigendes Gerät (z.B. `0_userdata`-Booleans) bleiben bei `ack:false` stehen, wenn das Script sie nicht explizit mit `ack:true` setzt.
+8. **Adapter → Hannah Core (gRPC)**: `AgentStateUpdate` über den `AgentConnect`-Stream.
+9. **Hannah Core (Empfang)**: `main.py:_on_agent_state` → `_on_state_update` → ruft beides auf: `iobroker.handle_state_update()` und `trigger_engine.on_state_update()`.
+10. **Hannah Core (Cache)**: `IoBrokerClient.handle_state_update()` (`core/hannah/iobroker.py`) übersetzt den rohen State-Suffix über `config.yaml`'s `iobroker.state_names` zurück auf den kanonischen Key, bevor `device.current[canon]` geschrieben wird. **Fehlt der Suffix in `state_names`, wird das Update lautlos verworfen** — der Wert bleibt für immer auf dem Stand des letzten Snapshots stehen (`handle_device_snapshot` schreibt den rohen Suffix direkt als Key, ohne diese Übersetzung). Neue Sensor-/Kategorie-Felder brauchen also **immer** einen `state_names`-Eintrag, auch wenn der Name 1:1 identisch zum ioBroker-Suffix ist.
+11. **NLU-Abfrage**: `category_filter` (`nlu.py`) + `_CATEGORY_STATES`/`_describe_category` (`iobroker.py`) lesen `device.current` und bauen die Sprachantwort.
+
+**Häufigste Fallstricke:**
+- Neuer State-Suffix ohne `state_names`-Eintrag → Wert friert nach dem ersten Snapshot ein
+- Neues Gerät/Enum-Mitglied nach Adapter-Start angelegt → nie abonniert, Adapter-Neustart nötig
+- `common.custom`-Override ohne `enabled: true` → wird von ioBroker verworfen
+- Gerätename überlappt mit Raumnamen (z.B. Licht "Bad" in Raum "Bad oben") → Sprachantwort klingt doppelt; kein Bug, sondern Datenmodellierung (fehlende Geräte-Ebene im virtualDevice-Pfad)
+- Direkt gesetzter State ohne `ack:true` über den Enum-discovered-Device-Pfad → wird verworfen (über den WatchMore-Pfad inzwischen nicht mehr)
+
 ---
 
 ## Hardware

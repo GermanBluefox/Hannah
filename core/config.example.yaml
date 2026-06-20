@@ -102,6 +102,9 @@ iobroker:
     expected:    "expected"      # z.B. Temperaturen.*.*.Raumtemperatur.expected
     illuminance: "illuminance"   # z.B. Helligkeit.*.*.illuminance
     open:        "open"          # z.B. Fenster.*.*.open
+    iaq:         "iaq"           # z.B. AirQuality.*.*.iaq
+    co2_equiv:   "co2_equiv"     # z.B. AirQuality.*.*.co2_equiv
+    voc_equiv:   "voc_equiv"     # z.B. AirQuality.*.*.voc_equiv
 
 tts:
   # Backend: piper (lokal/offline) | azure | polly

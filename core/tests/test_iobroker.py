@@ -106,6 +106,49 @@ class TestDescribeCategoryAirQuality:
         assert client._describe_category("does_not_exist", [], "Küche") is None
 
 
+class TestHandleStateUpdate:
+    """Regression: live updates go through state_names reverse-lookup, the initial
+    gRPC snapshot does not — a suffix missing from state_names freezes that field
+    forever after the first snapshot (Refs #21 follow-up bug)."""
+
+    @pytest.fixture
+    def client(self):
+        return IoBrokerClient({
+            "host": "localhost",
+            "port": 8093,
+            "state_names": {"iaq": "iaq", "co2_equiv": "co2_equiv", "on": "on"},
+        })
+
+    def _device(self, device_id):
+        dev = Device(
+            id=device_id, name="Sofaecke", key="sofaecke",
+            room="wohnzimmer", room_display_name="Wohnzimmer", floor="EG",
+            category="air_quality_sensor",
+        )
+        return dev
+
+    def test_mapped_suffix_updates_cache(self, client):
+        device_id = "javascript.0.virtualDevice.AirQuality.EG.Wohnzimmer.Sofaecke"
+        dev = self._device(device_id)
+        client._devices_by_id[device_id] = dev
+
+        client.handle_state_update(f"{device_id}.iaq", "98")
+
+        assert dev.current["iaq"] == 98
+
+    def test_unmapped_suffix_is_silently_dropped(self, client):
+        device_id = "javascript.0.virtualDevice.AirQuality.EG.Wohnzimmer.Sofaecke"
+        dev = self._device(device_id)
+        dev.current["voc_equiv"] = 0.5  # value from the initial snapshot
+        client._devices_by_id[device_id] = dev
+
+        client.handle_state_update(f"{device_id}.voc_equiv", "0.95")
+
+        # "voc_equiv" is missing from state_names in this client's config —
+        # the live update never reaches the cache, snapshot value stays frozen.
+        assert dev.current["voc_equiv"] == 0.5
+
+
 class TestGetStateRaw:
     @pytest.fixture
     def client(self):

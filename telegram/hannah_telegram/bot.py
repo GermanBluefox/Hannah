@@ -95,6 +95,17 @@ _COMMANDS_ADMIN = [
     telegram.BotCommand("trustlevel",     "Trust-Level setzen"),
 ]
 
+def _iaq_label(value: float) -> str:
+    """Übersetzt den BSEC2-IAQ-Index (0–500) in eine Klartext-Bewertung (gespiegelt aus Hannah Core)."""
+    if value <= 50:
+        return "gut"
+    if value <= 100:
+        return "okay"
+    if value <= 150:
+        return "leicht belastet"
+    return "schlecht"
+
+
 _CATEGORY_ICONS = {
     "Licht":        "💡",
     "Stecker":      "🔌",
@@ -548,6 +559,21 @@ class HannahBot:
             parts.append("Fenster: " + ("offen" if cur["open"] == "True" else "geschlossen"))
         if "power" in cur:
             parts.append(f"Verbrauch: {cur['power']} W")
+        if "iaq" in cur:
+            try:
+                parts.append(f"Luftqualität: {_iaq_label(float(cur['iaq']))}")
+            except (ValueError, TypeError):
+                pass
+        if "co2_equiv" in cur:
+            try:
+                parts.append(f"CO₂: {float(cur['co2_equiv']):.1f} ppm")
+            except (ValueError, TypeError):
+                parts.append(f"CO₂: {cur['co2_equiv']} ppm")
+        if "voc_equiv" in cur:
+            try:
+                parts.append(f"VOC: {float(cur['voc_equiv']):.2f} ppm")
+            except (ValueError, TypeError):
+                parts.append(f"VOC: {cur['voc_equiv']} ppm")
         return "\n".join(parts)
 
     # ------------------------------------------------------------------

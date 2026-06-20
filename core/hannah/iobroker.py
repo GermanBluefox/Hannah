@@ -117,6 +117,10 @@ class IoBrokerClient:
         self._pending: dict[str, dict] = {}
         self._pending_lock = threading.Lock()
 
+        # State-Suffixe, für die schon eine "fehlt in state_names"-Warnung geloggt wurde
+        # (vermeidet Log-Spam bei wiederholten Live-Updates desselben Suffixes).
+        self._warned_suffixes: set[str] = set()
+
         # Hintergrund-Thread für Timeouts
         self._timeout_thread = threading.Thread(
             target=self._timeout_loop, daemon=True, name="iobroker-confirm"
@@ -594,6 +598,13 @@ class IoBrokerClient:
         state_suffix_map = {v: k for k, v in self._state_names.items()}
         canon = state_suffix_map.get(state_suffix)
         if not canon:
+            if state_suffix not in self._warned_suffixes:
+                self._warned_suffixes.add(state_suffix)
+                log.warning(
+                    f"Unbekannter State-Suffix '{state_suffix}' (state_id={state_id}) — "
+                    f"fehlt in config.yaml's iobroker.state_names, Live-Update wird verworfen "
+                    f"(Wert friert auf dem letzten Snapshot ein)."
+                )
             return
 
         value = self._parse_payload(raw)

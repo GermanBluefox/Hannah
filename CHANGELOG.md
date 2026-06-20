@@ -5,6 +5,10 @@
 -->
 
 
+## 0.38.3
+### Hannah Core
+* Added: `IoBrokerClient.handle_state_update()` now logs a `WARNING` (once per suffix, no log spam on repeated updates) when a live state update arrives for a suffix missing from `config.yaml`'s `iobroker.state_names`, instead of silently dropping it — found via a stale production `config.yaml` that never got the `iaq`/`co2_equiv`/`voc_equiv` entries added for #21, causing those values to freeze at the last gRPC snapshot indefinitely without any visible symptom (Refs #21)
+
 ## 0.38.2
 ### Satellite Firmware
 * Added: WiFi AP-Setup-Modus verlässt sich nicht mehr endgültig — ein periodischer Timer (alle 10 Minuten, gleiches Muster wie der bestehende SNTP-Retry) versucht im Hintergrund das ursprüngliche Netz wiederzufinden, parallel zum laufenden AP (kein Scan-/Konfigurations-Unterbruch). Bei Erfolg wird der AP nur sofort abgeworfen, wenn kein Client mehr am Captive Portal hängt — sonst wartet der Cutover bis zur letzten Trennung, damit eine laufende Konfiguration (z.B. neuer PSK bei Netz-Umzug) nicht durch einen verschwindenden AP unterbrochen wird. Kein Retry bei unkonfigurierten Geräten ohne hinterlegtes WiFi (Refs #52)

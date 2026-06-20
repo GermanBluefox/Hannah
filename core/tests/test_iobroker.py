@@ -132,7 +132,9 @@ class TestDescribeCategoryHumidity:
 class TestHandleStateUpdate:
     """Regression: live updates go through state_names reverse-lookup, the initial
     gRPC snapshot does not — a suffix missing from state_names freezes that field
-    forever after the first snapshot (Refs #21 follow-up bug)."""
+    forever after the first snapshot (Refs #21 follow-up bug). Now logged (once per
+    suffix) instead of silently dropped, so a stale config.yaml deployment shows up
+    in the logs instead of just quietly freezing values."""
 
     @pytest.fixture
     def client(self):
@@ -159,17 +161,34 @@ class TestHandleStateUpdate:
 
         assert dev.current["iaq"] == 98
 
-    def test_unmapped_suffix_is_silently_dropped(self, client):
+    def test_unmapped_suffix_is_dropped_but_logged(self, client, caplog):
         device_id = "javascript.0.virtualDevice.AirQuality.EG.Wohnzimmer.Sofaecke"
         dev = self._device(device_id)
         dev.current["voc_equiv"] = 0.5  # value from the initial snapshot
         client._devices_by_id[device_id] = dev
 
-        client.handle_state_update(f"{device_id}.voc_equiv", "0.95")
+        with caplog.at_level("WARNING"):
+            client.handle_state_update(f"{device_id}.voc_equiv", "0.95")
 
         # "voc_equiv" is missing from state_names in this client's config —
         # the live update never reaches the cache, snapshot value stays frozen.
         assert dev.current["voc_equiv"] == 0.5
+        # ...but it's no longer silent — exactly this kind of deployment gap
+        # (config.yaml missing a state_names entry the code already expects)
+        # is what caused the live air-quality values to freeze in production.
+        assert "voc_equiv" in caplog.text
+        assert "state_names" in caplog.text
+
+    def test_unmapped_suffix_warning_logged_only_once(self, client, caplog):
+        device_id = "javascript.0.virtualDevice.AirQuality.EG.Wohnzimmer.Sofaecke"
+        dev = self._device(device_id)
+        client._devices_by_id[device_id] = dev
+
+        with caplog.at_level("WARNING"):
+            client.handle_state_update(f"{device_id}.voc_equiv", "0.9")
+            client.handle_state_update(f"{device_id}.voc_equiv", "0.95")
+
+        assert sum("voc_equiv" in r.message for r in caplog.records) == 1
 
 
 class TestGetStateRaw:

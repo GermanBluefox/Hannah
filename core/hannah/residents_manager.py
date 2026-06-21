@@ -1,0 +1,132 @@
+import logging
+import threading
+from typing import Callable, Optional
+
+from hannah.residents import Resident
+from hannah.proto import hannah_pb2 as pb
+
+log = logging.getLogger(__name__)
+
+
+class ResidentsClient:
+    """
+    Verbindet Hannah mit dem ioBroker Residents-Adapter.
+
+    Lesen   : Presence-Updates kommen via gRPC (AgentResident), siehe main.py:_on_agent_resident.
+    Schreiben: Hannah → ioBroker via agent_set_resident (gRPC).
+
+    Hannah pflegt ihren eigenen Status (hannah_roomie) beim Start/Stop.
+    Auf Ankunft/Abreise von Roomies und Gästen wird mit Callbacks reagiert.
+    """
+
+    def __init__(self, cfg: dict):
+        self._lock = threading.Lock()
+        # Key ist (resident_cls, roomie_id), nicht nur roomie_id — ein Gast und ein
+        # Roomie können denselben Namen haben (separate Präfixe im Residents-Adapter).
+        self._residents: dict[tuple[type, str], Resident] = {}
+
+        self.hannah_name = cfg.get("hannah_roomie", "hannah")
+
+        # user_roomies akzeptiert Liste oder einzelnen String (Rückwärtskompatibilität)
+        raw = cfg.get("user_roomies", cfg.get("user_roomie", []))
+        self.user_names: set[str] = {raw} if isinstance(raw, str) else set(raw)
+
+        # Set by main.py: fn(resident_id, presence_state, resident_type) → sends SetResident via gRPC adapter
+        self._setter: Optional[Callable[[str, int, "pb.ResidentType"], bool]] = None
+
+        # Welche presence_state-Werte bedeuten "zuhause" / "weg"?
+        # Residents-Adapter: 0=Abwesend, 1=zu Hause, 2=Nacht
+        self._state_home = cfg.get("state_home", 1)
+        self._state_away = cfg.get("state_away", 0)
+
+        # Callbacks: fn(resident: Resident)
+        self._on_arrival:   Optional[Callable[[Resident], None]] = None
+        self._on_departure: Optional[Callable[[Resident], None]] = None
+
+    # ------------------------------------------------------------------
+    # Callbacks registrieren
+    def set_setter(self, fn: Callable[[str, int, "pb.ResidentType"], bool]):
+        """Register the gRPC state setter: fn(resident_id, presence_state, resident_type) → True if adapter is connected."""
+        self._setter = fn
+
+    def on_arrival(self, fn: Callable[[Resident], None]):
+        """Wird aufgerufen wenn ein Resident (Roomie oder Gast) von weg → zuhause wechselt."""
+        self._on_arrival = fn
+
+    def on_departure(self, fn: Callable[[Resident], None]):
+        """Wird aufgerufen wenn ein Resident (Roomie oder Gast) von zuhause → weg wechselt."""
+        self._on_departure = fn
+
+    # ------------------------------------------------------------------
+    # Resident-Registry
+
+    def get_or_create(self, roomie_id: str, resident_cls: type) -> Resident:
+        """Liefert den bekannten Resident zu (roomie_id, resident_cls), legt ihn sonst neu an."""
+        key = (resident_cls, roomie_id)
+        with self._lock:
+            resident = self._residents.get(key)
+            if resident is None:
+                resident = resident_cls(roomie_id, roomie_id)
+                resident.on("arrival", self._dispatch_arrival)
+                resident.on("departure", self._dispatch_departure)
+                self._residents[key] = resident
+            return resident
+
+    def get_or_null(self, roomie_id: str, resident_cls: type) -> Optional[Resident]:
+        """Liefert den bekannten Resident zu (roomie_id, resident_cls), oder None falls unbekannt — legt nichts neu an."""
+        with self._lock:
+            return self._residents.get((resident_cls, roomie_id))
+
+    def _dispatch_arrival(self, resident: Resident):
+        log.info(f"Residents: {resident.roomie_id} ({type(resident).__name__}) ist angekommen.")
+        if self._on_arrival:
+            threading.Thread(target=self._on_arrival, args=(resident,), daemon=True).start()
+
+    def _dispatch_departure(self, resident: Resident):
+        log.info(f"Residents: {resident.roomie_id} ({type(resident).__name__}) hat das Haus verlassen.")
+        if self._on_departure:
+            threading.Thread(target=self._on_departure, args=(resident,), daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # State setzen (Hannah → ioBroker)
+
+    def set_presence(self, roomie: str, state_value: int, resident_type: "pb.ResidentType" = pb.ResidentType.ROOMIE):
+        """Setzt den Anwesenheits-Status eines Residents via gRPC."""
+        self._setter(roomie, state_value, resident_type)
+        log.info(f"Residents: {roomie} → {state_value!r} ({resident_type})")
+
+    def set_user_home(self, roomie: str):
+        self.set_presence(roomie, self._state_home, pb.ResidentType.ROOMIE)
+
+    def set_user_away(self, roomie: str):
+        self.set_presence(roomie, self._state_away, pb.ResidentType.ROOMIE)
+
+    def announce_online(self):
+        """Setzt Hannahs eigenen Status auf 'home' (beim Start)."""
+        self.set_presence(self.hannah_name, self._state_home, pb.ResidentType.ROOMIE)
+
+    def announce_offline(self):
+        """Setzt Hannahs eigenen Status auf 'away' (beim Stop)."""
+        self.set_presence(self.hannah_name, self._state_away, pb.ResidentType.ROOMIE)
+
+    def set_guest_home(self, roomie: str):
+        self.set_presence(roomie, self._state_home, pb.ResidentType.GUEST)
+
+    def set_guest_away(self, roomie: str):
+        self.set_presence(roomie, self._state_away, pb.ResidentType.GUEST)
+
+    # ------------------------------------------------------------------
+    # Cache lesen
+
+    def is_home(self, roomie_id: Optional[str] = None) -> bool:
+        if roomie_id:
+            return any(
+                resident.is_home()
+                for resident in self._residents.values()
+                if resident.roomie_id == roomie_id
+            )
+        return any(
+            resident.is_home()
+            for resident in self._residents.values()
+            if resident.roomie_id in self.user_names
+        )

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from hannah.grpc_server import HannahServicer
 from hannah.user_registry import UserRegistry
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType
 
 def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None):
     return HannahServicer(
@@ -45,12 +45,12 @@ def test_resident_snapshot_dispatched():
         AgentResident(
             roomie_id="test1",
             name="Test 1",
-            is_guest = False
+            type=ResidentType.ROOMIE
         ),
         AgentResident(
             roomie_id="test2",
             name="Test 2",
-            is_guest = True
+            type=ResidentType.GUEST
         )
     ]
     servicer._on_agent_send_residents(residents)

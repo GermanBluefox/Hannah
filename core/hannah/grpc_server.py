@@ -73,10 +73,10 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         enroll_voiceprint: Optional[Callable[[str, bytes, int], tuple]] = None,  # (roomie_id, pcm, rate) → (ok, msg)
         on_satellite_change: Optional[Callable[[dict], None]] = None,           # ({device: room}) bei Register/Disconnect via Proxy
         on_agent_state: Optional[Callable[[str, str, bool, int], None]] = None,      # (state_id, value, ack, ts)
-        on_agent_resident: Optional[Callable[[str, int, bool], None]] = None,        # (roomie_id, presence_state, is_guest)
+        on_agent_resident: Optional[Callable[[str, str, int, pb.ResidentType, int], None]] = None,   # (roomie_id, name, presence_state, type, mood_level)
         on_agent_text_command: Optional[Callable[[str], tuple[str, str]]] = None,    # (text) → (answer, intent)
         on_agent_connect: Optional[Callable[[], None]] = None,                       # called on each new adapter connection
-        on_agent_set_resident: Optional[Callable[[str, int, bool], None]] = None,    # (resident_id, presence_state, is_guest)
+        on_agent_set_resident: Optional[Callable[[str, int, pb.ResidentType], None]] = None,    # (resident_id, presence_state, type)
         on_agent_satellite_control: Optional[Callable[[str, str, object], None]] = None,  # (room, key, value)
         on_agent_device_snapshot: Optional[Callable[[Iterable[pb.AgentDevice]], None]] = None,
         on_agent_send_residents: Optional[Callable[[Iterable[pb.AgentResident]], None]] = None,
@@ -603,12 +603,12 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 q.put(cmd)
             return len(self._agent_queues) > 0
 
-    def agent_set_resident(self, resident_id: str, presence_state: int, is_guest: bool) -> bool:
+    def agent_set_resident(self, resident_id: str, presence_state: int, resident_type: pb.ResidentType) -> bool:
         """Push SetResident command to all connected adapters."""
         cmd = pb.AgentCommand(set_resident=pb.AgentSetResident(
             resident_id=resident_id,
             presence_state=presence_state,
-            is_guest=is_guest,
+            type=resident_type,
         ))
         with self._agent_lock:
             for q in self._agent_queues:
@@ -772,7 +772,11 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                         self._on_agent_state(u.state_id, u.value, u.ack, u.ts)
                     elif which == "resident_update" and self._on_agent_resident:
                         r = msg.resident_update
-                        self._on_agent_resident(r.roomie_id, r.presence_state, r.is_guest)
+                        if r.HasField("mood_level"):
+                            self._on_agent_resident(r.roomie_id, r.name, r.presence_state, r.type, r.mood_level)
+                        else:
+                            self._on_agent_resident(r.roomie_id, r.name, r.presence_state, r.type)
+                        
                     elif which == "text_command" and self._on_agent_text_command:
                         answer, intent = self._on_agent_text_command(msg.text_command.text)
                         q.put(pb.AgentCommand(text_answer=pb.AgentTextAnswer(
@@ -788,7 +792,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                             )
                     elif which == "set_resident" and self._on_agent_set_resident:
                         r = msg.set_resident
-                        self._on_agent_set_resident(r.resident_id, r.presence_state, r.is_guest)
+                        self._on_agent_set_resident(r.resident_id, r.presence_state, r.type)
                     elif which == "send_snapshot" and self._on_agent_device_snapshot:
                         snapshot = msg.send_snapshot
                         self._on_agent_device_snapshot(snapshot.devices)

@@ -7,12 +7,13 @@ log = logging.getLogger(__name__)
 
 
 class BleTag:
-    __slots__ = ("mac", "label", "roomie")
+    __slots__ = ("mac", "label", "roomie", "type")
 
-    def __init__(self, mac: str, label: str, roomie: Optional[str] = None):
+    def __init__(self, mac: str, label: str, roomie: Optional[str] = None, type: str = "roomie"):
         self.mac = mac.lower()
         self.label = label
         self.roomie = roomie
+        self.type = type
 
 
 class _Report:
@@ -47,7 +48,7 @@ class BleLocationEngine:
         for t in cfg.get("tags", []):
             mac = t.get("mac", "").lower()
             if mac:
-                self._tags[mac] = BleTag(mac, t.get("label", mac), t.get("roomie"))
+                self._tags[mac] = BleTag(mac, t.get("label", mac), t.get("roomie"), t.get("type", "roomie"))
 
         # {mac → {satellite → _Report}}
         self._reports: dict[str, dict[str, _Report]] = {}

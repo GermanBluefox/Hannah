@@ -23,15 +23,16 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from hannah.residents import Roomie, Guest, Pet, Resident, HOME_PRESENCE_STATE
 from hannah import audio as audio_mod
 from hannah import config as config_mod
 from hannah.car_tracker import CarManager, CarTracker
 from hannah.routines import RoutineManager
-from hannah.grpc_server import GrpcServer, HannahServicer, make_car_parked_event, make_firmware_event, make_resident_event, make_system_notification_event
+from hannah.grpc_server import GrpcServer, HannahServicer, make_car_parked_event, make_firmware_event, make_resident_event, make_system_notification_event, pb
 from hannah.iobroker import IoBrokerClient
 from hannah.mqtt_handler import MQTTHandler
 from hannah.nlu import NLU, Intent, build_clarification_question, resolve_clarification_answer
-from hannah.residents import ResidentsClient
+from hannah.residents_manager import ResidentsClient
 from hannah.stt import STT
 from hannah.tts import TTS
 from hannah.udp_server import UDPServer
@@ -620,6 +621,12 @@ def main():
         db_path=cfg.get("timers", {}).get("db", "timers.db"),
     )
 
+    _BLE_TYPE_CLASSES = {
+        "roomie": Roomie,
+        "guest": Guest,
+        "pet": Pet,
+    }
+
     def _on_ble_location_change(tag, room, satellite, rssi):
         room_str = room or ""
         sat_str = satellite or ""
@@ -627,6 +634,20 @@ def main():
                               "satellite": sat_str, "rssi": rssi}, ensure_ascii=False)
         mqtt_handler.publish_raw(f"hannah/ble/{tag.label}/location", payload)
         grpc_servicer.agent_ble_update(tag.label, tag.mac, room_str, sat_str, rssi)
+
+        # BLE-Sichtung ist ein starkes "zuhause"-Signal, aber kein zuverlässiges
+        # "weg"-Signal (schwacher Empfang ≠ Haus verlassen) — daher nur bei aktiver
+        # Sichtung (room gesetzt) presence_state auf HOME setzen, nie zurücksetzen.
+        if tag.roomie and room is not None:
+            cls = _BLE_TYPE_CLASSES.get(tag.type)
+            if cls is None:
+                log.warning(f"BLE: Tag {tag.label!r} hat unbekannten type {tag.type!r} (roomie={tag.roomie!r}) — Presence-Update übersprungen.")
+                return
+            resident = residents.get_or_null(tag.roomie, cls)
+            if resident is None:
+                log.warning(f"BLE: Tag {tag.label!r} verweist auf unbekannten Resident {tag.roomie!r} ({tag.type}) — Tippfehler in config.yaml?")
+                return
+            resident.update(resident.display_name, HOME_PRESENCE_STATE)
 
     ble_engine.set_location_change_handler(_on_ble_location_change)
     mqtt_handler.set_ble_report_handler(ble_engine.on_report)
@@ -910,20 +931,26 @@ def main():
             if topic.startswith(_ct.topic_prefix):
                 _ct.update(topic, raw)
 
-    def _on_agent_resident(roomie_id: str, presence_state: int, is_guest: bool):
-        # Residents-Update via gRPC in bestehendes Update-System einleiten.
-        # residents ist per late-binding sichtbar (wird kurz nach grpc_servicer gesetzt).
-        if is_guest:
-            topic = f"{residents.guest_topic_prefix}/{roomie_id}/{residents._state_key}"
-        else:
-            topic = f"{residents.topic_prefix_read}/{roomie_id}/{residents._state_key}"
-        residents.update(topic, str(presence_state))
+    _RESIDENT_TYPE_CLASSES = {
+        pb.ResidentType.ROOMIE: Roomie,
+        pb.ResidentType.GUEST: Guest,
+        pb.ResidentType.PET: Pet,
+    }
+
+    def _on_agent_resident(roomie_id: str, display_name: str, presence_state: int, resident_type: pb.ResidentType, mood_level: int | None = None):
+        # Residents-Update via gRPC. residents ist per late-binding sichtbar
+        # (wird kurz nach grpc_servicer gesetzt).
+        cls = _RESIDENT_TYPE_CLASSES.get(resident_type)
+        if cls is None:
+            log.warning(f"Unbekannter/unspezifizierter resident_type '{resident_type}' für {roomie_id}")
+            return
+        residents.get_or_create(roomie_id, cls).update(display_name, presence_state, mood_level)
 
     def _on_agent_text_command(text: str) -> tuple[str, str]:
         return _handle_text(text, source="iobroker")
 
-    def _on_agent_set_resident(resident_id: str, presence_state: int, _is_guest: bool):
-        residents.set_presence(resident_id, presence_state)
+    def _on_agent_set_resident(resident_id: str, presence_state: int, resident_type: pb.ResidentType):
+        residents.set_presence(resident_id, presence_state, resident_type)
 
     def _on_agent_satellite_control(room: str, key: str, value: object, device_id: str = ""):
         all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
@@ -1106,12 +1133,17 @@ def main():
 
     residents = ResidentsClient(cfg.get("residents", {}))
     residents.set_setter(grpc_servicer.agent_set_resident)
+    registry.set_residents_client(residents)
 
-    def _on_arrival(name: str):
-        process_announcement("all", "Willkommen zuhause!")
-        user = registry.get_by_roomie(name)
-        display = user["display_name"] if user else name
-        grpc_servicer.publish_event(make_resident_event(name, display, "arrived"))
+    def _on_resident_arrival(resident: Resident):
+        if isinstance(resident, Roomie):
+            process_announcement("all", "Willkommen zuhause!")
+            user = registry.get_by_roomie(resident.roomie_id)
+            display = user["display_name"] if user else resident.roomie_id
+            grpc_servicer.publish_event(make_resident_event(resident.roomie_id, display, "arrived"))
+        elif isinstance(resident, Guest):
+            process_announcement("all", "Es ist Besuch angekommen!")
+            grpc_servicer.publish_event(make_resident_event(f"guest:{resident.roomie_id}", resident.roomie_id, "arrived"))
 
     _satellite_firmware: dict[str, str] = {}
 
@@ -1137,22 +1169,16 @@ def main():
             log.info(f"OTA-Pending: jemand zuhause — {device} wartet auf Freigabe.")
             _ota_pending.add(device)
 
-    def _on_departure(name: str):
-        log.info(f"Residents: {name} hat das Haus verlassen.")
-        user = registry.get_by_roomie(name)
-        display = user["display_name"] if user else name
-        grpc_servicer.publish_event(make_resident_event(name, display, "departed"))
-        if not residents.is_home() and _ota_pending:
-            log.info("Alle weg — OTA-Updates freigeben.")
-            _release_ota_updates()
-
-    def _on_guest_arrival(name: str):
-        process_announcement("all", "Es ist Besuch angekommen!")
-        grpc_servicer.publish_event(make_resident_event(f"guest:{name}", name, "arrived"))
-
-    def _on_guest_departure(name: str):
-        log.info(f"Residents: Gast '{name}' ist gegangen.")
-        grpc_servicer.publish_event(make_resident_event(f"guest:{name}", name, "departed"))
+    def _on_resident_departure(resident: Resident):
+        if isinstance(resident, Roomie):
+            user = registry.get_by_roomie(resident.roomie_id)
+            display = user["display_name"] if user else resident.roomie_id
+            grpc_servicer.publish_event(make_resident_event(resident.roomie_id, display, "departed"))
+            if not residents.is_home() and _ota_pending:
+                log.info("Alle weg — OTA-Updates freigeben.")
+                _release_ota_updates()
+        elif isinstance(resident, Guest):
+            grpc_servicer.publish_event(make_resident_event(f"guest:{resident.roomie_id}", resident.roomie_id, "departed"))
 
     def _on_sensor(device: str, temperature: float, pressure: float,
                    humidity: float, iaq: float, iaq_accuracy: int,
@@ -1165,10 +1191,8 @@ def main():
     mqtt_handler.set_ota_pending_handler(_on_ota_pending)
     mqtt_handler.set_firmware_handler(_on_firmware_version)
     mqtt_handler.set_sensor_handler(_on_sensor)
-    residents.on_arrival(_on_arrival)
-    residents.on_departure(_on_departure)
-    residents.on_guest_arrival(_on_guest_arrival)
-    residents.on_guest_departure(_on_guest_departure)
+    residents.on_arrival(_on_resident_arrival)
+    residents.on_departure(_on_resident_departure)
 
     # Auto-Einpark-Event → gRPC-Stream (pro Tracker, damit home_address bekannt ist)
     for _ct in car_manager:
@@ -1328,7 +1352,7 @@ def main():
     log.info(f"Satelliten finden Hannah über MQTT-Topic: {_discovery_topic}")
 
     residents.announce_online()
-    log.info(f"Residents: Hannah online ({residents.topic_prefix_read}/{residents.hannah_name}/state)")
+    log.info(f"Residents: Hannah online ({residents.hannah_name})")
 
     # ------------------------------------------------------------------
     # Web UI starten (Raum- und Gruppen-Verwaltung)

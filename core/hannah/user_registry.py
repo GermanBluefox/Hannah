@@ -31,6 +31,15 @@ _RESIDENT_TYPE_CLASSES = {
 }
 
 
+class AmbiguousResidentError(Exception):
+    """roomie_id alone matched more than one active resident across types — caller must specify type."""
+
+    def __init__(self, roomie_id: str, types: list[str]):
+        self.roomie_id = roomie_id
+        self.types = types
+        super().__init__(f"roomie_id {roomie_id!r} ist mehrdeutig: {types}")
+
+
 class User:
     """
     Decorator um Resident (Roomie/Guest/Pet) — fügt Registry-Felder hinzu
@@ -110,6 +119,12 @@ class UserRegistry:
             # echte Typ war vor dieser Migration nie gespeichert) — sync() trägt ihn
             # beim nächsten Lauf anhand der echten ioBroker-Daten nach, ohne Duplikate.
             if "type" not in existing:
+                # ALTER TABLE users RENAME TO users_old lässt SQLite automatisch die FOREIGN KEY
+                # in linked_accounts auf "users_old" umschreiben (SQLite hält Schema-Referenzen bei
+                # RENAME TABLE konsistent). Reihenfolge ist deshalb wichtig: linked_accounts muss auf
+                # die neue "users"-Tabelle umverdrahtet werden, BEVOR users_old gedroppt wird — sonst
+                # schlägt entweder der DROP selbst (FK zeigt noch auf users_old) oder jedes spätere
+                # INSERT in linked_accounts (FK zeigt auf eine nicht mehr existierende Tabelle) fehl.
                 conn.executescript("""
                     ALTER TABLE users RENAME TO users_old;
                     CREATE TABLE users (
@@ -126,8 +141,26 @@ class UserRegistry:
                     );
                     INSERT INTO users (uuid, roomie_id, display_name, trust_level, system_messages, active, created_at, updated_at)
                         SELECT uuid, roomie_id, display_name, trust_level, system_messages, active, created_at, updated_at FROM users_old;
-                    DROP TABLE users_old;
                 """)
+                has_linked_accounts = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='linked_accounts'"
+                ).fetchone()
+                if has_linked_accounts:
+                    conn.executescript("""
+                        ALTER TABLE linked_accounts RENAME TO linked_accounts_old;
+                        CREATE TABLE linked_accounts (
+                            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_uuid   TEXT    NOT NULL REFERENCES users(uuid),
+                            service     TEXT    NOT NULL,
+                            account_id  TEXT    NOT NULL,
+                            created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+                            UNIQUE(service, account_id)
+                        );
+                        INSERT INTO linked_accounts SELECT * FROM linked_accounts_old;
+                        DROP TABLE linked_accounts_old;
+                    """)
+                    log.info("UserRegistry: linked_accounts FOREIGN KEY neu auf 'users' verdrahtet")
+                conn.execute("DROP TABLE users_old")
                 log.info("UserRegistry: Schema-Migration — Spalte 'type' ergänzt, UNIQUE(roomie_id) → UNIQUE(roomie_id, type)")
             conn.executescript("""
 
@@ -272,17 +305,36 @@ class UserRegistry:
             """).fetchall()
         return [_row_to_dict(r) for r in rows]
 
-    def get_by_roomie(self, roomie_id: str) -> Optional[dict]:
+    def get_by_roomie(self, roomie_id: str, resident_type: Optional[str] = None) -> Optional[dict]:
+        """
+        resident_type (z.B. "ROOMIE"/"GUEST"/"PET") disambiguiert, falls roomie_id
+        mehrfach aktiv vorkommt (z.B. Gast "leonie" neben Roomie "leonie"). Ohne
+        Angabe wird bei einer Kollision AmbiguousResidentError geworfen statt
+        stillschweigend irgendeine der Zeilen zurückzugeben.
+        """
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
-            row = conn.execute("""
-                SELECT u.*, GROUP_CONCAT(la.service || ':' || la.account_id) AS linked_accounts
-                FROM users u
-                LEFT JOIN linked_accounts la ON la.user_uuid = u.uuid
-                WHERE u.roomie_id = ? AND u.active = 1
-                GROUP BY u.uuid
-            """, (roomie_id,)).fetchone()
-        return _row_to_dict(row) if row else None
+            if resident_type is not None:
+                rows = conn.execute("""
+                    SELECT u.*, GROUP_CONCAT(la.service || ':' || la.account_id) AS linked_accounts
+                    FROM users u
+                    LEFT JOIN linked_accounts la ON la.user_uuid = u.uuid
+                    WHERE u.roomie_id = ? AND u.type = ? AND u.active = 1
+                    GROUP BY u.uuid
+                """, (roomie_id, resident_type)).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT u.*, GROUP_CONCAT(la.service || ':' || la.account_id) AS linked_accounts
+                    FROM users u
+                    LEFT JOIN linked_accounts la ON la.user_uuid = u.uuid
+                    WHERE u.roomie_id = ? AND u.active = 1
+                    GROUP BY u.uuid
+                """, (roomie_id,)).fetchall()
+        if not rows:
+            return None
+        if len(rows) > 1:
+            raise AmbiguousResidentError(roomie_id, [r["type"] for r in rows])
+        return _row_to_dict(rows[0])
 
     def get_by_uuid(self, user_uuid: str) -> Optional[dict]:
         with self._connect() as conn:
@@ -310,9 +362,9 @@ class UserRegistry:
     # ------------------------------------------------------------------
     # Mutationen
 
-    def link_account(self, roomie_id: str, service: str, account_id: str) -> bool:
-        """Verknüpft einen externen Account (z.B. Telegram) mit einem Roomie."""
-        user = self.get_by_roomie(roomie_id)
+    def link_account(self, roomie_id: str, service: str, account_id: str, resident_type: Optional[str] = None) -> bool:
+        """Verknüpft einen externen Account (z.B. Telegram) mit einem Roomie. Kann AmbiguousResidentError werfen."""
+        user = self.get_by_roomie(roomie_id, resident_type)
         if not user:
             log.warning(f"UserRegistry: link_account — Roomie {roomie_id!r} nicht gefunden")
             return False
@@ -333,25 +385,49 @@ class UserRegistry:
             )
         return c.rowcount > 0
 
-    def set_trust_level(self, roomie_id: str, level: int) -> bool:
+    def set_trust_level(self, roomie_id: str, level: int, resident_type: Optional[str] = None) -> bool:
+        """Kann AmbiguousResidentError werfen, falls roomie_id ohne resident_type mehrfach aktiv vorkommt."""
         level = max(0, min(10, level))
         with self._lock, self._connect() as conn:
-            c = conn.execute(
-                "UPDATE users SET trust_level = ?, updated_at = datetime('now')"
-                " WHERE roomie_id = ? AND active = 1",
-                (level, roomie_id),
-            )
+            self._raise_if_ambiguous(conn, roomie_id, resident_type)
+            if resident_type is not None:
+                c = conn.execute(
+                    "UPDATE users SET trust_level = ?, updated_at = datetime('now')"
+                    " WHERE roomie_id = ? AND type = ? AND active = 1",
+                    (level, roomie_id, resident_type),
+                )
+            else:
+                c = conn.execute(
+                    "UPDATE users SET trust_level = ?, updated_at = datetime('now')"
+                    " WHERE roomie_id = ? AND active = 1",
+                    (level, roomie_id),
+                )
         return c.rowcount > 0
 
-    def set_system_messages(self, roomie_id: str, enabled: bool) -> bool:
-        """Aktiviert/deaktiviert System-Notifications für einen Nutzer."""
+    def set_system_messages(self, user_uuid: str, enabled: bool) -> bool:
+        """
+        Aktiviert/deaktiviert System-Notifications. Identifiziert per uuid statt roomie_id —
+        der einzige Aufrufer (Telegram /systemmessages) wirkt immer auf den Nutzer selbst,
+        der sich vorher schon eindeutig per Linked-Account aufgelöst hat.
+        """
         with self._lock, self._connect() as conn:
             c = conn.execute(
                 "UPDATE users SET system_messages = ?, updated_at = datetime('now')"
-                " WHERE roomie_id = ? AND active = 1",
-                (1 if enabled else 0, roomie_id),
+                " WHERE uuid = ? AND active = 1",
+                (1 if enabled else 0, user_uuid),
             )
         return c.rowcount > 0
+
+    @staticmethod
+    def _raise_if_ambiguous(conn: sqlite3.Connection, roomie_id: str, resident_type: Optional[str]):
+        """Wirft AmbiguousResidentError, wenn resident_type fehlt und roomie_id mehrfach aktiv vorkommt."""
+        if resident_type is not None:
+            return
+        rows = conn.execute(
+            "SELECT DISTINCT type FROM users WHERE roomie_id = ? AND active = 1", (roomie_id,)
+        ).fetchall()
+        if len(rows) > 1:
+            raise AmbiguousResidentError(roomie_id, [r[0] for r in rows])
 
     def get_system_message_recipients(self) -> list[dict]:
         """Gibt alle aktiven Nutzer zurück, die System-Notifications erhalten sollen."""

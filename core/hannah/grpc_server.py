@@ -15,7 +15,7 @@ import grpc
 
 from hannah.proto import hannah_pb2 as pb
 from hannah.proto import hannah_pb2_grpc as pb_grpc
-from hannah.user_registry import UserRegistry
+from hannah.user_registry import UserRegistry, AmbiguousResidentError
 
 log = logging.getLogger(__name__)
 
@@ -237,25 +237,38 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         return pb.GetUsersResponse(users=[_user_to_pb(u) for u in users])
 
     def GetUser(self, request, context):
+        resident_type = _resident_type_name(request.type)
         lookup = request.WhichOneof("lookup")
-        if lookup == "roomie_id":
-            raw = self._registry.get_by_roomie(request.roomie_id)
-        elif lookup == "uuid":
-            raw = self._registry.get_by_uuid(request.uuid)
-        elif lookup == "linked_account":
-            la = request.linked_account
-            raw = self._registry.get_by_linked_account(la.service, la.account_id)
-        else:
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details("Exactly one lookup field must be set.")
+        try:
+            if lookup == "roomie_id":
+                raw = self._registry.get_by_roomie(request.roomie_id, resident_type)
+            elif lookup == "uuid":
+                raw = self._registry.get_by_uuid(request.uuid)
+            elif lookup == "linked_account":
+                la = request.linked_account
+                raw = self._registry.get_by_linked_account(la.service, la.account_id)
+            else:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details("Exactly one lookup field must be set.")
+                return pb.UserResponse()
+        except AmbiguousResidentError as exc:
+            context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+            context.set_details(_ambiguous_message(exc))
             return pb.UserResponse()
 
         if raw is None:
             return pb.UserResponse(found=False)
         return pb.UserResponse(found=True, user=_user_to_pb(raw))
 
-    def LinkAccount(self, request, _context):
-        ok = self._registry.link_account(request.roomie_id, request.service, request.account_id)
+    def LinkAccount(self, request, context):
+        try:
+            ok = self._registry.link_account(
+                request.roomie_id, request.service, request.account_id, _resident_type_name(request.type)
+            )
+        except AmbiguousResidentError as exc:
+            context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+            context.set_details(_ambiguous_message(exc))
+            return pb.StatusResponse(ok=False, message=_ambiguous_message(exc))
         msg = "verknüpft" if ok else f"Roomie {request.roomie_id!r} nicht gefunden"
         return pb.StatusResponse(ok=ok, message=msg)
 
@@ -264,14 +277,21 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         msg = "entfernt" if ok else "Account nicht gefunden"
         return pb.StatusResponse(ok=ok, message=msg)
 
-    def SetTrustLevel(self, request, _context):
-        ok = self._registry.set_trust_level(request.roomie_id, request.level)
+    def SetTrustLevel(self, request, context):
+        try:
+            ok = self._registry.set_trust_level(request.roomie_id, request.level, _resident_type_name(request.type))
+        except AmbiguousResidentError as exc:
+            context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+            context.set_details(_ambiguous_message(exc))
+            return pb.StatusResponse(ok=False, message=_ambiguous_message(exc))
         msg = "aktualisiert" if ok else f"Roomie {request.roomie_id!r} nicht gefunden"
         return pb.StatusResponse(ok=ok, message=msg)
 
     def SetSystemMessages(self, request, _context):
-        ok = self._registry.set_system_messages(request.roomie_id, request.enabled)
-        msg = "aktualisiert" if ok else f"Roomie {request.roomie_id!r} nicht gefunden"
+        # uuid ist immer eindeutig (PRIMARY KEY) — anders als roomie_id keine Kollisionsgefahr,
+        # daher kein AmbiguousResidentError-Handling nötig.
+        ok = self._registry.set_system_messages(request.uuid, request.enabled)
+        msg = "aktualisiert" if ok else f"User {request.uuid!r} nicht gefunden"
         return pb.StatusResponse(ok=ok, message=msg)
 
     # ------------------------------------------------------------------
@@ -1067,6 +1087,17 @@ def make_system_notification_event(text: str) -> pb.HannahEvent:
 
 # ------------------------------------------------------------------
 # Conversion helpers
+
+def _resident_type_name(t: "pb.ResidentType") -> Optional[str]:
+    """None for UNSPECIFIED (caller didn't disambiguate), else the enum name (e.g. 'ROOMIE')."""
+    if t == pb.ResidentType.RESIDENT_TYPE_UNSPECIFIED:
+        return None
+    return pb.ResidentType.Name(t)
+
+
+def _ambiguous_message(exc: "AmbiguousResidentError") -> str:
+    return f"'{exc.roomie_id}' ist mehrdeutig ({', '.join(exc.types)}) — bitte type angeben."
+
 
 def _user_to_pb(u: dict) -> pb.User:
     return pb.User(

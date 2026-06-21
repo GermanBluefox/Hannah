@@ -5,6 +5,20 @@
 -->
 
 
+## 0.39.1
+### Hannah Core
+* Fixed: `UserRegistry._init_db()`'s `type`-column migration (#64/0.39.0) did `ALTER TABLE users RENAME TO users_old`, which made SQLite automatically rewrite `linked_accounts.user_uuid`'s FOREIGN KEY to point at `users_old` — the migration then dropped that table, leaving `linked_accounts` referencing a table that no longer existed. Every `link_account()` call failed with `FOREIGN KEY constraint failed` (surfaced in Telegram as `/verknuepfen` always failing). `_init_db()` now rebuilds `linked_accounts` too, repointed at the new `users` table *before* `users_old` is dropped (dropping it first fails too — for the same reason) (Refs #69)
+* Fixed: `get_by_roomie`/`link_account`/`set_trust_level` resolved a resident by `roomie_id` alone — if a Guest and a Roomie (or a Pet) share a name, `fetchone()`/`UPDATE ... WHERE roomie_id = ?` would silently act on whichever row SQLite happened to return, with no guarantee it's the right one (e.g. linking your Telegram account to a same-named pet instead of yourself). All three now accept an optional `resident_type` and raise a new `AmbiguousResidentError` (naming the colliding types) when it's omitted and more than one active match exists, instead of guessing (Refs #69)
+* Changed: `GetUserRequest`/`LinkAccountRequest`/`SetTrustLevelRequest` get an optional `ResidentType type` field to pass the disambiguation through gRPC; the corresponding `HannahServicer` handlers catch `AmbiguousResidentError` and fail the RPC with `FAILED_PRECONDITION`, naming the colliding types in the details (Refs #69)
+* Changed: `set_system_messages` now identifies the target by `uuid` instead of `roomie_id` — its only caller (Telegram `/systemmessages`) always acts on the requesting user, who is already uniquely resolved via their linked Telegram account beforehand, so threading `roomie_id` (+ the collision risk that comes with it) through was pointless. `SetSystemMessagesRequest.roomie_id`/`.type` replaced by `.uuid` (never released, safe to change outright) (Refs #69)
+
+### Hannah Proxy
+* Changed: proto updated — `GetUserRequest`/`LinkAccountRequest`/`SetTrustLevelRequest` get an optional `type` field, `SetSystemMessagesRequest.roomie_id`/`.type` replaced by `.uuid` (Refs #69)
+
+### Telegram
+* Changed: `/verknuepfen <roomie-id> [roomie|guest|pet]` — the type is now an optional second argument, needed only when `roomie-id` is ambiguous; the bot surfaces Hannah Core's `FAILED_PRECONDITION` details instead of swallowing them as a generic "not found" (`get_user_by_roomie`/`link_account` now thread `resident_type` through and return the real error message) (Refs #69)
+* Changed: `/trustlevel <roomie-id> <0-10> [roomie|guest|pet]` — same optional type argument as `/verknuepfen`, for the same reason (admin-only command, but still needs to disambiguate a colliding `roomie-id`) (Refs #69)
+
 ## 0.39.0
 ### Hannah Core
 * Changed: `is_guest: bool` replaced by a `ResidentType` enum (`ROOMIE`/`GUEST`/`PET`) throughout the residents proto surface (`AgentResident`, `AgentSetResident`); `AgentResidentUpdate` removed and merged into `AgentResident` (now also carries `name`, `optional mood_level`, `presence_state`), used directly as the `resident_update` payload — groundwork for Pet support (Refs #64)

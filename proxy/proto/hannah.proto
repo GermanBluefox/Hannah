@@ -154,6 +154,11 @@ message GetUserRequest {
     string                uuid           = 2;
     LinkedAccountLookup   linked_account = 3;
   }
+  // Only meaningful together with roomie_id: roomie_id alone is not unique across
+  // types (a Guest and a Roomie can share a name). Leave UNSPECIFIED if there's no
+  // collision; required when one exists, otherwise the RPC fails with
+  // FAILED_PRECONDITION naming the colliding types.
+  ResidentType type = 4;
 }
 
 message LinkedAccountLookup {
@@ -170,6 +175,7 @@ message LinkAccountRequest {
   string roomie_id  = 1;
   string service    = 2;
   string account_id = 3;
+  ResidentType type = 4;  // see GetUserRequest.type
 }
 
 message UnlinkAccountRequest {
@@ -180,11 +186,15 @@ message UnlinkAccountRequest {
 message SetTrustLevelRequest {
   string roomie_id = 1;
   int32  level     = 2;  // clamped to [0, 10]
+  ResidentType type = 3;  // see GetUserRequest.type
 }
 
 message SetSystemMessagesRequest {
-  string roomie_id = 1;
-  bool   enabled   = 2;
+  // Always called by the user for themselves, identified beforehand via a unique
+  // linked-account lookup (GetUserRequest.linked_account) — uuid is already known
+  // and unambiguous, unlike roomie_id which can collide across resident types.
+  string uuid    = 1;
+  bool   enabled = 2;
 }
 
 // ============================================================

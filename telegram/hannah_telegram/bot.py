@@ -215,7 +215,7 @@ class HannahBot:
 
         owner_roomie = car_state.owner_roomie
         if owner_roomie:
-            found, user = await self._hannah.get_user_by_roomie(owner_roomie)
+            found, user, _error = await self._hannah.get_user_by_roomie(owner_roomie)
             if not found or user is None:
                 log.warning("Car parked: owner roomie %r not found – nobody to notify", owner_roomie)
                 return
@@ -314,16 +314,22 @@ class HannahBot:
             return
         args = ctx.args or []
         if not args:
-            await update.message.reply_text("Bitte gib deine Roomie-ID an:\n  /verknuepfen <roomie-id>")
+            await update.message.reply_text(
+                "Bitte gib deine Roomie-ID an:\n  /verknuepfen <roomie-id> [roomie|guest|pet]"
+            )
             return
 
         roomie_id = args[0].strip()
-        found, user = await self._hannah.get_user_by_roomie(roomie_id)
+        resident_type = args[1].strip().upper() if len(args) > 1 else None
+        found, user, error = await self._hannah.get_user_by_roomie(roomie_id, resident_type)
         if not found:
-            await update.message.reply_text(f"Roomie-ID '{roomie_id}' nicht gefunden.")
+            if error:
+                await update.message.reply_text(f"{error}\nBeispiel: /verknuepfen {roomie_id} roomie")
+            else:
+                await update.message.reply_text(f"Roomie-ID '{roomie_id}' nicht gefunden.")
             return
 
-        ok, msg = await self._hannah.link_account(roomie_id, chat_id)
+        ok, msg = await self._hannah.link_account(roomie_id, chat_id, resident_type)
         if ok:
             name = user.display_name if user else roomie_id
             await update.message.reply_text(f"Verknüpfung erfolgreich! Hallo, {name}.")
@@ -388,11 +394,12 @@ class HannahBot:
             return
 
         args = ctx.args or []
-        if len(args) != 2:
-            await update.message.reply_text("Verwendung: /trustlevel <roomie-id> <0-10>")
+        if len(args) not in (2, 3):
+            await update.message.reply_text("Verwendung: /trustlevel <roomie-id> <0-10> [roomie|guest|pet]")
             return
 
         roomie_id = args[0].strip()
+        resident_type = args[2].strip().upper() if len(args) == 3 else None
         try:
             level = int(args[1])
             if not 0 <= level <= 10:
@@ -401,7 +408,7 @@ class HannahBot:
             await update.message.reply_text("Trust-Level muss eine Zahl zwischen 0 und 10 sein.")
             return
 
-        set_ok, msg = await self._hannah.set_trust_level(roomie_id, level)
+        set_ok, msg = await self._hannah.set_trust_level(roomie_id, level, resident_type)
         if not set_ok:
             await update.message.reply_text(f"Fehler: {msg}")
             return
@@ -409,7 +416,7 @@ class HannahBot:
         await update.message.reply_text(f"Trust-Level von '{roomie_id}' auf {level} gesetzt.")
 
         # Commands für diesen User sofort aktualisieren falls er Telegram verknüpft hat
-        _, target_user = await self._hannah.get_user_by_roomie(roomie_id)
+        _, target_user, _error = await self._hannah.get_user_by_roomie(roomie_id, resident_type)
         if target_user:
             tg_id = target_user.linked_accounts.get("telegram")
             if tg_id:
@@ -436,7 +443,7 @@ class HannahBot:
             return
 
         enabled = args[0].lower() == "an"
-        set_ok, msg = await self._hannah.set_system_messages(user.roomie_id, enabled)
+        set_ok, msg = await self._hannah.set_system_messages(user.uuid, enabled)
         if not set_ok:
             await update.message.reply_text(f"Fehler: {msg}")
             return

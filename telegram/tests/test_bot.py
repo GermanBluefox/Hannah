@@ -38,7 +38,7 @@ def _make_hannah(
     hannah = MagicMock()
     _user = user or (_make_user() if known else None)
     hannah.get_user_by_telegram = AsyncMock(return_value=(known, _user))
-    hannah.get_user_by_roomie = AsyncMock(return_value=(False, None))
+    hannah.get_user_by_roomie = AsyncMock(return_value=(False, None, None))
     hannah.link_account = AsyncMock(return_value=(True, "ok"))
     hannah.get_all_car_states = AsyncMock(return_value=[])
     resp = MagicMock()
@@ -225,12 +225,12 @@ class TestCmdLink:
     async def test_valid_roomie_id_calls_link_account(self):
         user = _make_user(trust_level=5)
         hannah = _make_hannah(known=False)
-        hannah.get_user_by_roomie = AsyncMock(return_value=(True, user))
+        hannah.get_user_by_roomie = AsyncMock(return_value=(True, user, None))
         hannah.link_account = AsyncMock(return_value=(True, "ok"))
         bot = _make_bot(hannah)
         update, ctx = _make_update(chat_id=99999, args=["leonie"])
         await bot._cmd_link(update, ctx)
-        hannah.link_account.assert_called_once_with("leonie", "99999")
+        hannah.link_account.assert_called_once_with("leonie", "99999", None)
 
     @pytest.mark.asyncio
     async def test_group_chat_rejected(self):

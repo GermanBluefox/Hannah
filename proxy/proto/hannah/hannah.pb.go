@@ -350,7 +350,12 @@ type GetUserRequest struct {
 	//	*GetUserRequest_RoomieId
 	//	*GetUserRequest_Uuid
 	//	*GetUserRequest_LinkedAccount
-	Lookup        isGetUserRequest_Lookup `protobuf_oneof:"lookup"`
+	Lookup isGetUserRequest_Lookup `protobuf_oneof:"lookup"`
+	// Only meaningful together with roomie_id: roomie_id alone is not unique across
+	// types (a Guest and a Roomie can share a name). Leave UNSPECIFIED if there's no
+	// collision; required when one exists, otherwise the RPC fails with
+	// FAILED_PRECONDITION naming the colliding types.
+	Type          ResidentType `protobuf:"varint,4,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -417,6 +422,13 @@ func (x *GetUserRequest) GetLinkedAccount() *LinkedAccountLookup {
 		}
 	}
 	return nil
+}
+
+func (x *GetUserRequest) GetType() ResidentType {
+	if x != nil {
+		return x.Type
+	}
+	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
 }
 
 type isGetUserRequest_Lookup interface {
@@ -550,6 +562,7 @@ type LinkAccountRequest struct {
 	RoomieId      string                 `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`
 	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
 	AccountId     string                 `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	Type          ResidentType           `protobuf:"varint,4,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"` // see GetUserRequest.type
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -603,6 +616,13 @@ func (x *LinkAccountRequest) GetAccountId() string {
 		return x.AccountId
 	}
 	return ""
+}
+
+func (x *LinkAccountRequest) GetType() ResidentType {
+	if x != nil {
+		return x.Type
+	}
+	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
 }
 
 type UnlinkAccountRequest struct {
@@ -660,7 +680,8 @@ func (x *UnlinkAccountRequest) GetAccountId() string {
 type SetTrustLevelRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RoomieId      string                 `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`
-	Level         int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"` // clamped to [0, 10]
+	Level         int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"`                        // clamped to [0, 10]
+	Type          ResidentType           `protobuf:"varint,3,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"` // see GetUserRequest.type
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -709,10 +730,18 @@ func (x *SetTrustLevelRequest) GetLevel() int32 {
 	return 0
 }
 
+func (x *SetTrustLevelRequest) GetType() ResidentType {
+	if x != nil {
+		return x.Type
+	}
+	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
+}
+
 type SetSystemMessagesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RoomieId      string                 `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`
 	Enabled       bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Type          ResidentType           `protobuf:"varint,3,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"` // see GetUserRequest.type
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -759,6 +788,13 @@ func (x *SetSystemMessagesRequest) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *SetSystemMessagesRequest) GetType() ResidentType {
+	if x != nil {
+		return x.Type
+	}
+	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
 }
 
 type SubmitTextRequest struct {
@@ -3501,7 +3537,7 @@ func (x *AgentWatchMore) GetStateIds() []string {
 }
 
 // Hannah instructs the adapter to set a resident's presence state in the residents adapter.
-// is_guest determines whether the target path is .roomie. or .guest.
+// type determines whether the target path is .roomie./.guest./.pet.
 type AgentSetResident struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ResidentId    string                 `protobuf:"bytes,1,opt,name=resident_id,json=residentId,proto3" json:"resident_id,omitempty"`           // e.g. "leonie", "hannah"
@@ -5495,11 +5531,12 @@ const file_hannah_proto_rawDesc = "" +
 	"\x0fGetUsersRequest\x12)\n" +
 	"\x10include_inactive\x18\x01 \x01(\bR\x0fincludeInactive\"6\n" +
 	"\x10GetUsersResponse\x12\"\n" +
-	"\x05users\x18\x01 \x03(\v2\f.hannah.UserR\x05users\"\x95\x01\n" +
+	"\x05users\x18\x01 \x03(\v2\f.hannah.UserR\x05users\"\xbf\x01\n" +
 	"\x0eGetUserRequest\x12\x1d\n" +
 	"\troomie_id\x18\x01 \x01(\tH\x00R\broomieId\x12\x14\n" +
 	"\x04uuid\x18\x02 \x01(\tH\x00R\x04uuid\x12D\n" +
-	"\x0elinked_account\x18\x03 \x01(\v2\x1b.hannah.LinkedAccountLookupH\x00R\rlinkedAccountB\b\n" +
+	"\x0elinked_account\x18\x03 \x01(\v2\x1b.hannah.LinkedAccountLookupH\x00R\rlinkedAccount\x12(\n" +
+	"\x04type\x18\x04 \x01(\x0e2\x14.hannah.ResidentTypeR\x04typeB\b\n" +
 	"\x06lookup\"N\n" +
 	"\x13LinkedAccountLookup\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x1d\n" +
@@ -5507,22 +5544,25 @@ const file_hannah_proto_rawDesc = "" +
 	"account_id\x18\x02 \x01(\tR\taccountId\"F\n" +
 	"\fUserResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12 \n" +
-	"\x04user\x18\x02 \x01(\v2\f.hannah.UserR\x04user\"j\n" +
+	"\x04user\x18\x02 \x01(\v2\f.hannah.UserR\x04user\"\x94\x01\n" +
 	"\x12LinkAccountRequest\x12\x1b\n" +
 	"\troomie_id\x18\x01 \x01(\tR\broomieId\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\x03 \x01(\tR\taccountId\"O\n" +
+	"account_id\x18\x03 \x01(\tR\taccountId\x12(\n" +
+	"\x04type\x18\x04 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"O\n" +
 	"\x14UnlinkAccountRequest\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\x02 \x01(\tR\taccountId\"I\n" +
+	"account_id\x18\x02 \x01(\tR\taccountId\"s\n" +
 	"\x14SetTrustLevelRequest\x12\x1b\n" +
 	"\troomie_id\x18\x01 \x01(\tR\broomieId\x12\x14\n" +
-	"\x05level\x18\x02 \x01(\x05R\x05level\"Q\n" +
+	"\x05level\x18\x02 \x01(\x05R\x05level\x12(\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"{\n" +
 	"\x18SetSystemMessagesRequest\x12\x1b\n" +
 	"\troomie_id\x18\x01 \x01(\tR\broomieId\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"t\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\x12(\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"t\n" +
 	"\x11SubmitTextRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12%\n" +
 	"\x0esource_service\x18\x02 \x01(\tR\rsourceService\x12$\n" +
@@ -6023,119 +6063,123 @@ var file_hannah_proto_depIdxs = []int32{
 	81, // 0: hannah.User.linked_accounts:type_name -> hannah.User.LinkedAccountsEntry
 	3,  // 1: hannah.GetUsersResponse.users:type_name -> hannah.User
 	7,  // 2: hannah.GetUserRequest.linked_account:type_name -> hannah.LinkedAccountLookup
-	3,  // 3: hannah.UserResponse.user:type_name -> hannah.User
-	18, // 4: hannah.GetSatellitesResponse.satellites:type_name -> hannah.Satellite
-	22, // 5: hannah.CarStateResponse.state:type_name -> hannah.CarStateProto
-	22, // 6: hannah.GetAllCarStatesResponse.states:type_name -> hannah.CarStateProto
-	82, // 7: hannah.CarStateProto.doors:type_name -> hannah.CarStateProto.DoorsEntry
-	83, // 8: hannah.CarStateProto.windows:type_name -> hannah.CarStateProto.WindowsEntry
-	22, // 9: hannah.HannahEvent.car_state:type_name -> hannah.CarStateProto
-	28, // 10: hannah.HannahEvent.resident_event:type_name -> hannah.ResidentEventProto
-	25, // 11: hannah.HannahEvent.system_notification:type_name -> hannah.SystemNotificationEvent
-	26, // 12: hannah.HannahEvent.firmware_event:type_name -> hannah.FirmwareEventProto
-	31, // 13: hannah.ProxyCommand.ack:type_name -> hannah.ProxyAck
-	32, // 14: hannah.ProxyCommand.play_audio:type_name -> hannah.PlayAudioCommand
-	84, // 15: hannah.DeviceInfo.current:type_name -> hannah.DeviceInfo.CurrentEntry
-	35, // 16: hannah.RoomInfo.devices:type_name -> hannah.DeviceInfo
-	36, // 17: hannah.GetDevicesResponse.rooms:type_name -> hannah.RoomInfo
-	44, // 18: hannah.AgentMessage.state_update:type_name -> hannah.AgentStateUpdate
-	60, // 19: hannah.AgentMessage.resident_update:type_name -> hannah.AgentResident
-	45, // 20: hannah.AgentMessage.text_command:type_name -> hannah.AgentTextCommand
-	43, // 21: hannah.AgentMessage.satellite_control:type_name -> hannah.AgentSatelliteControl
-	57, // 22: hannah.AgentMessage.send_snapshot:type_name -> hannah.AgentDeviceSnapshot
-	61, // 23: hannah.AgentMessage.send_residents:type_name -> hannah.AgentResidentSnapshot
-	62, // 24: hannah.AgentMessage.ask_resident:type_name -> hannah.AgentAskResident
-	59, // 25: hannah.AgentMessage.send_rooms:type_name -> hannah.AgentRoomSnapshot
-	48, // 26: hannah.AgentCommand.set_state:type_name -> hannah.AgentSetState
-	49, // 27: hannah.AgentCommand.watch_more:type_name -> hannah.AgentWatchMore
-	50, // 28: hannah.AgentCommand.set_resident:type_name -> hannah.AgentSetResident
-	51, // 29: hannah.AgentCommand.satellite_update:type_name -> hannah.AgentSatelliteUpdate
-	53, // 30: hannah.AgentCommand.text_answer:type_name -> hannah.AgentTextAnswer
-	47, // 31: hannah.AgentCommand.firmware_event:type_name -> hannah.AgentFirmwareEvent
-	64, // 32: hannah.AgentCommand.ble_update:type_name -> hannah.AgentBleUpdate
-	65, // 33: hannah.AgentCommand.sensor_update:type_name -> hannah.AgentSensorUpdate
-	63, // 34: hannah.AgentCommand.resident_answered:type_name -> hannah.AgentResidentAnswered
-	52, // 35: hannah.AgentCommand.satellite_deleted:type_name -> hannah.AgentSatelliteDeleted
-	0,  // 36: hannah.AgentSetResident.type:type_name -> hannah.ResidentType
-	55, // 37: hannah.AgentDevice.value:type_name -> hannah.AgentStateValue
-	85, // 38: hannah.AgentDevice.room_names:type_name -> hannah.AgentDevice.RoomNamesEntry
-	56, // 39: hannah.AgentDeviceSnapshot.devices:type_name -> hannah.AgentDevice
-	86, // 40: hannah.AgentRoom.display_names:type_name -> hannah.AgentRoom.DisplayNamesEntry
-	58, // 41: hannah.AgentRoomSnapshot.rooms:type_name -> hannah.AgentRoom
-	0,  // 42: hannah.AgentResident.type:type_name -> hannah.ResidentType
-	60, // 43: hannah.AgentResidentSnapshot.residents:type_name -> hannah.AgentResident
-	73, // 44: hannah.TimerCommand.create:type_name -> hannah.TimerCreate
-	74, // 45: hannah.TimerCommand.cancel:type_name -> hannah.TimerCancel
-	75, // 46: hannah.TimerCommand.list:type_name -> hannah.TimerListRequest
-	71, // 47: hannah.TimerCommand.ready:type_name -> hannah.TimerReady
-	72, // 48: hannah.TimerCommand.not_ready:type_name -> hannah.TimerNotReady
-	77, // 49: hannah.TimerMessage.ack:type_name -> hannah.TimerAck
-	78, // 50: hannah.TimerMessage.fired:type_name -> hannah.TimerFired
-	79, // 51: hannah.TimerMessage.list:type_name -> hannah.TimerListResponse
-	80, // 52: hannah.TimerListResponse.timers:type_name -> hannah.TimerInfo
-	4,  // 53: hannah.HannahService.GetUsers:input_type -> hannah.GetUsersRequest
-	6,  // 54: hannah.HannahService.GetUser:input_type -> hannah.GetUserRequest
-	9,  // 55: hannah.HannahService.LinkAccount:input_type -> hannah.LinkAccountRequest
-	10, // 56: hannah.HannahService.UnlinkAccount:input_type -> hannah.UnlinkAccountRequest
-	11, // 57: hannah.HannahService.SetTrustLevel:input_type -> hannah.SetTrustLevelRequest
-	12, // 58: hannah.HannahService.SetSystemMessages:input_type -> hannah.SetSystemMessagesRequest
-	1,  // 59: hannah.HannahService.GetDevices:input_type -> hannah.Empty
-	38, // 60: hannah.HannahService.ControlDevice:input_type -> hannah.ControlDeviceRequest
-	13, // 61: hannah.HannahService.SubmitText:input_type -> hannah.SubmitTextRequest
-	15, // 62: hannah.HannahService.SubmitVoice:input_type -> hannah.SubmitVoiceRequest
-	17, // 63: hannah.HannahService.Announce:input_type -> hannah.AnnounceRequest
-	54, // 64: hannah.HannahService.Notify:input_type -> hannah.AgentNotification
-	1,  // 65: hannah.HannahService.GetSatellites:input_type -> hannah.Empty
-	1,  // 66: hannah.HannahService.GetCarState:input_type -> hannah.Empty
-	1,  // 67: hannah.HannahService.GetAllCarStates:input_type -> hannah.Empty
-	23, // 68: hannah.HannahService.SubscribeEvents:input_type -> hannah.EventFilter
-	27, // 69: hannah.HannahService.TriggerFirmwareUpdate:input_type -> hannah.TriggerFirmwareUpdateRequest
-	66, // 70: hannah.HannahService.RequestSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
-	66, // 71: hannah.HannahService.ReleaseSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
-	66, // 72: hannah.HannahService.StreamSatelliteAudio:input_type -> hannah.SatelliteCaptureRequest
-	67, // 73: hannah.HannahService.TriggerPlink:input_type -> hannah.TriggerPlinkRequest
-	29, // 74: hannah.HannahService.RegisterProxy:input_type -> hannah.ProxyHeartbeat
-	33, // 75: hannah.HannahService.SubmitSatelliteAudio:input_type -> hannah.SubmitSatelliteAudioRequest
-	41, // 76: hannah.HannahService.NotifySatelliteRegistered:input_type -> hannah.SatelliteRegistration
-	41, // 77: hannah.HannahService.NotifySatelliteGone:input_type -> hannah.SatelliteRegistration
-	39, // 78: hannah.HannahService.ProvisionSatellite:input_type -> hannah.ProvisionSatelliteRequest
-	40, // 79: hannah.HannahService.EnrollVoiceprint:input_type -> hannah.EnrollVoiceprintRequest
-	76, // 80: hannah.HannahService.TimerConnect:input_type -> hannah.TimerMessage
-	42, // 81: hannah.HannahService.AgentConnect:input_type -> hannah.AgentMessage
-	5,  // 82: hannah.HannahService.GetUsers:output_type -> hannah.GetUsersResponse
-	8,  // 83: hannah.HannahService.GetUser:output_type -> hannah.UserResponse
-	2,  // 84: hannah.HannahService.LinkAccount:output_type -> hannah.StatusResponse
-	2,  // 85: hannah.HannahService.UnlinkAccount:output_type -> hannah.StatusResponse
-	2,  // 86: hannah.HannahService.SetTrustLevel:output_type -> hannah.StatusResponse
-	2,  // 87: hannah.HannahService.SetSystemMessages:output_type -> hannah.StatusResponse
-	37, // 88: hannah.HannahService.GetDevices:output_type -> hannah.GetDevicesResponse
-	2,  // 89: hannah.HannahService.ControlDevice:output_type -> hannah.StatusResponse
-	14, // 90: hannah.HannahService.SubmitText:output_type -> hannah.SubmitTextResponse
-	16, // 91: hannah.HannahService.SubmitVoice:output_type -> hannah.SubmitVoiceResponse
-	2,  // 92: hannah.HannahService.Announce:output_type -> hannah.StatusResponse
-	2,  // 93: hannah.HannahService.Notify:output_type -> hannah.StatusResponse
-	19, // 94: hannah.HannahService.GetSatellites:output_type -> hannah.GetSatellitesResponse
-	20, // 95: hannah.HannahService.GetCarState:output_type -> hannah.CarStateResponse
-	21, // 96: hannah.HannahService.GetAllCarStates:output_type -> hannah.GetAllCarStatesResponse
-	24, // 97: hannah.HannahService.SubscribeEvents:output_type -> hannah.HannahEvent
-	2,  // 98: hannah.HannahService.TriggerFirmwareUpdate:output_type -> hannah.StatusResponse
-	68, // 99: hannah.HannahService.RequestSatelliteCapture:output_type -> hannah.SatelliteCaptureResponse
-	2,  // 100: hannah.HannahService.ReleaseSatelliteCapture:output_type -> hannah.StatusResponse
-	69, // 101: hannah.HannahService.StreamSatelliteAudio:output_type -> hannah.SatelliteAudioChunk
-	2,  // 102: hannah.HannahService.TriggerPlink:output_type -> hannah.StatusResponse
-	30, // 103: hannah.HannahService.RegisterProxy:output_type -> hannah.ProxyCommand
-	34, // 104: hannah.HannahService.SubmitSatelliteAudio:output_type -> hannah.SubmitSatelliteAudioResponse
-	2,  // 105: hannah.HannahService.NotifySatelliteRegistered:output_type -> hannah.StatusResponse
-	2,  // 106: hannah.HannahService.NotifySatelliteGone:output_type -> hannah.StatusResponse
-	2,  // 107: hannah.HannahService.ProvisionSatellite:output_type -> hannah.StatusResponse
-	2,  // 108: hannah.HannahService.EnrollVoiceprint:output_type -> hannah.StatusResponse
-	70, // 109: hannah.HannahService.TimerConnect:output_type -> hannah.TimerCommand
-	46, // 110: hannah.HannahService.AgentConnect:output_type -> hannah.AgentCommand
-	82, // [82:111] is the sub-list for method output_type
-	53, // [53:82] is the sub-list for method input_type
-	53, // [53:53] is the sub-list for extension type_name
-	53, // [53:53] is the sub-list for extension extendee
-	0,  // [0:53] is the sub-list for field type_name
+	0,  // 3: hannah.GetUserRequest.type:type_name -> hannah.ResidentType
+	3,  // 4: hannah.UserResponse.user:type_name -> hannah.User
+	0,  // 5: hannah.LinkAccountRequest.type:type_name -> hannah.ResidentType
+	0,  // 6: hannah.SetTrustLevelRequest.type:type_name -> hannah.ResidentType
+	0,  // 7: hannah.SetSystemMessagesRequest.type:type_name -> hannah.ResidentType
+	18, // 8: hannah.GetSatellitesResponse.satellites:type_name -> hannah.Satellite
+	22, // 9: hannah.CarStateResponse.state:type_name -> hannah.CarStateProto
+	22, // 10: hannah.GetAllCarStatesResponse.states:type_name -> hannah.CarStateProto
+	82, // 11: hannah.CarStateProto.doors:type_name -> hannah.CarStateProto.DoorsEntry
+	83, // 12: hannah.CarStateProto.windows:type_name -> hannah.CarStateProto.WindowsEntry
+	22, // 13: hannah.HannahEvent.car_state:type_name -> hannah.CarStateProto
+	28, // 14: hannah.HannahEvent.resident_event:type_name -> hannah.ResidentEventProto
+	25, // 15: hannah.HannahEvent.system_notification:type_name -> hannah.SystemNotificationEvent
+	26, // 16: hannah.HannahEvent.firmware_event:type_name -> hannah.FirmwareEventProto
+	31, // 17: hannah.ProxyCommand.ack:type_name -> hannah.ProxyAck
+	32, // 18: hannah.ProxyCommand.play_audio:type_name -> hannah.PlayAudioCommand
+	84, // 19: hannah.DeviceInfo.current:type_name -> hannah.DeviceInfo.CurrentEntry
+	35, // 20: hannah.RoomInfo.devices:type_name -> hannah.DeviceInfo
+	36, // 21: hannah.GetDevicesResponse.rooms:type_name -> hannah.RoomInfo
+	44, // 22: hannah.AgentMessage.state_update:type_name -> hannah.AgentStateUpdate
+	60, // 23: hannah.AgentMessage.resident_update:type_name -> hannah.AgentResident
+	45, // 24: hannah.AgentMessage.text_command:type_name -> hannah.AgentTextCommand
+	43, // 25: hannah.AgentMessage.satellite_control:type_name -> hannah.AgentSatelliteControl
+	57, // 26: hannah.AgentMessage.send_snapshot:type_name -> hannah.AgentDeviceSnapshot
+	61, // 27: hannah.AgentMessage.send_residents:type_name -> hannah.AgentResidentSnapshot
+	62, // 28: hannah.AgentMessage.ask_resident:type_name -> hannah.AgentAskResident
+	59, // 29: hannah.AgentMessage.send_rooms:type_name -> hannah.AgentRoomSnapshot
+	48, // 30: hannah.AgentCommand.set_state:type_name -> hannah.AgentSetState
+	49, // 31: hannah.AgentCommand.watch_more:type_name -> hannah.AgentWatchMore
+	50, // 32: hannah.AgentCommand.set_resident:type_name -> hannah.AgentSetResident
+	51, // 33: hannah.AgentCommand.satellite_update:type_name -> hannah.AgentSatelliteUpdate
+	53, // 34: hannah.AgentCommand.text_answer:type_name -> hannah.AgentTextAnswer
+	47, // 35: hannah.AgentCommand.firmware_event:type_name -> hannah.AgentFirmwareEvent
+	64, // 36: hannah.AgentCommand.ble_update:type_name -> hannah.AgentBleUpdate
+	65, // 37: hannah.AgentCommand.sensor_update:type_name -> hannah.AgentSensorUpdate
+	63, // 38: hannah.AgentCommand.resident_answered:type_name -> hannah.AgentResidentAnswered
+	52, // 39: hannah.AgentCommand.satellite_deleted:type_name -> hannah.AgentSatelliteDeleted
+	0,  // 40: hannah.AgentSetResident.type:type_name -> hannah.ResidentType
+	55, // 41: hannah.AgentDevice.value:type_name -> hannah.AgentStateValue
+	85, // 42: hannah.AgentDevice.room_names:type_name -> hannah.AgentDevice.RoomNamesEntry
+	56, // 43: hannah.AgentDeviceSnapshot.devices:type_name -> hannah.AgentDevice
+	86, // 44: hannah.AgentRoom.display_names:type_name -> hannah.AgentRoom.DisplayNamesEntry
+	58, // 45: hannah.AgentRoomSnapshot.rooms:type_name -> hannah.AgentRoom
+	0,  // 46: hannah.AgentResident.type:type_name -> hannah.ResidentType
+	60, // 47: hannah.AgentResidentSnapshot.residents:type_name -> hannah.AgentResident
+	73, // 48: hannah.TimerCommand.create:type_name -> hannah.TimerCreate
+	74, // 49: hannah.TimerCommand.cancel:type_name -> hannah.TimerCancel
+	75, // 50: hannah.TimerCommand.list:type_name -> hannah.TimerListRequest
+	71, // 51: hannah.TimerCommand.ready:type_name -> hannah.TimerReady
+	72, // 52: hannah.TimerCommand.not_ready:type_name -> hannah.TimerNotReady
+	77, // 53: hannah.TimerMessage.ack:type_name -> hannah.TimerAck
+	78, // 54: hannah.TimerMessage.fired:type_name -> hannah.TimerFired
+	79, // 55: hannah.TimerMessage.list:type_name -> hannah.TimerListResponse
+	80, // 56: hannah.TimerListResponse.timers:type_name -> hannah.TimerInfo
+	4,  // 57: hannah.HannahService.GetUsers:input_type -> hannah.GetUsersRequest
+	6,  // 58: hannah.HannahService.GetUser:input_type -> hannah.GetUserRequest
+	9,  // 59: hannah.HannahService.LinkAccount:input_type -> hannah.LinkAccountRequest
+	10, // 60: hannah.HannahService.UnlinkAccount:input_type -> hannah.UnlinkAccountRequest
+	11, // 61: hannah.HannahService.SetTrustLevel:input_type -> hannah.SetTrustLevelRequest
+	12, // 62: hannah.HannahService.SetSystemMessages:input_type -> hannah.SetSystemMessagesRequest
+	1,  // 63: hannah.HannahService.GetDevices:input_type -> hannah.Empty
+	38, // 64: hannah.HannahService.ControlDevice:input_type -> hannah.ControlDeviceRequest
+	13, // 65: hannah.HannahService.SubmitText:input_type -> hannah.SubmitTextRequest
+	15, // 66: hannah.HannahService.SubmitVoice:input_type -> hannah.SubmitVoiceRequest
+	17, // 67: hannah.HannahService.Announce:input_type -> hannah.AnnounceRequest
+	54, // 68: hannah.HannahService.Notify:input_type -> hannah.AgentNotification
+	1,  // 69: hannah.HannahService.GetSatellites:input_type -> hannah.Empty
+	1,  // 70: hannah.HannahService.GetCarState:input_type -> hannah.Empty
+	1,  // 71: hannah.HannahService.GetAllCarStates:input_type -> hannah.Empty
+	23, // 72: hannah.HannahService.SubscribeEvents:input_type -> hannah.EventFilter
+	27, // 73: hannah.HannahService.TriggerFirmwareUpdate:input_type -> hannah.TriggerFirmwareUpdateRequest
+	66, // 74: hannah.HannahService.RequestSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
+	66, // 75: hannah.HannahService.ReleaseSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
+	66, // 76: hannah.HannahService.StreamSatelliteAudio:input_type -> hannah.SatelliteCaptureRequest
+	67, // 77: hannah.HannahService.TriggerPlink:input_type -> hannah.TriggerPlinkRequest
+	29, // 78: hannah.HannahService.RegisterProxy:input_type -> hannah.ProxyHeartbeat
+	33, // 79: hannah.HannahService.SubmitSatelliteAudio:input_type -> hannah.SubmitSatelliteAudioRequest
+	41, // 80: hannah.HannahService.NotifySatelliteRegistered:input_type -> hannah.SatelliteRegistration
+	41, // 81: hannah.HannahService.NotifySatelliteGone:input_type -> hannah.SatelliteRegistration
+	39, // 82: hannah.HannahService.ProvisionSatellite:input_type -> hannah.ProvisionSatelliteRequest
+	40, // 83: hannah.HannahService.EnrollVoiceprint:input_type -> hannah.EnrollVoiceprintRequest
+	76, // 84: hannah.HannahService.TimerConnect:input_type -> hannah.TimerMessage
+	42, // 85: hannah.HannahService.AgentConnect:input_type -> hannah.AgentMessage
+	5,  // 86: hannah.HannahService.GetUsers:output_type -> hannah.GetUsersResponse
+	8,  // 87: hannah.HannahService.GetUser:output_type -> hannah.UserResponse
+	2,  // 88: hannah.HannahService.LinkAccount:output_type -> hannah.StatusResponse
+	2,  // 89: hannah.HannahService.UnlinkAccount:output_type -> hannah.StatusResponse
+	2,  // 90: hannah.HannahService.SetTrustLevel:output_type -> hannah.StatusResponse
+	2,  // 91: hannah.HannahService.SetSystemMessages:output_type -> hannah.StatusResponse
+	37, // 92: hannah.HannahService.GetDevices:output_type -> hannah.GetDevicesResponse
+	2,  // 93: hannah.HannahService.ControlDevice:output_type -> hannah.StatusResponse
+	14, // 94: hannah.HannahService.SubmitText:output_type -> hannah.SubmitTextResponse
+	16, // 95: hannah.HannahService.SubmitVoice:output_type -> hannah.SubmitVoiceResponse
+	2,  // 96: hannah.HannahService.Announce:output_type -> hannah.StatusResponse
+	2,  // 97: hannah.HannahService.Notify:output_type -> hannah.StatusResponse
+	19, // 98: hannah.HannahService.GetSatellites:output_type -> hannah.GetSatellitesResponse
+	20, // 99: hannah.HannahService.GetCarState:output_type -> hannah.CarStateResponse
+	21, // 100: hannah.HannahService.GetAllCarStates:output_type -> hannah.GetAllCarStatesResponse
+	24, // 101: hannah.HannahService.SubscribeEvents:output_type -> hannah.HannahEvent
+	2,  // 102: hannah.HannahService.TriggerFirmwareUpdate:output_type -> hannah.StatusResponse
+	68, // 103: hannah.HannahService.RequestSatelliteCapture:output_type -> hannah.SatelliteCaptureResponse
+	2,  // 104: hannah.HannahService.ReleaseSatelliteCapture:output_type -> hannah.StatusResponse
+	69, // 105: hannah.HannahService.StreamSatelliteAudio:output_type -> hannah.SatelliteAudioChunk
+	2,  // 106: hannah.HannahService.TriggerPlink:output_type -> hannah.StatusResponse
+	30, // 107: hannah.HannahService.RegisterProxy:output_type -> hannah.ProxyCommand
+	34, // 108: hannah.HannahService.SubmitSatelliteAudio:output_type -> hannah.SubmitSatelliteAudioResponse
+	2,  // 109: hannah.HannahService.NotifySatelliteRegistered:output_type -> hannah.StatusResponse
+	2,  // 110: hannah.HannahService.NotifySatelliteGone:output_type -> hannah.StatusResponse
+	2,  // 111: hannah.HannahService.ProvisionSatellite:output_type -> hannah.StatusResponse
+	2,  // 112: hannah.HannahService.EnrollVoiceprint:output_type -> hannah.StatusResponse
+	70, // 113: hannah.HannahService.TimerConnect:output_type -> hannah.TimerCommand
+	46, // 114: hannah.HannahService.AgentConnect:output_type -> hannah.AgentCommand
+	86, // [86:115] is the sub-list for method output_type
+	57, // [57:86] is the sub-list for method input_type
+	57, // [57:57] is the sub-list for extension type_name
+	57, // [57:57] is the sub-list for extension extendee
+	0,  // [0:57] is the sub-list for field type_name
 }
 
 func init() { file_hannah_proto_init() }

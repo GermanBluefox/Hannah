@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash
 
 _log = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "..", "hannah.db"))
+DB_PATH = os.environ.get("DB_PATH", "hannah.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS "users" (

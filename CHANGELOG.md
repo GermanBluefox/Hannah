@@ -7,6 +7,11 @@
 
 
 
+
+## 0.40.6
+### Hannah Core
+* Fixed: `hannah.db` (User-Registry, Issue #72) was deleted on every AutoDeploy update — `DB_PATH` defaulted to a path relative to `__file__` (`.../core/hannah/hannah.db`), landing it *inside* the `hannah/` package directory that `autodeploy.py`'s `_extract_and_copy()` wipes and replaces wholesale on each deploy. Now defaults to the relative path `"hannah.db"`, resolved against the service's working directory like `room_manager.py`'s `rooms.db` and `memory.py`'s `memory.db` already do (Refs #76)
+
 ## 0.40.5
 ### Hannah Core
 * Added: "Löschen"-Button auf der `/users`-WebUI-Seite — `username` ist im Edit-Formular absichtlich readonly (Identifier für Telegram `/verknuepfen` u.a.), ein Vertipper beim Anlegen (z.B. Groß-/Kleinschreibung) ließ sich bisher nur direkt in der DB korrigieren. Neue `UserManager.delete_user()` räumt zusätzlich den In-Memory-Cache/Wiring-State auf, `linked_accounts` läuft per `ON DELETE CASCADE` mit (Refs #75)

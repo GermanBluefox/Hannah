@@ -122,6 +122,17 @@ class UserManager:
             return self._cache(user)
         return None
 
+    def delete_user(self, user_id):
+        """Löscht den Benutzer dauerhaft (inkl. Linked Accounts, per ON DELETE CASCADE)."""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return False
+        user.delete()
+        self._users.pop(user.id, None)
+        self._wired_residents.discard(user.id)
+        self._wired_mood.discard(user.id)
+        return True
+
     def get_user_by_linked_account(self, provider, external_id):
         """Gibt den Benutzer mit der angegebenen external ID zurück."""
         user = User.select(self._db()).join(

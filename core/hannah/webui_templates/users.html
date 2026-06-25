@@ -55,8 +55,13 @@
             </form>
             {% endif %}
           </td>
-          <td class="align-middle">
+          <td class="align-middle d-flex gap-1">
             <a href="{{ url_for('edit_user', user_id=row.user.id) }}" class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
+            <form method="post"
+                  action="{{ url_for('delete_user', user_id=row.user.id) }}"
+                  onsubmit="return confirm('User {{ row.user.display_name }} ({{ row.user.username }}) wirklich löschen?')">
+              <button class="btn btn-sm btn-outline-danger">Löschen</button>
+            </form>
           </td>
         </tr>
         {% endfor %}

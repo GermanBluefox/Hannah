@@ -6,6 +6,11 @@
 
 
 
+
+## 0.40.5
+### Hannah Core
+* Added: "Löschen"-Button auf der `/users`-WebUI-Seite — `username` ist im Edit-Formular absichtlich readonly (Identifier für Telegram `/verknuepfen` u.a.), ein Vertipper beim Anlegen (z.B. Groß-/Kleinschreibung) ließ sich bisher nur direkt in der DB korrigieren. Neue `UserManager.delete_user()` räumt zusätzlich den In-Memory-Cache/Wiring-State auf, `linked_accounts` läuft per `ON DELETE CASCADE` mit (Refs #75)
+
 ## 0.40.4
 ### Hannah Core
 * Fixed: the adapter's initial `send_residents` snapshot (sent once per `AgentConnect`, all currently known residents in one message) was never wired up on the Core side — `on_agent_send_residents` was passed as `None` with a `#TODO`, so `HannahServicer` always fell through to `log.warning("[grpc] Unrecognized AgentMessage payload: send_residents")` and Core had to wait for the next individual `resident_update` per resident instead (Refs #73)

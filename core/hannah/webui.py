@@ -208,6 +208,11 @@ def create_app(
             return redirect(url_for("users"))
         return render_template("user_edit.html", user=user, types=_USER_TYPES)
 
+    @app.route("/users/<int:user_id>/delete", methods=["POST"])
+    def delete_user(user_id: int):
+        user_manager.delete_user(user_id)
+        return redirect(url_for("users"))
+
     @app.route("/users/<int:user_id>/link-resident", methods=["POST"])
     def link_resident(user_id: int):
         resident_id = request.form.get("resident_id", "")

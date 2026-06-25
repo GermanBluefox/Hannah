@@ -20,6 +20,11 @@ def _register(server, device, addr=("192.168.1.50", 7776)):
     server._handle_control(payload, addr)
 
 
+def _heartbeat(server, device, addr=("192.168.1.50", 7776)):
+    payload = json.dumps({"type": "heartbeat", "device": device}).encode("utf-8")
+    server._handle_control(payload, addr)
+
+
 class TestHeartbeatWatchdog:
     def test_stale_satellite_removed(self):
         server = _make_server()
@@ -98,6 +103,34 @@ class TestHeartbeatWatchdog:
         snapshot = callback.call_args[0][0]
         assert "stale-sat" not in snapshot
         assert "fresh-sat" in snapshot
+
+
+class TestHeartbeatUpsertsLastSeen:
+    def test_heartbeat_from_known_satellite_upserts(self):
+        """Regression: heartbeats only refreshed the in-memory watchdog state, never
+        RoomManager's last_seen — DB showed a satellite as never-updated forever,
+        even while it kept heartbeating and staying connected."""
+        upsert = MagicMock()
+        server = _make_server(upsert_satellite=upsert)
+        with server._lock:
+            server._satellites["wz-sat"] = {
+                "addr": ("192.168.1.100", 7776),
+                "tts_addr": ("192.168.1.100", 7776),
+                "room": "Wohnzimmer",
+                "last_heartbeat": time.monotonic() - 5.0,
+            }
+
+        _heartbeat(server, "wz-sat")
+
+        upsert.assert_called_once_with("wz-sat")
+
+    def test_heartbeat_from_unknown_satellite_does_not_upsert(self):
+        upsert = MagicMock()
+        server = _make_server(upsert_satellite=upsert)
+
+        _heartbeat(server, "ghost-sat")
+
+        upsert.assert_not_called()
 
 
 class TestRegisterRoomCheck:

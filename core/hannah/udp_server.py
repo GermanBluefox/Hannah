@@ -303,6 +303,8 @@ class UDPServer:
                 else:
                     log.warning(f"Heartbeat von unbekanntem Satellit '{device}' {addr} — sende reregister")
                     self._send_control({"type": "reregister"}, addr)
+                    return
+            self._upsert_satellite(device)
 
         else:
             log.debug(f"UDP Control unbekannt: type='{t}' von {addr}")

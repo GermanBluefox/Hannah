@@ -93,6 +93,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         pair_satellite: Optional[Callable[[str, str], bool]] = None,             # (device_id, seed) → bool
         resolve_satellite_name: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → display_name | None
         resolve_satellite_room: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → room_id | None
+        upsert_satellite: Optional[Callable[[str], None]] = None,                # (device_id) → refresh last_seen
     ):
         self._user_manager          = user_manager
         self._handle_text           = handle_text
@@ -130,6 +131,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._pair_satellite          = pair_satellite or (lambda *_: False)
         self._resolve_satellite_name  = resolve_satellite_name or (lambda *_: None)
         self._resolve_satellite_room  = resolve_satellite_room or (lambda *_: None)
+        self._upsert_satellite        = upsert_satellite or (lambda *_: None)
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -475,6 +477,14 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 for hb in request_iterator:
                     proxy_id = hb.proxy_id
                     log.debug(f"[grpc] Heartbeat von Proxy '{proxy_id}'")
+                    # Der Proxy leitet keine Einzel-Heartbeats pro Satellit weiter (nur
+                    # einen Stream-Heartbeat für die ganze Verbindung) — bei jedem davon
+                    # last_seen für alle aktuell bekannten Proxy-Satelliten mitziehen,
+                    # sonst friert er nach der ersten Registrierung für immer ein.
+                    with self._proxy_sat_lock:
+                        proxy_satellite_ids = list(self._proxy_satellites)
+                    for device_id in proxy_satellite_ids:
+                        self._upsert_satellite(device_id)
                     if not discovery_published and hb.udp_host and hb.udp_port:
                         log.info(
                             f"[grpc] Proxy-Discovery: {hb.udp_host}:{hb.udp_port}"
@@ -568,6 +578,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
     def NotifySatelliteRegistered(self, request, _context):
         """Proxy meldet: Satellit hat sich via UDP registriert."""
         device, address = request.device_id, request.address
+        self._upsert_satellite(device)
 
         paired = False
         if request.seed:

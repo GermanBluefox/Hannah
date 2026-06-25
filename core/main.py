@@ -1168,6 +1168,7 @@ def main():
         pair_satellite=room_manager.pair_satellite,
         resolve_satellite_name=room_manager.resolve_satellite_name,
         resolve_satellite_room=room_manager.get_satellite_room,
+        upsert_satellite=room_manager.upsert_satellite,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)

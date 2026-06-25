@@ -7,9 +7,9 @@ from hannah.grpc_server import HannahServicer, _user_to_pb
 from hannah.user_manager import UserManager
 from hannah.models.user import User
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat
 
-def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None):
+def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None):
     return HannahServicer(
         user_manager=user_manager or MagicMock(),
         handle_text=handle_text or MagicMock(),
@@ -23,6 +23,7 @@ def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satell
         on_agent_room_snapshot=on_agent_room_snapshot,
         on_satellite_change=on_satellite_change,
         resolve_satellite_room=resolve_satellite_room,
+        upsert_satellite=upsert_satellite,
     )
 
 def test_device_snapshot_dispatched():
@@ -62,6 +63,38 @@ def test_notify_satellite_registered_does_not_double_send():
     assert response.ok
     servicer.agent_satellite_update.assert_not_called()
     on_satellite_change.assert_called_once_with({"wz-sat": "wohnzimmer"})
+
+def test_notify_satellite_registered_upserts_last_seen():
+    """Regression: NotifySatelliteRegistered never refreshed RoomManager's last_seen,
+    unlike the UDP "register" path — satellites connected via the proxy showed a
+    last_seen frozen at whatever it last was before they switched to proxy routing."""
+    upsert = MagicMock()
+    servicer = _make_server(resolve_satellite_room=lambda _d: "wohnzimmer", upsert_satellite=upsert)
+
+    servicer.NotifySatelliteRegistered(SatelliteRegistration(device_id="wz-sat", address="192.168.1.50"), None)
+
+    upsert.assert_called_once_with("wz-sat")
+
+def test_register_proxy_heartbeat_upserts_known_satellites():
+    """Regression: the proxy never forwards individual satellite heartbeats, only one
+    heartbeat per proxy connection — without touching last_seen here too, it would
+    freeze again right after the registration-time upsert for the whole proxy session."""
+    upsert = MagicMock()
+    servicer = _make_server(resolve_satellite_room=lambda _d: "wohnzimmer", upsert_satellite=upsert)
+    servicer.NotifySatelliteRegistered(SatelliteRegistration(device_id="wz-sat", address="192.168.1.50"), None)
+    upsert.reset_mock()
+
+    class _FakeContext:
+        def __init__(self):
+            self._active = True
+        def is_active(self):
+            active = self._active
+            self._active = False
+            return active
+
+    list(servicer.RegisterProxy(iter([ProxyHeartbeat(proxy_id="proxy-1")]), _FakeContext()))
+
+    upsert.assert_called_once_with("wz-sat")
 
 def test_notify_satellite_gone_does_not_double_send():
     on_satellite_change = MagicMock()

@@ -9,6 +9,11 @@
 
 
 
+
+## 0.41.1
+### Hannah Core
+* Fixed: a satellite's "last seen" timestamp froze forever after its initial registration — `udp_server.py` only refreshed it on the `"register"` control packet, never on the periodic `"heartbeat"` ones; `grpc_server.py`'s `NotifySatelliteRegistered` (proxy-routed satellites) never refreshed it at all, not even once. Since the Go proxy also never forwards individual satellite heartbeats to Core (only one heartbeat per proxy connection, covering every satellite behind it), `RegisterProxy`'s heartbeat drain loop now refreshes `last_seen` for every currently-known proxy satellite on each proxy heartbeat as a pragmatic stand-in — a real per-satellite heartbeat would need a proxy protocol change, deliberately out of scope here (Refs #80)
+
 ## 0.41.0
 ### Hannah Core
 * Fixed: `BaseModel.create()`/`update()`/`delete()` never rolled back on a failed write (e.g. `IntegrityError` from a UNIQUE violation) — the implicitly-started transaction stayed open on that connection, which then blocked every other write to the same DB file with `database is locked` until the connection happened to get garbage-collected. Found while writing an end-to-end test for #77; also affects `User`/`LinkedAccount` already in production (e.g. a duplicate username/email via `/users/create`) (Refs #79)

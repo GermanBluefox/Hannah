@@ -18,7 +18,7 @@ class BaseModel:
                 if attr != "_db" and attr in row:
                     value = row.get(attr)
                     if attr in self.__json_fields__ and isinstance(value, str):
-                        value = json.loads(value)
+                        value = json.loads(value) if value else None
                     setattr(self, attr, value)
 
         for key, value in extra.items():

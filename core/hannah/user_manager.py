@@ -97,7 +97,12 @@ class UserManager:
         return self._cache(user)
 
     def get_user_by_id(self, user_id):
-        """Gibt den Benutzer mit der angegebenen ID zurück."""
+        """Gibt den Benutzer mit der angegebenen ID zurück.
+
+        Normalisiert auf int, damit ein versehentlich als String übergebenes
+        user_id nicht den (int-keyed) Cache mit einem KeyError verfehlt.
+        """
+        user_id = int(user_id)
         if user_id not in self._users:
             user = User.get(self._db(), id=user_id)
             if not user:

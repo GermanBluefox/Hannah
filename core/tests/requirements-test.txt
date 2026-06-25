@@ -3,3 +3,4 @@ grpcio>=1.60.0
 protobuf>=4.0
 requests>=2.31.0
 PyYAML>=6.0
+Werkzeug>=3.0.0

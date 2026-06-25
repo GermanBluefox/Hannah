@@ -1107,13 +1107,13 @@ def make_system_notification_event(text: str) -> pb.HannahEvent:
 
 def _user_to_pb(u: User) -> pb.User:
     return pb.User(
-        id=str(u.id or ""),
+        id=u.id or 0,
         user_name=u.username or "",
         display_name=u.display_name or "",
         trust_level=int(u.trust_level or 5),
         active=bool(u.is_active),
         system_messages=bool(u.system_messages),
-        linked_accounts={acc.service: acc.external_id for acc in u.linked_accounts}
+        linked_accounts={acc.provider: acc.external_id for acc in u.linked_accounts}
     )
 
 

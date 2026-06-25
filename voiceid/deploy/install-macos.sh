@@ -28,6 +28,8 @@ INSTALL_DIR="/opt/hannah/voiceid"
 DATA_DIR="/opt/hannah/voiceid-data"
 PROFILES_DIR="${DATA_DIR}/voice_profiles"
 MEM_DIR="${DATA_DIR}/mem"            # plain dir on macOS — no RAM-disk mount needed
+CONFIG_DIR="/opt/hannah/etc"
+CONFIG_FILE="${CONFIG_DIR}/voiceid.yaml"
 SERVICE_NAME="com.hannah.voiceid"
 PLIST="/Library/LaunchDaemons/${SERVICE_NAME}.plist"
 LOG="/opt/hannah/voiceid.log"
@@ -97,8 +99,12 @@ info "Installing Python dependencies (torch + speechbrain, can take a few minute
 ok "Python dependencies installed."
 
 # ── Data directories (persistent, outside INSTALL_DIR) ────────────────────────
-mkdir -p "$PROFILES_DIR" "$MEM_DIR"
+mkdir -p "$PROFILES_DIR" "$MEM_DIR" "$CONFIG_DIR"
 ok "Data directories: ${PROFILES_DIR}, ${MEM_DIR}"
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    info "No config at ${CONFIG_FILE} yet — running with defaults (unknown_threshold=0.25, uncertain_threshold=0.40)."
+fi
 
 # ── LaunchDaemon ──────────────────────────────────────────────────────────────
 cat > "$PLIST" << EOF
@@ -112,6 +118,8 @@ cat > "$PLIST" << EOF
     <array>
         <string>${VENV}/bin/python</string>
         <string>${INSTALL_DIR}/app.py</string>
+        <string>--config</string>
+        <string>${CONFIG_FILE}</string>
     </array>
     <key>WorkingDirectory</key>
     <string>${INSTALL_DIR}</string>

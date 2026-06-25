@@ -5,6 +5,24 @@
 -->
 
 
+## 0.40.3
+### Hannah Core
+* Changed: `User.id` and every `*Request.user_id`/`GetUserRequest.id` field (LinkAccount, UnlinkAccount, SetTrustLevel, SetSystemMessages, GetUser) are now `int32` instead of `string` on the wire, matching the actual `users.id` SQLite column — found while debugging `/verknuepfen` always failing with `Exception calling application: '3'`. `EnrollVoiceprintRequest.user_id`/`SubmitSatelliteAudioRequest.speaker_user_id` stay `string` on purpose — those cross into the Voice-ID HTTP service, which treats the identifier as an opaque key
+* Fixed: `UserManager.get_user_by_id()` looked a (possibly string) `user_id` up against its int-keyed cache after caching under the int — `self._users[user_id]` then missed with `KeyError` for any non-int input; now normalizes to `int(user_id)` up front regardless of what the proto wire type guarantees
+* Fixed: `_user_to_pb` read `acc.service` to build the `linked_accounts` map, but the `LinkedAccount` model attribute is `.provider` — crashed with `AttributeError` on `GetUsers`/`GetUser` for any user with at least one linked account
+* Fixed: `BaseModel.__init__` called `json.loads(value)` on every JSON-typed column unconditionally, including an empty string — `provider_payload` defaults to `""` when a caller (e.g. Telegram's `/verknuepfen`) never sets it, so the very next read of that row raised `JSONDecodeError`. Empty string now deserializes to `None`
+* Added: regression tests in `core/tests/test_grpc_server.py` exercising `LinkAccount` and `_user_to_pb` against a real (non-mocked) `UserManager`/SQLite DB — all four bugs above were invisible to the existing mock-based tests
+
+### Hannah Proxy
+* Changed: proto copy synced with the `User`/`*Request.user_id` `string` → `int32` change above — mirror-only, the proxy itself never touches these fields
+
+### Telegram
+* Changed: proto copy synced with the `User`/`*Request.user_id` `string` → `int32` change above — `user.id` was already typed `int` in `grpc_client.py`'s signatures, so no source changes needed, just regenerated stubs
+
+## 0.40.2
+### VoiceID
+* Added: `voiceid/deploy/install-macos.sh` now passes `--config /opt/hannah/etc/voiceid.yaml` to the service — config support already existed in `app.py` but nothing on macOS ever wired it up, so `unknown_threshold`/`uncertain_threshold`/host/port were silently stuck on defaults
+
 ## 0.40.1
 ### AutoDeploy
 * Fixed: the self-update restart path (when autodeploy deploys a newer version of itself) still hardcoded `systemctl restart` — `_restart_service()` got the macOS/launchd platform switch earlier, but this is a separate call site that was missed, crashing with `FileNotFoundError` on the Mac Mini as soon as a newer autodeploy release was available

@@ -163,7 +163,7 @@ func (x *StatusResponse) GetMessage() string {
 
 type User struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
-	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id          int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	UserName    string                 `protobuf:"bytes,2,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
 	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	TrustLevel  int32                  `protobuf:"varint,4,opt,name=trust_level,json=trustLevel,proto3" json:"trust_level,omitempty"`
@@ -205,11 +205,11 @@ func (*User) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *User) GetId() string {
+func (x *User) GetId() int32 {
 	if x != nil {
 		return x.Id
 	}
-	return ""
+	return 0
 }
 
 func (x *User) GetUserName() string {
@@ -406,13 +406,13 @@ func (x *GetUserRequest) GetUserName() string {
 	return ""
 }
 
-func (x *GetUserRequest) GetId() string {
+func (x *GetUserRequest) GetId() int32 {
 	if x != nil {
 		if x, ok := x.Lookup.(*GetUserRequest_Id); ok {
 			return x.Id
 		}
 	}
-	return ""
+	return 0
 }
 
 func (x *GetUserRequest) GetLinkedAccount() *LinkedAccountLookup {
@@ -440,7 +440,7 @@ type GetUserRequest_UserName struct {
 }
 
 type GetUserRequest_Id struct {
-	Id string `protobuf:"bytes,2,opt,name=id,proto3,oneof"`
+	Id int32 `protobuf:"varint,2,opt,name=id,proto3,oneof"`
 }
 
 type GetUserRequest_LinkedAccount struct {
@@ -559,7 +559,7 @@ func (x *UserResponse) GetUser() *User {
 
 type LinkAccountRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	UserId          string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId          int32                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Service         string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
 	AccountId       string                 `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	ProviderPayload string                 `protobuf:"bytes,4,opt,name=provider_payload,json=providerPayload,proto3" json:"provider_payload,omitempty"`
@@ -597,11 +597,11 @@ func (*LinkAccountRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *LinkAccountRequest) GetUserId() string {
+func (x *LinkAccountRequest) GetUserId() int32 {
 	if x != nil {
 		return x.UserId
 	}
-	return ""
+	return 0
 }
 
 func (x *LinkAccountRequest) GetService() string {
@@ -627,7 +627,7 @@ func (x *LinkAccountRequest) GetProviderPayload() string {
 
 type UnlinkAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId        int32                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
 	AccountId     string                 `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -664,11 +664,11 @@ func (*UnlinkAccountRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *UnlinkAccountRequest) GetUserId() string {
+func (x *UnlinkAccountRequest) GetUserId() int32 {
 	if x != nil {
 		return x.UserId
 	}
-	return ""
+	return 0
 }
 
 func (x *UnlinkAccountRequest) GetService() string {
@@ -687,7 +687,7 @@ func (x *UnlinkAccountRequest) GetAccountId() string {
 
 type SetTrustLevelRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserId        int32                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Level         int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"` // clamped to [0, 10]
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -723,11 +723,11 @@ func (*SetTrustLevelRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *SetTrustLevelRequest) GetUserId() string {
+func (x *SetTrustLevelRequest) GetUserId() int32 {
 	if x != nil {
 		return x.UserId
 	}
-	return ""
+	return 0
 }
 
 func (x *SetTrustLevelRequest) GetLevel() int32 {
@@ -740,10 +740,10 @@ func (x *SetTrustLevelRequest) GetLevel() int32 {
 type SetSystemMessagesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Always called by the user for themselves, identified beforehand via a unique
-	// linked-account lookup (GetUserRequest.linked_account) — uuid is already known
+	// linked-account lookup (GetUserRequest.linked_account) — id is already known
 	// and unambiguous, unlike roomie_id which can collide across resident types.
-	UserId        string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Enabled       bool   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	UserId        int32 `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Enabled       bool  `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -778,11 +778,11 @@ func (*SetSystemMessagesRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *SetSystemMessagesRequest) GetUserId() string {
+func (x *SetSystemMessagesRequest) GetUserId() int32 {
 	if x != nil {
 		return x.UserId
 	}
-	return ""
+	return 0
 }
 
 func (x *SetSystemMessagesRequest) GetEnabled() bool {
@@ -5591,7 +5591,7 @@ const file_hannah_proto_rawDesc = "" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\xc6\x02\n" +
 	"\x04User\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x1b\n" +
 	"\tuser_name\x18\x02 \x01(\tR\buserName\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1f\n" +
 	"\vtrust_level\x18\x04 \x01(\x05R\n" +
@@ -5608,7 +5608,7 @@ const file_hannah_proto_rawDesc = "" +
 	"\x05users\x18\x01 \x03(\v2\f.hannah.UserR\x05users\"\xbb\x01\n" +
 	"\x0eGetUserRequest\x12\x1d\n" +
 	"\tuser_name\x18\x01 \x01(\tH\x00R\buserName\x12\x10\n" +
-	"\x02id\x18\x02 \x01(\tH\x00R\x02id\x12D\n" +
+	"\x02id\x18\x02 \x01(\x05H\x00R\x02id\x12D\n" +
 	"\x0elinked_account\x18\x03 \x01(\v2\x1b.hannah.LinkedAccountLookupH\x00R\rlinkedAccount\x12(\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x14.hannah.ResidentTypeR\x04typeB\b\n" +
 	"\x06lookup\"R\n" +
@@ -5620,21 +5620,21 @@ const file_hannah_proto_rawDesc = "" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12 \n" +
 	"\x04user\x18\x02 \x01(\v2\f.hannah.UserR\x04user\"\x91\x01\n" +
 	"\x12LinkAccountRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x18\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x03 \x01(\tR\taccountId\x12)\n" +
 	"\x10provider_payload\x18\x04 \x01(\tR\x0fproviderPayload\"h\n" +
 	"\x14UnlinkAccountRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x18\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x03 \x01(\tR\taccountId\"E\n" +
 	"\x14SetTrustLevelRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\x05R\x05level\"M\n" +
 	"\x18SetSystemMessagesRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x18\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"t\n" +
 	"\x11SubmitTextRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12%\n" +

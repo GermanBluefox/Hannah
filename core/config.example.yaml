@@ -55,12 +55,10 @@ mqtt:
 #   tags:
 #     - mac: "aa:bb:cc:dd:ee:ff"
 #       label: "leonie"          # wird als State-Pfad verwendet (keine Leerzeichen)
-#       roomie: "leonie"         # optional: Resident-ID — bei Sichtung wird presence_state auf "zuhause" gesetzt
-#       type: "roomie"          # optional, Default "roomie" — roomie/guest/pet; nötig falls roomie-ID nicht eindeutig
+#       username: "leonie"       # optional: Hannah-Username — bei Sichtung wird User.presence auf True gesetzt
 #     - mac: "11:22:33:44:55:66"
 #       label: "zoey"
-#       roomie: "zoey"
-#       type: "pet"
+#       username: "zoey"
 
 grpc:
   host: "0.0.0.0"   # Bind-Adresse des gRPC-Servers

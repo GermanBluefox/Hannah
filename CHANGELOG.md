@@ -5,6 +5,13 @@
 -->
 
 
+
+## 0.42.0
+### Hannah Core
+* Changed: BLE-Indoor-Lokalisierung (`ble_location.py`) ist jetzt von ioBroker Residents entkoppelt und setzt direkt `User.presence`, statt über `ResidentsClient`/`Resident` zu laufen. Grund: `ResidentsClient._residents` wird nur asynchron über die gRPC-Verbindung zum Adapter befüllt (Einzel-Updates oder das `send_residents`-Snapshot, #73) — BLE-Reports kommen aber unabhängig per MQTT und können direkt nach einem Core-Neustart schon eintreffen, bevor der Adapter verbunden ist, was zu `log.warning(...Tippfehler in config.yaml?)` führte, obwohl kein Tippfehler vorlag. `UserManager` lädt dagegen synchron aus der lokalen SQLite-DB, keine Race möglich
+* Changed: `config.yaml`s BLE-Tag-Einträge nutzen jetzt `username` statt `roomie`/`type` — Auflösung zu `user_id` passiert einmalig beim Config-Laden (nicht mehr pro Sichtung), ein unbekannter Username wird sofort beim Start gewarnt statt erst bei der ersten Sichtung
+* Added: `UserManager.dump_present_users()`, aufgerufen bei jedem `AgentConnect` — pusht "anwesend" für jeden User, den Hannah aktuell als zuhause kennt, Richtung ioBroker. Schließt eine Lücke aus #82: BLE-Sichtungen können eintreffen, bevor der Adapter überhaupt verbunden ist, das zugehörige arrival-Event verhallt dann ungehört. Sendet bewusst nur "anwesend", nie "weg" — ioBroker kann eine eigene, unabhängige Presence-Quelle haben (z.B. WLAN-Controller-Tracking), die nicht überschrieben werden soll (Refs #83)
+
 ## 0.41.2
 ### Hannah Core
 * Fixed: the `/satellites` WebUI page's "Meldet sich als" warning compared a live-resolved room *ID* (e.g. `leonie_schlafzimmer`) against the assigned room's *display name* (e.g. `Leonie Schlafzimmer`) — a false positive for every room whose ID isn't spelled identically to its display name, even though the satellite was correctly assigned. The satellite/proxy never sends a room at all (`SatelliteRegistration.room` was deliberately removed — RoomManager is the sole authority); the mismatch check now compares room ID against room ID, resolving the live ID to a display name only for the message text (Refs #81)

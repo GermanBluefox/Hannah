@@ -48,7 +48,7 @@ from hannah.room_manager import RoomManager
 from hannah.webui import create_app as create_webui
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
-from hannah.ble_location import BleLocationEngine
+from hannah.ble_location import BleLocationEngine, BleTag
 from hannah.timers import AlarmManager, HannahTimerStore, format_duration, next_alarm_dt
 from hannah.__version__ import VERSION as HANNAH_VERSION
 
@@ -644,7 +644,7 @@ def main():
         all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
         return all_devices.get(device)
 
-    ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room)
+    ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room, _user_manager)
     alarm_manager = AlarmManager(
         persist_path=cfg.get("alarm", {}).get("persist", "alarms.json"),
         on_fire=lambda alarm_id, target: _handle_feedback(target, True, "Wecker! Guten Morgen!"),
@@ -653,13 +653,7 @@ def main():
         db_path=cfg.get("timers", {}).get("db", "timers.db"),
     )
 
-    _BLE_TYPE_CLASSES = {
-        "roomie": Roomie,
-        "guest": Guest,
-        "pet": Pet,
-    }
-
-    def _on_ble_location_change(tag, room, satellite, rssi):
+    def _on_ble_location_change(tag : BleTag, room, satellite, rssi):
         room_str = room or ""
         sat_str = satellite or ""
         payload = json.dumps({"label": tag.label, "mac": tag.mac, "room": room_str,
@@ -670,16 +664,11 @@ def main():
         # BLE-Sichtung ist ein starkes "zuhause"-Signal, aber kein zuverlässiges
         # "weg"-Signal (schwacher Empfang ≠ Haus verlassen) — daher nur bei aktiver
         # Sichtung (room gesetzt) presence_state auf HOME setzen, nie zurücksetzen.
-        if tag.roomie and room is not None:
-            cls = _BLE_TYPE_CLASSES.get(tag.type)
-            if cls is None:
-                log.warning(f"BLE: Tag {tag.label!r} hat unbekannten type {tag.type!r} (roomie={tag.roomie!r}) — Presence-Update übersprungen.")
+        if tag.user_id and room is not None:
+            user = _user_manager.get_user_by_id(tag.user_id)
+            if user is None:
                 return
-            resident = residents.get_or_null(tag.roomie, cls)
-            if resident is None:
-                log.warning(f"BLE: Tag {tag.label!r} verweist auf unbekannten Resident {tag.roomie!r} ({tag.type}) — Tippfehler in config.yaml?")
-                return
-            resident.update(resident.display_name, HOME_PRESENCE_STATE)
+            user.presence = True
 
     ble_engine.set_location_change_handler(_on_ble_location_change)
     mqtt_handler.set_ble_report_handler(ble_engine.on_report)
@@ -1118,6 +1107,10 @@ def main():
             grpc_servicer.agent_watch_more(list(state_ids))
         for tag, room, satellite, rssi in ble_engine.get_current_locations():
             grpc_servicer.agent_ble_update(tag.label, tag.mac, room or "", satellite or "", rssi)
+        # Presence-Updates, die zwischen Core-Start und Adapter-Connect entstanden sind
+        # (z.B. eine BLE-Sichtung), wurden beim Push Richtung ioBroker nie zugestellt —
+        # hier einmalig nachziehen. Nur "anwesend", nie "weg" (siehe dump_present_users).
+        _user_manager.dump_present_users()
 
     def _on_agent_ask_resident(correlation_id: str, room: str, question: str) -> None:
         log.info(f"[grpc/ask] corr={correlation_id!r} room={room!r} question={question!r}")

@@ -50,18 +50,26 @@ class UserManager:
         allerersten Start: zu dem Zeitpunkt existiert der Link noch nicht)."""
         self._wire_residents_bridge(user)
 
+    def _resident_link(self, user: User) -> Optional[tuple[str, str]]:
+        """Liefert (roomie_id, resident_type) für einen User mit verlinktem Residents-Account,
+        oder None falls nicht verlinkt bzw. ohne roomie_id im provider_payload."""
+        la = user.get_linked_account("residents")
+        if not la:
+            return None
+        payload = la.provider_payload or {}
+        roomie_id = payload.get("roomie_id")
+        if not roomie_id:
+            return None
+        return roomie_id, payload.get("resident_type", "roomie")
+
     def _wire_residents_bridge(self, user: User):
         """Bei verlinktem Roomie: user.presence/.mood-Änderungen Richtung ioBroker pushen.
         Presence und Mood werden unabhängig verdrahtet (separate Pusher, separates Tracking),
         falls einer der beiden noch nicht gebunden ist, wenn der andere ankommt."""
-        la = user.get_linked_account("residents")
-        if not la:
+        link = self._resident_link(user)
+        if not link:
             return
-        payload = la.provider_payload or {}
-        roomie_id = payload.get("roomie_id")
-        if not roomie_id:
-            return
-        resident_type = payload.get("resident_type", "roomie")
+        roomie_id, resident_type = link
 
         if self._residents_pusher and user.id not in self._wired_residents:
             user.on("arrival", lambda _u: self._residents_pusher(roomie_id, True, resident_type))
@@ -71,6 +79,24 @@ class UserManager:
         if self._mood_pusher and user.id not in self._wired_mood:
             user.on("mood_change", lambda _u, mood: self._mood_pusher(roomie_id, mood, resident_type))
             self._wired_mood.add(user.id)
+
+    def dump_present_users(self):
+        """Pusht 'anwesend' für jeden User, den Hannah aktuell als zuhause kennt — gedacht für
+        den AgentConnect-Fall (#83): BLE-Sichtungen können eintreffen, bevor der Adapter
+        überhaupt verbunden ist, das zugehörige arrival-Event verhallt dann ungehört, weil
+        niemand zuhört. Sendet bewusst nur "anwesend", nie "weg" — ioBroker kann eine eigene,
+        unabhängige Presence-Quelle haben (z.B. WLAN-Controller-Tracking), die nicht von einem
+        veralteten oder unvollständigen Hannah-Stand überschrieben werden soll."""
+        if not self._residents_pusher:
+            return
+        for user in self.users():
+            if not user.presence:
+                continue
+            link = self._resident_link(user)
+            if not link:
+                continue
+            roomie_id, resident_type = link
+            self._residents_pusher(roomie_id, True, resident_type)
 
     def _loadAll(self):
         users = User.select(self._db()).order_by("id").all()

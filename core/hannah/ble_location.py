@@ -2,18 +2,18 @@ import logging
 import threading
 import time
 from typing import Callable, Optional
+from hannah.user_manager import UserManager
 
 log = logging.getLogger(__name__)
 
 
 class BleTag:
-    __slots__ = ("mac", "label", "roomie", "type")
+    __slots__ = ("mac", "label", "user_id")
 
-    def __init__(self, mac: str, label: str, roomie: Optional[str] = None, type: str = "roomie"):
+    def __init__(self, mac: str, label: str, user_id: Optional[int] = None):
         self.mac = mac.lower()
         self.label = label
-        self.roomie = roomie
-        self.type = type
+        self.user_id = user_id
 
 
 class _Report:
@@ -35,7 +35,7 @@ class BleLocationEngine:
     Bei jeder Lageänderung wird der on_location_change-Callback aufgerufen.
     """
 
-    def __init__(self, cfg: dict, get_satellite_room: Callable[[str], Optional[str]]):
+    def __init__(self, cfg: dict, get_satellite_room: Callable[[str], Optional[str]], user_manager : UserManager):
         """
         cfg                 : ble-Abschnitt aus config.yaml
         get_satellite_room  : fn(device) → room-Name oder None
@@ -43,12 +43,19 @@ class BleLocationEngine:
         self._stale = float(cfg.get("stale_timeout", 30))
         self._get_room = get_satellite_room
         self._lock = threading.Lock()
+        self._user_manager = user_manager
 
         self._tags: dict[str, BleTag] = {}
         for t in cfg.get("tags", []):
             mac = t.get("mac", "").lower()
+            label = t.get("label", mac)
             if mac:
-                self._tags[mac] = BleTag(mac, t.get("label", mac), t.get("roomie"), t.get("type", "roomie"))
+                username = t.get("username")
+                user = self._user_manager.get_user_by_username(username=username) if username else None
+                if username and user is None:
+                    log.warning(f"BLE: Tag {label!r} verweist auf unbekannten User {username!r} — Tippfehler in config.yaml?")
+                userID = user.id if user else None
+                self._tags[mac] = BleTag(mac, label, userID)
 
         # {mac → {satellite → _Report}}
         self._reports: dict[str, dict[str, _Report]] = {}

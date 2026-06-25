@@ -127,8 +127,8 @@ def main():
     if not iobroker.rooms:
         log.warning("Keine Räume aus ioBroker geladen — NLU arbeitet ohne Raum-Erkennung.")
 
-    # Room Manager (Räume, Gruppen, Satellit-Zuweisung)
-    room_manager = RoomManager(cfg.get("room_manager", {}))
+    # Room Manager (Räume, Gruppen, Satellit-Zuweisung) — teilt sich hannah.db mit der User-Registry
+    room_manager = RoomManager(get_db, cfg.get("room_manager", {}))
 
     # STT + NLU + TTS
     stt = STT(cfg.get("stt", {}))

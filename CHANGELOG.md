@@ -8,6 +8,14 @@
 
 
 
+
+## 0.41.0
+### Hannah Core
+* Fixed: `BaseModel.create()`/`update()`/`delete()` never rolled back on a failed write (e.g. `IntegrityError` from a UNIQUE violation) — the implicitly-started transaction stayed open on that connection, which then blocked every other write to the same DB file with `database is locked` until the connection happened to get garbage-collected. Found while writing an end-to-end test for #77; also affects `User`/`LinkedAccount` already in production (e.g. a duplicate username/email via `/users/create`) (Refs #79)
+* Added: `Room`/`Group`/`Satellite` models, `rooms`/`groups`/`group_rooms`/`satellites` tables added to `hannah.db`'s schema (Refs #77)
+* Changed: `RoomManager` now uses the `hannah.models` layer instead of hand-rolled `sqlite3` — same public API/return shapes, so `main.py`/`webui.py`/`grpc_server.py` needed no changes beyond the constructor call. `group_rooms` (pure n:n pivot) stays model-less, queried via joins; `Satellite`'s pairing rename (device_id is the PK) stays raw SQL since `BaseModel.update()` never touches PK columns (Refs #77)
+* Added: `core/deploy/migrate_rooms_db.py` — one-time, idempotent migration of the real production data in the old standalone `rooms.db` into `hannah.db`'s new tables; ships with the next core release since `deploy/` is part of the release tarball (Refs #77)
+
 ## 0.40.6
 ### Hannah Core
 * Fixed: `hannah.db` (User-Registry, Issue #72) was deleted on every AutoDeploy update — `DB_PATH` defaulted to a path relative to `__file__` (`.../core/hannah/hannah.db`), landing it *inside* the `hannah/` package directory that `autodeploy.py`'s `_extract_and_copy()` wipes and replaces wholesale on each deploy. Now defaults to the relative path `"hannah.db"`, resolved against the service's working directory like `room_manager.py`'s `rooms.db` and `memory.py`'s `memory.db` already do (Refs #76)

@@ -1,25 +1,23 @@
-import tempfile
 import os
 
 import pytest
 
+import hannah.utils.db as db_module
 from hannah.room_manager import RoomManager
 
 
 @pytest.fixture
-def manager():
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    mgr = RoomManager({"db_path": path, "seed_ttl_days": 7})
-    yield mgr
-    try:
-        os.remove(path)
-    except PermissionError:
-        pass  # sqlite3-Connection-Objekte werden erst beim GC geschlossen (Windows hält Datei-Handle)
+def manager(tmp_path):
+    """Real (non-mocked) RoomManager against a throwaway SQLite DB — see
+    hannah.utils.db.DB_PATH docstring note in test_grpc_server.py for why this
+    has to patch the module attribute directly rather than just an env var."""
+    db_module.DB_PATH = os.path.join(str(tmp_path), "h.db")
+    db_module.init_db()
+    yield RoomManager(db_module.get_db, {"seed_ttl_days": 7})
 
 
 def _insert_satellite(mgr, device_id, seed, days_old):
-    with mgr._connect() as conn:
+    with mgr._db() as conn:
         conn.execute(
             """INSERT INTO satellites (device_id, seed, display_name, created_at)
                VALUES (?, ?, ?, datetime('now', ?))""",
@@ -45,7 +43,7 @@ class TestCleanupStaleSeeds:
         assert manager.get_satellite("new-seed") is not None
 
     def test_paired_satellite_kept_regardless_of_age(self, manager):
-        with manager._connect() as conn:
+        with manager._db() as conn:
             conn.execute(
                 """INSERT INTO satellites (device_id, seed, display_name, paired_at, created_at)
                    VALUES (?, NULL, ?, datetime('now', '-30 days'), datetime('now', '-30 days'))""",

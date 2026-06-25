@@ -113,8 +113,17 @@ class BaseModel:
         import logging
         logger = logging.getLogger(__name__)
         logger.debug(f"DATABASE QUERY: {sql} | PARAMS: {values}")
-        cursor = db.execute(sql, values)
-        db.commit()
+        try:
+            cursor = db.execute(sql, values)
+            db.commit()
+        except Exception:
+            # Ohne Rollback bleibt die von Python implizit vor dem INSERT
+            # gestartete Transaktion offen (z.B. nach IntegrityError bei
+            # UNIQUE-Verletzung) — die Connection hält dann unbemerkt einen
+            # Write-Lock, der alle folgenden Writes mit "database is locked"
+            # blockiert, bis sie irgendwann vom GC geschlossen wird.
+            db.rollback()
+            raise
 
         pk_cols = cls.__primary_key__
         if isinstance(pk_cols, str):
@@ -147,8 +156,12 @@ class BaseModel:
         params.extend(pk_params)
         
         sql = f"UPDATE {self.__table__} SET {', '.join(updates)} WHERE {where_sql}"
-        self._db.execute(sql, params)
-        self._db.commit()
+        try:
+            self._db.execute(sql, params)
+            self._db.commit()
+        except Exception:
+            self._db.rollback()
+            raise
         return self
 
     def save(self):
@@ -165,8 +178,12 @@ class BaseModel:
 
         where_sql, pk_params = self.pk_filter
         sql = f"DELETE FROM {self.__table__} WHERE {where_sql}"
-        self._db.execute(sql, pk_params)
-        self._db.commit()
+        try:
+            self._db.execute(sql, pk_params)
+            self._db.commit()
+        except Exception:
+            self._db.rollback()
+            raise
     
     def after_init(self):
         pass

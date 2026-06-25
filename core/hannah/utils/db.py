@@ -36,6 +36,40 @@ CREATE TABLE IF NOT EXISTS "linked_accounts" (
 	UNIQUE("user_id","provider"),
 	FOREIGN KEY("user_id") REFERENCES "users"("id") ON UPDATE CASCADE ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS "rooms" (
+	"room_id"	TEXT NOT NULL,
+	"display_name"	TEXT NOT NULL,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("room_id")
+);
+
+CREATE TABLE IF NOT EXISTS "groups" (
+	"group_id"	TEXT NOT NULL,
+	"display_name"	TEXT NOT NULL,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("group_id")
+);
+
+CREATE TABLE IF NOT EXISTS "group_rooms" (
+	"group_id"	TEXT NOT NULL,
+	"room_id"	TEXT NOT NULL,
+	PRIMARY KEY("group_id","room_id"),
+	FOREIGN KEY("group_id") REFERENCES "groups"("group_id") ON DELETE CASCADE,
+	FOREIGN KEY("room_id") REFERENCES "rooms"("room_id") ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "satellites" (
+	"device_id"	TEXT NOT NULL,
+	"seed"	TEXT,
+	"display_name"	TEXT,
+	"room_id"	TEXT,
+	"last_seen"	TEXT,
+	"paired_at"	TEXT,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("device_id"),
+	FOREIGN KEY("room_id") REFERENCES "rooms"("room_id")
+);
 """
 
 

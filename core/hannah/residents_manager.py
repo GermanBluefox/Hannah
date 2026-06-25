@@ -33,6 +33,8 @@ class ResidentsClient:
 
         # Set by main.py: fn(resident_id, presence_state, resident_type) → sends SetResident via gRPC adapter
         self._setter: Optional[Callable[[str, int, "pb.ResidentType"], bool]] = None
+        # Set by main.py: fn(resident_id, mood, resident_type) → sends SetResidentMood via gRPC adapter
+        self._mood_setter: Optional[Callable[[str, int, "pb.ResidentType"], bool]] = None
 
         # Welche presence_state-Werte bedeuten "zuhause" / "weg"?
         # Residents-Adapter: 0=Abwesend, 1=zu Hause, 2=Nacht
@@ -42,12 +44,18 @@ class ResidentsClient:
         # Callbacks: fn(resident: Resident)
         self._on_arrival:   Optional[Callable[[Resident], None]] = None
         self._on_departure: Optional[Callable[[Resident], None]] = None
+        # Callback: fn(resident: Resident, old_mood: int, mood: int)
+        self._on_mood_changed: Optional[Callable[[Resident, int, int], None]] = None
 
     # ------------------------------------------------------------------
     # Callbacks registrieren
     def set_setter(self, fn: Callable[[str, int, "pb.ResidentType"], bool]):
         """Register the gRPC state setter: fn(resident_id, presence_state, resident_type) → True if adapter is connected."""
         self._setter = fn
+
+    def set_mood_setter(self, fn: Callable[[str, int, "pb.ResidentType"], bool]):
+        """Register the gRPC mood setter: fn(resident_id, mood, resident_type) → True if adapter is connected."""
+        self._mood_setter = fn
 
     def on_arrival(self, fn: Callable[[Resident], None]):
         """Wird aufgerufen wenn ein Resident (Roomie oder Gast) von weg → zuhause wechselt."""
@@ -56,6 +64,10 @@ class ResidentsClient:
     def on_departure(self, fn: Callable[[Resident], None]):
         """Wird aufgerufen wenn ein Resident (Roomie oder Gast) von zuhause → weg wechselt."""
         self._on_departure = fn
+
+    def on_mood_changed(self, fn: Callable[[Resident, int, int], None]):
+        """Wird aufgerufen wenn sich die Stimmung eines Residents ändert: fn(resident, old_mood, mood)."""
+        self._on_mood_changed = fn
 
     # ------------------------------------------------------------------
     # Resident-Registry
@@ -69,6 +81,7 @@ class ResidentsClient:
                 resident = resident_cls(roomie_id, roomie_id)
                 resident.on("arrival", self._dispatch_arrival)
                 resident.on("departure", self._dispatch_departure)
+                resident.on("mood_changed", self._dispatch_mood_changed)
                 self._residents[key] = resident
             return resident
 
@@ -76,6 +89,11 @@ class ResidentsClient:
         """Liefert den bekannten Resident zu (roomie_id, resident_cls), oder None falls unbekannt — legt nichts neu an."""
         with self._lock:
             return self._residents.get((resident_cls, roomie_id))
+
+    def all_residents(self) -> list[Resident]:
+        """Alle bisher per gRPC bekannt gewordenen Residents (Roomies/Guests/Pets)."""
+        with self._lock:
+            return list(self._residents.values())
 
     def _dispatch_arrival(self, resident: Resident):
         log.info(f"Residents: {resident.roomie_id} ({type(resident).__name__}) ist angekommen.")
@@ -86,6 +104,11 @@ class ResidentsClient:
         log.info(f"Residents: {resident.roomie_id} ({type(resident).__name__}) hat das Haus verlassen.")
         if self._on_departure:
             threading.Thread(target=self._on_departure, args=(resident,), daemon=True).start()
+
+    def _dispatch_mood_changed(self, resident: Resident, old_mood: int, mood: int):
+        log.info(f"Residents: {resident.roomie_id} ({type(resident).__name__}) Stimmung {old_mood} → {mood}.")
+        if self._on_mood_changed:
+            threading.Thread(target=self._on_mood_changed, args=(resident, old_mood, mood), daemon=True).start()
 
     # ------------------------------------------------------------------
     # State setzen (Hannah → ioBroker)
@@ -114,6 +137,11 @@ class ResidentsClient:
 
     def set_guest_away(self, roomie: str):
         self.set_presence(roomie, self._state_away, pb.ResidentType.GUEST)
+
+    def set_mood(self, roomie: str, mood: int, resident_type: "pb.ResidentType" = pb.ResidentType.ROOMIE):
+        """Pusht eine Stimmungsänderung an den Residents-Adapter, unabhängig vom Presence-Status."""
+        self._mood_setter(roomie, mood, resident_type)
+        log.info(f"Residents: {roomie} → mood {mood!r} ({resident_type})")
 
     # ------------------------------------------------------------------
     # Cache lesen

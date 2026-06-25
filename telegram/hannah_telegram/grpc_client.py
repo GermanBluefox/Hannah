@@ -90,8 +90,8 @@ class HannahClient:
             resp = await self._stub.GetUser(
                 hannah_pb2.GetUserRequest(
                     linked_account=hannah_pb2.LinkedAccountLookup(
-                        service="telegram",
-                        account_id=str(chat_id),
+                        provider="telegram",
+                        external_id=str(chat_id),
                     )
                 )
             )
@@ -127,7 +127,7 @@ class HannahClient:
             for user in resp.users:
                 log.info(
                     "GetUsers: %s system_messages=%s telegram=%s",
-                    user.roomie_id, user.system_messages,
+                    user.user_name, user.system_messages,
                     user.linked_accounts.get("telegram", "-"),
                 )
                 if user.system_messages and "telegram" in user.linked_accounts:
@@ -137,59 +137,51 @@ class HannahClient:
             log.error("GetUsers gRPC error: %s", exc)
             return []
 
-    async def set_system_messages(self, user_uuid: str, enabled: bool) -> tuple[bool, str]:
+    async def set_system_messages(self, user_id: int, enabled: bool) -> tuple[bool, str]:
         """Enable/disable system message notifications for the user identified by uuid (always
         unambiguous, unlike roomie_id — callers already resolved uuid via a linked-account lookup)."""
         assert self._stub, "call connect() first"
         try:
             resp = await self._stub.SetSystemMessages(
-                hannah_pb2.SetSystemMessagesRequest(uuid=user_uuid, enabled=enabled)
+                hannah_pb2.SetSystemMessagesRequest(user_id=user_id, enabled=enabled)
             )
             return resp.ok, resp.message
         except grpc.aio.AioRpcError as exc:
             log.error("SetSystemMessages gRPC error: %s", exc)
             return False, exc.details() or str(exc)
 
-    async def set_trust_level(self, roomie_id: str, level: int, resident_type: Optional[str] = None) -> tuple[bool, str]:
-        """Set the trust level of a roomie. resident_type (ROOMIE/GUEST/PET) disambiguates if
-        roomie_id collides across types. Returns (ok, message)."""
+    async def set_trust_level(self, user_id: int, level: int) -> tuple[bool, str]:
+        """Set the trust level of a roomie. Returns (ok, message)."""
         assert self._stub, "call connect() first"
         try:
-            req = hannah_pb2.SetTrustLevelRequest(roomie_id=roomie_id, level=level)
-            if resident_type:
-                req.type = hannah_pb2.ResidentType.Value(resident_type)
+            req = hannah_pb2.SetTrustLevelRequest(user_id=user_id, level=level)
             resp = await self._stub.SetTrustLevel(req)
             return resp.ok, resp.message
         except grpc.aio.AioRpcError as exc:
             log.error("SetTrustLevel gRPC error: %s", exc)
             return False, exc.details() or str(exc)
 
-    async def link_account(self, roomie_id: str, chat_id: str, resident_type: Optional[str] = None) -> tuple[bool, str]:
+    async def link_account(self, user_id: int, chat_id: str) -> tuple[bool, str]:
         """Link a Telegram chat_id to a Hannah roomie. resident_type (ROOMIE/GUEST/PET) disambiguates
         if roomie_id collides across types. Returns (ok, message)."""
         assert self._stub, "call connect() first"
         try:
-            req = hannah_pb2.LinkAccountRequest(roomie_id=roomie_id, service="telegram", account_id=str(chat_id))
-            if resident_type:
-                req.type = hannah_pb2.ResidentType.Value(resident_type)
+            req = hannah_pb2.LinkAccountRequest(user_id=user_id, service="telegram", account_id=str(chat_id))
             resp = await self._stub.LinkAccount(req)
             return resp.ok, resp.message
         except grpc.aio.AioRpcError as exc:
             log.error("LinkAccount gRPC error: %s", exc)
             return False, exc.details() or str(exc)
 
-    async def get_user_by_roomie(self, roomie_id: str, resident_type: Optional[str] = None):
-        """Check if a roomie_id exists. resident_type (ROOMIE/GUEST/PET) disambiguates if roomie_id
-        collides across types. Returns (found, user_or_None, error_or_None)."""
+    async def get_user_by_username(self, user_name: str):
+        """Check if a userbane exists. Returns (found, user_or_None, error_or_None)."""
         assert self._stub, "call connect() first"
         try:
-            req = hannah_pb2.GetUserRequest(roomie_id=roomie_id)
-            if resident_type:
-                req.type = hannah_pb2.ResidentType.Value(resident_type)
+            req = hannah_pb2.GetUserRequest(user_name=user_name)
             resp = await self._stub.GetUser(req)
             return resp.found, (resp.user if resp.found else None), None
         except grpc.aio.AioRpcError as exc:
-            log.error("GetUser(roomie) gRPC error: %s", exc)
+            log.error("GetUser(username) gRPC error: %s", exc)
             return False, None, exc.details() or str(exc)
 
     # ------------------------------------------------------------------

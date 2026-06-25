@@ -1,25 +1,23 @@
+from abc import ABC, abstractmethod
 from typing import Callable, Optional
+
+from hannah.utils import EventEmitterMixin
 
 HOME_PRESENCE_STATE = 1
 
 
-class Resident:
+class Resident(EventEmitterMixin, ABC):
     def __init__(self, roomie_id: str, display_name: str, presence_state: Optional[int] = None, mood: Optional[int] = None):
         self.roomie_id = roomie_id
         self.display_name = display_name
         self.presence_state = presence_state
         self.mood = mood
-        self._listeners: dict[str, list[Callable]] = {}
 
-    # ------------------------------------------------------------------
-    # Event-System
-
-    def on(self, event: str, fn: Callable):
-        self._listeners.setdefault(event, []).append(fn)
-
-    def _emit(self, event: str, *args):
-        for fn in self._listeners.get(event, []):
-            fn(self, *args)
+    @property
+    @abstractmethod
+    def id(self) -> str:
+        """Gibt die berechnete ID des Bewohners zurück."""
+        pass
 
     # ------------------------------------------------------------------
     # Presence

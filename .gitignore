@@ -3,6 +3,7 @@ forum_post.md
 __pycache__/
 venv/
 core/venv/
+core/.venv-test/
 telegram/venv/
 satelite_cache/
 hannah_users.db
@@ -15,7 +16,8 @@ timers.db
 timers.db-shm
 timers.db-wal
 .idea/
-.claude/
+**/.claude/*
+!**/.claude/skills/
 satellite-esp/build/
 satellite-esp/managed_components/
 .vscode/

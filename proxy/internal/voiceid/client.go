@@ -7,13 +7,13 @@
 //	  X-Sample-Rate: 16000
 //	  Body: raw PCM bytes (16-bit signed little-endian mono)
 //
-//	  200 → {"roomie_id": "leonie", "confidence": 0.91}
-//	        roomie_id="" or "unknown" means speaker not recognised
+//	  200 → {"user_id": "1", "confidence": 0.91}
+//	        user_id="" or "unknown" means speaker not recognised
 //
 //	POST /enroll
 //	  Content-Type: application/octet-stream
 //	  X-Sample-Rate: 16000
-//	  X-Roomie-ID: leonie
+//	  X-User-ID: 1
 //	  Body: raw PCM bytes
 //
 //	  200 → {"ok": true, "message": "enrolled"}
@@ -37,7 +37,7 @@ type Client struct {
 
 // IdentifyResponse is the JSON body returned by POST /identify.
 type IdentifyResponse struct {
-	RoomieID   string  `json:"roomie_id"`
+	UserID     string  `json:"user_id"`
 	Confidence float32 `json:"confidence"`
 }
 
@@ -55,7 +55,7 @@ func NewClient(baseURL string, timeoutSec float64) *Client {
 	}
 }
 
-// Identify sends PCM audio to the Voice-ID service and returns the roomie_id.
+// Identify sends PCM audio to the Voice-ID service and returns the user_id.
 // Returns "" if the speaker is unknown or confidence is below the configured threshold.
 // Errors are logged but do not block the pipeline — the caller gets "" on failure.
 func (c *Client) Identify(ctx context.Context, pcm []byte, sampleRate int) (string, error) {
@@ -83,15 +83,15 @@ func (c *Client) Identify(ctx context.Context, pcm []byte, sampleRate int) (stri
 		return "", fmt.Errorf("decode response: %w", err)
 	}
 
-	if result.RoomieID == "" || result.RoomieID == "unknown" {
+	if result.UserID == "" || result.UserID == "unknown" {
 		return "", nil
 	}
-	return result.RoomieID, nil
+	return result.UserID, nil
 }
 
-// Enroll registers a voice sample for a roomie at the Voice-ID service.
+// Enroll registers a voice sample for a user at the Voice-ID service.
 // Called when Hannah Core forwards an EnrollVoiceprint gRPC request.
-func (c *Client) Enroll(ctx context.Context, roomieID string, pcm []byte, sampleRate int) error {
+func (c *Client) Enroll(ctx context.Context, userID string, pcm []byte, sampleRate int) error {
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodPost, c.baseURL+"/enroll", bytes.NewReader(pcm),
 	)
@@ -100,7 +100,7 @@ func (c *Client) Enroll(ctx context.Context, roomieID string, pcm []byte, sample
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("X-Sample-Rate", strconv.Itoa(sampleRate))
-	req.Header.Set("X-Roomie-ID", roomieID)
+	req.Header.Set("X-User-ID", userID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

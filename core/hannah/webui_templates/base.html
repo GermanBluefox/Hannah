@@ -38,6 +38,10 @@
           <a class="nav-link {% if request.endpoint == 'satellites' %}active{% endif %}"
              href="{{ url_for('satellites') }}">Satelliten</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'users' %}active{% endif %}"
+             href="{{ url_for('users') }}">User</a>
+        </li>
       </ul>
     </div>
   </div>

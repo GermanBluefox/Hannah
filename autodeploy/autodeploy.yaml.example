@@ -26,5 +26,5 @@ components:
   - name: voiceid
     channel: voiceid-stable
     install_dir: /opt/hannah/voiceid
-    service: hannah-voiceid
+    service: hannah-voiceid  # macOS: use the launchd label instead, e.g. com.hannah.voiceid
     post_install: "/opt/hannah/venv/bin/pip install -q -r /opt/hannah/voiceid/requirements.txt"

@@ -10,8 +10,11 @@ import re
 from typing import Callable
 
 from flask import Flask, redirect, render_template, request, url_for
+from werkzeug.security import generate_password_hash
 
 from hannah.room_manager import RoomManager
+
+_USER_TYPES = ("roomie", "guest", "pet")
 
 log = logging.getLogger(__name__)
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
@@ -31,6 +34,8 @@ def create_app(
     room_manager: RoomManager,
     get_connected_satellites: Callable[[], dict[str, str]],
     notify_satellite_deleted: Callable[[str, str], bool],
+    user_manager=None,
+    get_residents: Callable[[], list] = lambda: [],
 ) -> Flask:
     app = Flask(__name__, template_folder=_TEMPLATES)
     app.secret_key = os.urandom(24)
@@ -153,5 +158,73 @@ def create_app(
         room_manager.delete_satellite(device_id)
         notify_satellite_deleted(device_id, room_id)
         return redirect(url_for("satellites"))
+
+    # ── User ───────────────────────────────────────────────────────────────────
+
+    @app.route("/users")
+    def users():
+        users_view = []
+        for u in user_manager.users(include_inactive=True):
+            la = u.get_linked_account("residents")
+            users_view.append({"user": u, "resident_link": la.provider_payload if la else None})
+        return render_template("users.html", users=users_view, residents=get_residents())
+
+    @app.route("/users/create", methods=["GET", "POST"])
+    def create_user():
+        if request.method == "POST":
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            email = request.form.get("email", "").strip()
+            display_name = request.form.get("display_name", "").strip()
+            user_type = request.form.get("type", "roomie")
+            if username and password and email:
+                try:
+                    user_manager.create_user(
+                        username, generate_password_hash(password),
+                        email=email, display_name=display_name or None, type=user_type,
+                    )
+                    return redirect(url_for("users"))
+                except ValueError as e:
+                    return render_template("user_create.html", error=str(e), types=_USER_TYPES)
+            return render_template("user_create.html", error="Username, Passwort und E-Mail sind Pflicht.", types=_USER_TYPES)
+        return render_template("user_create.html", error=None, types=_USER_TYPES)
+
+    @app.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
+    def edit_user(user_id: int):
+        user = user_manager.get_user_by_id(user_id)
+        if user is None:
+            return redirect(url_for("users"))
+        if request.method == "POST":
+            user.display_name = request.form.get("display_name", "").strip() or user.username
+            user.email = request.form.get("email", "").strip() or user.email
+            user.type = request.form.get("type", user.type)
+            user.trust_level = int(request.form.get("trust_level") or user.trust_level)
+            user.is_active = 1 if request.form.get("is_active") else 0
+            user.system_messages = 1 if request.form.get("system_messages") else 0
+            new_password = request.form.get("password", "").strip()
+            if new_password:
+                user.password_hash = generate_password_hash(new_password)
+            user.save()
+            return redirect(url_for("users"))
+        return render_template("user_edit.html", user=user, types=_USER_TYPES)
+
+    @app.route("/users/<int:user_id>/link-resident", methods=["POST"])
+    def link_resident(user_id: int):
+        resident_id = request.form.get("resident_id", "")
+        user = user_manager.get_user_by_id(user_id)
+        if user and resident_id:
+            roomie_id, _, resident_type = resident_id.rpartition("_")
+            user.link_account(
+                "residents", resident_id,
+                provider_payload={"resident_type": resident_type, "roomie_id": roomie_id},
+            )
+        return redirect(url_for("users"))
+
+    @app.route("/users/<int:user_id>/unlink-resident", methods=["POST"])
+    def unlink_resident(user_id: int):
+        user = user_manager.get_user_by_id(user_id)
+        if user:
+            user.unlink_account("residents")
+        return redirect(url_for("users"))
 
     return app

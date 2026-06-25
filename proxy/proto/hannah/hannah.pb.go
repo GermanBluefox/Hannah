@@ -163,8 +163,8 @@ func (x *StatusResponse) GetMessage() string {
 
 type User struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
-	Uuid        string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
-	RoomieId    string                 `protobuf:"bytes,2,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserName    string                 `protobuf:"bytes,2,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
 	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	TrustLevel  int32                  `protobuf:"varint,4,opt,name=trust_level,json=trustLevel,proto3" json:"trust_level,omitempty"`
 	Active      bool                   `protobuf:"varint,5,opt,name=active,proto3" json:"active,omitempty"`
@@ -205,16 +205,16 @@ func (*User) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *User) GetUuid() string {
+func (x *User) GetId() string {
 	if x != nil {
-		return x.Uuid
+		return x.Id
 	}
 	return ""
 }
 
-func (x *User) GetRoomieId() string {
+func (x *User) GetUserName() string {
 	if x != nil {
-		return x.RoomieId
+		return x.UserName
 	}
 	return ""
 }
@@ -347,8 +347,8 @@ type GetUserRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Lookup:
 	//
-	//	*GetUserRequest_RoomieId
-	//	*GetUserRequest_Uuid
+	//	*GetUserRequest_UserName
+	//	*GetUserRequest_Id
 	//	*GetUserRequest_LinkedAccount
 	Lookup isGetUserRequest_Lookup `protobuf_oneof:"lookup"`
 	// Only meaningful together with roomie_id: roomie_id alone is not unique across
@@ -397,19 +397,19 @@ func (x *GetUserRequest) GetLookup() isGetUserRequest_Lookup {
 	return nil
 }
 
-func (x *GetUserRequest) GetRoomieId() string {
+func (x *GetUserRequest) GetUserName() string {
 	if x != nil {
-		if x, ok := x.Lookup.(*GetUserRequest_RoomieId); ok {
-			return x.RoomieId
+		if x, ok := x.Lookup.(*GetUserRequest_UserName); ok {
+			return x.UserName
 		}
 	}
 	return ""
 }
 
-func (x *GetUserRequest) GetUuid() string {
+func (x *GetUserRequest) GetId() string {
 	if x != nil {
-		if x, ok := x.Lookup.(*GetUserRequest_Uuid); ok {
-			return x.Uuid
+		if x, ok := x.Lookup.(*GetUserRequest_Id); ok {
+			return x.Id
 		}
 	}
 	return ""
@@ -435,28 +435,28 @@ type isGetUserRequest_Lookup interface {
 	isGetUserRequest_Lookup()
 }
 
-type GetUserRequest_RoomieId struct {
-	RoomieId string `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3,oneof"`
+type GetUserRequest_UserName struct {
+	UserName string `protobuf:"bytes,1,opt,name=user_name,json=userName,proto3,oneof"`
 }
 
-type GetUserRequest_Uuid struct {
-	Uuid string `protobuf:"bytes,2,opt,name=uuid,proto3,oneof"`
+type GetUserRequest_Id struct {
+	Id string `protobuf:"bytes,2,opt,name=id,proto3,oneof"`
 }
 
 type GetUserRequest_LinkedAccount struct {
 	LinkedAccount *LinkedAccountLookup `protobuf:"bytes,3,opt,name=linked_account,json=linkedAccount,proto3,oneof"`
 }
 
-func (*GetUserRequest_RoomieId) isGetUserRequest_Lookup() {}
+func (*GetUserRequest_UserName) isGetUserRequest_Lookup() {}
 
-func (*GetUserRequest_Uuid) isGetUserRequest_Lookup() {}
+func (*GetUserRequest_Id) isGetUserRequest_Lookup() {}
 
 func (*GetUserRequest_LinkedAccount) isGetUserRequest_Lookup() {}
 
 type LinkedAccountLookup struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Service       string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	AccountId     string                 `protobuf:"bytes,2,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	ExternalId    string                 `protobuf:"bytes,2,opt,name=external_id,json=externalId,proto3" json:"external_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -491,16 +491,16 @@ func (*LinkedAccountLookup) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *LinkedAccountLookup) GetService() string {
+func (x *LinkedAccountLookup) GetProvider() string {
 	if x != nil {
-		return x.Service
+		return x.Provider
 	}
 	return ""
 }
 
-func (x *LinkedAccountLookup) GetAccountId() string {
+func (x *LinkedAccountLookup) GetExternalId() string {
 	if x != nil {
-		return x.AccountId
+		return x.ExternalId
 	}
 	return ""
 }
@@ -558,13 +558,13 @@ func (x *UserResponse) GetUser() *User {
 }
 
 type LinkAccountRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RoomieId      string                 `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`
-	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
-	AccountId     string                 `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
-	Type          ResidentType           `protobuf:"varint,4,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"` // see GetUserRequest.type
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UserId          string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Service         string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
+	AccountId       string                 `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	ProviderPayload string                 `protobuf:"bytes,4,opt,name=provider_payload,json=providerPayload,proto3" json:"provider_payload,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *LinkAccountRequest) Reset() {
@@ -597,9 +597,9 @@ func (*LinkAccountRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *LinkAccountRequest) GetRoomieId() string {
+func (x *LinkAccountRequest) GetUserId() string {
 	if x != nil {
-		return x.RoomieId
+		return x.UserId
 	}
 	return ""
 }
@@ -618,17 +618,18 @@ func (x *LinkAccountRequest) GetAccountId() string {
 	return ""
 }
 
-func (x *LinkAccountRequest) GetType() ResidentType {
+func (x *LinkAccountRequest) GetProviderPayload() string {
 	if x != nil {
-		return x.Type
+		return x.ProviderPayload
 	}
-	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
+	return ""
 }
 
 type UnlinkAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Service       string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	AccountId     string                 `protobuf:"bytes,2,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
+	AccountId     string                 `protobuf:"bytes,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -663,6 +664,13 @@ func (*UnlinkAccountRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{9}
 }
 
+func (x *UnlinkAccountRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
 func (x *UnlinkAccountRequest) GetService() string {
 	if x != nil {
 		return x.Service
@@ -679,9 +687,8 @@ func (x *UnlinkAccountRequest) GetAccountId() string {
 
 type SetTrustLevelRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RoomieId      string                 `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`
-	Level         int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"`                        // clamped to [0, 10]
-	Type          ResidentType           `protobuf:"varint,3,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"` // see GetUserRequest.type
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Level         int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"` // clamped to [0, 10]
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -716,9 +723,9 @@ func (*SetTrustLevelRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *SetTrustLevelRequest) GetRoomieId() string {
+func (x *SetTrustLevelRequest) GetUserId() string {
 	if x != nil {
-		return x.RoomieId
+		return x.UserId
 	}
 	return ""
 }
@@ -730,18 +737,13 @@ func (x *SetTrustLevelRequest) GetLevel() int32 {
 	return 0
 }
 
-func (x *SetTrustLevelRequest) GetType() ResidentType {
-	if x != nil {
-		return x.Type
-	}
-	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
-}
-
 type SetSystemMessagesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RoomieId      string                 `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`
-	Enabled       bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	Type          ResidentType           `protobuf:"varint,3,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"` // see GetUserRequest.type
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Always called by the user for themselves, identified beforehand via a unique
+	// linked-account lookup (GetUserRequest.linked_account) — uuid is already known
+	// and unambiguous, unlike roomie_id which can collide across resident types.
+	UserId        string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Enabled       bool   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -776,9 +778,9 @@ func (*SetSystemMessagesRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *SetSystemMessagesRequest) GetRoomieId() string {
+func (x *SetSystemMessagesRequest) GetUserId() string {
 	if x != nil {
-		return x.RoomieId
+		return x.UserId
 	}
 	return ""
 }
@@ -788,13 +790,6 @@ func (x *SetSystemMessagesRequest) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
-}
-
-func (x *SetSystemMessagesRequest) GetType() ResidentType {
-	if x != nil {
-		return x.Type
-	}
-	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
 }
 
 type SubmitTextRequest struct {
@@ -2130,11 +2125,11 @@ type SubmitSatelliteAudioRequest struct {
 	Room       string                 `protobuf:"bytes,2,opt,name=room,proto3" json:"room,omitempty"`                                // room name (from proxy registration / config)
 	AudioPcm   []byte                 `protobuf:"bytes,3,opt,name=audio_pcm,json=audioPcm,proto3" json:"audio_pcm,omitempty"`        // raw PCM, 16-bit signed mono, 16000 Hz
 	SampleRate int32                  `protobuf:"varint,4,opt,name=sample_rate,json=sampleRate,proto3" json:"sample_rate,omitempty"` // sample rate of the audio (typically 16000)
-	// Optional: speaker identity provided by an upstream speaker-ID service.
+	// Optional: speaker identity (Hannah users.id) provided by an upstream speaker-ID service.
 	// Empty = anonymous (Hannah treats as unknown user).
-	SpeakerRoomieId string `protobuf:"bytes,5,opt,name=speaker_roomie_id,json=speakerRoomieId,proto3" json:"speaker_roomie_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	SpeakerUserId string `protobuf:"bytes,5,opt,name=speaker_user_id,json=speakerUserId,proto3" json:"speaker_user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitSatelliteAudioRequest) Reset() {
@@ -2195,9 +2190,9 @@ func (x *SubmitSatelliteAudioRequest) GetSampleRate() int32 {
 	return 0
 }
 
-func (x *SubmitSatelliteAudioRequest) GetSpeakerRoomieId() string {
+func (x *SubmitSatelliteAudioRequest) GetSpeakerUserId() string {
 	if x != nil {
-		return x.SpeakerRoomieId
+		return x.SpeakerUserId
 	}
 	return ""
 }
@@ -2583,7 +2578,7 @@ func (x *ProvisionSatelliteRequest) GetRoomId() string {
 
 type EnrollVoiceprintRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RoomieId      string                 `protobuf:"bytes,1,opt,name=roomie_id,json=roomieId,proto3" json:"roomie_id,omitempty"`        // whose voice this sample belongs to
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`              // Hannah user this voice sample belongs to (users.id, stable)
 	AudioPcm      []byte                 `protobuf:"bytes,2,opt,name=audio_pcm,json=audioPcm,proto3" json:"audio_pcm,omitempty"`        // raw PCM, 16-bit signed mono
 	SampleRate    int32                  `protobuf:"varint,3,opt,name=sample_rate,json=sampleRate,proto3" json:"sample_rate,omitempty"` // e.g. 16000
 	unknownFields protoimpl.UnknownFields
@@ -2620,9 +2615,9 @@ func (*EnrollVoiceprintRequest) Descriptor() ([]byte, []int) {
 	return file_hannah_proto_rawDescGZIP(), []int{39}
 }
 
-func (x *EnrollVoiceprintRequest) GetRoomieId() string {
+func (x *EnrollVoiceprintRequest) GetUserId() string {
 	if x != nil {
-		return x.RoomieId
+		return x.UserId
 	}
 	return ""
 }
@@ -3178,6 +3173,7 @@ type AgentCommand struct {
 	//	*AgentCommand_SensorUpdate
 	//	*AgentCommand_ResidentAnswered
 	//	*AgentCommand_SatelliteDeleted
+	//	*AgentCommand_SetResidentMood
 	Command       isAgentCommand_Command `protobuf_oneof:"command"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3310,6 +3306,15 @@ func (x *AgentCommand) GetSatelliteDeleted() *AgentSatelliteDeleted {
 	return nil
 }
 
+func (x *AgentCommand) GetSetResidentMood() *AgentSetResidentMood {
+	if x != nil {
+		if x, ok := x.Command.(*AgentCommand_SetResidentMood); ok {
+			return x.SetResidentMood
+		}
+	}
+	return nil
+}
+
 type isAgentCommand_Command interface {
 	isAgentCommand_Command()
 }
@@ -3354,6 +3359,10 @@ type AgentCommand_SatelliteDeleted struct {
 	SatelliteDeleted *AgentSatelliteDeleted `protobuf:"bytes,10,opt,name=satellite_deleted,json=satelliteDeleted,proto3,oneof"` // Hannah Core deleted a satellite — adapter must remove its object tree
 }
 
+type AgentCommand_SetResidentMood struct {
+	SetResidentMood *AgentSetResidentMood `protobuf:"bytes,11,opt,name=set_resident_mood,json=setResidentMood,proto3,oneof"` // Hannah wants to set a resident's mood, independent of presence
+}
+
 func (*AgentCommand_SetState) isAgentCommand_Command() {}
 
 func (*AgentCommand_WatchMore) isAgentCommand_Command() {}
@@ -3373,6 +3382,8 @@ func (*AgentCommand_SensorUpdate) isAgentCommand_Command() {}
 func (*AgentCommand_ResidentAnswered) isAgentCommand_Command() {}
 
 func (*AgentCommand_SatelliteDeleted) isAgentCommand_Command() {}
+
+func (*AgentCommand_SetResidentMood) isAgentCommand_Command() {}
 
 type AgentFirmwareEvent struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -3598,6 +3609,69 @@ func (x *AgentSetResident) GetType() ResidentType {
 	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
 }
 
+// Hannah instructs the adapter to set a resident's mood — separate command from
+// AgentSetResident so it can fire independent of any presence change (e.g. when a
+// Hannah User's linked mood changes without an arrival/departure).
+type AgentSetResidentMood struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ResidentId    string                 `protobuf:"bytes,1,opt,name=resident_id,json=residentId,proto3" json:"resident_id,omitempty"` // e.g. "leonie", "hannah"
+	Mood          int32                  `protobuf:"varint,2,opt,name=mood,proto3" json:"mood,omitempty"`
+	Type          ResidentType           `protobuf:"varint,3,opt,name=type,proto3,enum=hannah.ResidentType" json:"type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentSetResidentMood) Reset() {
+	*x = AgentSetResidentMood{}
+	mi := &file_hannah_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentSetResidentMood) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentSetResidentMood) ProtoMessage() {}
+
+func (x *AgentSetResidentMood) ProtoReflect() protoreflect.Message {
+	mi := &file_hannah_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentSetResidentMood.ProtoReflect.Descriptor instead.
+func (*AgentSetResidentMood) Descriptor() ([]byte, []int) {
+	return file_hannah_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *AgentSetResidentMood) GetResidentId() string {
+	if x != nil {
+		return x.ResidentId
+	}
+	return ""
+}
+
+func (x *AgentSetResidentMood) GetMood() int32 {
+	if x != nil {
+		return x.Mood
+	}
+	return 0
+}
+
+func (x *AgentSetResidentMood) GetType() ResidentType {
+	if x != nil {
+		return x.Type
+	}
+	return ResidentType_RESIDENT_TYPE_UNSPECIFIED
+}
+
 // Hannah notifies the adapter that a satellite registered or disconnected,
 // or that a satellite's volume or mute state changed.
 // The adapter updates hannah.<instance>.satellites.rooms.<room_id>.* states accordingly.
@@ -3616,7 +3690,7 @@ type AgentSatelliteUpdate struct {
 
 func (x *AgentSatelliteUpdate) Reset() {
 	*x = AgentSatelliteUpdate{}
-	mi := &file_hannah_proto_msgTypes[50]
+	mi := &file_hannah_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3628,7 +3702,7 @@ func (x *AgentSatelliteUpdate) String() string {
 func (*AgentSatelliteUpdate) ProtoMessage() {}
 
 func (x *AgentSatelliteUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[50]
+	mi := &file_hannah_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3641,7 +3715,7 @@ func (x *AgentSatelliteUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentSatelliteUpdate.ProtoReflect.Descriptor instead.
 func (*AgentSatelliteUpdate) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{50}
+	return file_hannah_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *AgentSatelliteUpdate) GetDeviceId() string {
@@ -3706,7 +3780,7 @@ type AgentSatelliteDeleted struct {
 
 func (x *AgentSatelliteDeleted) Reset() {
 	*x = AgentSatelliteDeleted{}
-	mi := &file_hannah_proto_msgTypes[51]
+	mi := &file_hannah_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3718,7 +3792,7 @@ func (x *AgentSatelliteDeleted) String() string {
 func (*AgentSatelliteDeleted) ProtoMessage() {}
 
 func (x *AgentSatelliteDeleted) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[51]
+	mi := &file_hannah_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3731,7 +3805,7 @@ func (x *AgentSatelliteDeleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentSatelliteDeleted.ProtoReflect.Descriptor instead.
 func (*AgentSatelliteDeleted) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{51}
+	return file_hannah_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *AgentSatelliteDeleted) GetDeviceId() string {
@@ -3760,7 +3834,7 @@ type AgentTextAnswer struct {
 
 func (x *AgentTextAnswer) Reset() {
 	*x = AgentTextAnswer{}
-	mi := &file_hannah_proto_msgTypes[52]
+	mi := &file_hannah_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3772,7 +3846,7 @@ func (x *AgentTextAnswer) String() string {
 func (*AgentTextAnswer) ProtoMessage() {}
 
 func (x *AgentTextAnswer) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[52]
+	mi := &file_hannah_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3785,7 +3859,7 @@ func (x *AgentTextAnswer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentTextAnswer.ProtoReflect.Descriptor instead.
 func (*AgentTextAnswer) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{52}
+	return file_hannah_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *AgentTextAnswer) GetText() string {
@@ -3816,7 +3890,7 @@ type AgentNotification struct {
 
 func (x *AgentNotification) Reset() {
 	*x = AgentNotification{}
-	mi := &file_hannah_proto_msgTypes[53]
+	mi := &file_hannah_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3828,7 +3902,7 @@ func (x *AgentNotification) String() string {
 func (*AgentNotification) ProtoMessage() {}
 
 func (x *AgentNotification) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[53]
+	mi := &file_hannah_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3841,7 +3915,7 @@ func (x *AgentNotification) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentNotification.ProtoReflect.Descriptor instead.
 func (*AgentNotification) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{53}
+	return file_hannah_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *AgentNotification) GetText() string {
@@ -3875,7 +3949,7 @@ type AgentStateValue struct {
 
 func (x *AgentStateValue) Reset() {
 	*x = AgentStateValue{}
-	mi := &file_hannah_proto_msgTypes[54]
+	mi := &file_hannah_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3887,7 +3961,7 @@ func (x *AgentStateValue) String() string {
 func (*AgentStateValue) ProtoMessage() {}
 
 func (x *AgentStateValue) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[54]
+	mi := &file_hannah_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3900,7 +3974,7 @@ func (x *AgentStateValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentStateValue.ProtoReflect.Descriptor instead.
 func (*AgentStateValue) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{54}
+	return file_hannah_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *AgentStateValue) GetValue() string {
@@ -3934,7 +4008,7 @@ type AgentDevice struct {
 
 func (x *AgentDevice) Reset() {
 	*x = AgentDevice{}
-	mi := &file_hannah_proto_msgTypes[55]
+	mi := &file_hannah_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3946,7 +4020,7 @@ func (x *AgentDevice) String() string {
 func (*AgentDevice) ProtoMessage() {}
 
 func (x *AgentDevice) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[55]
+	mi := &file_hannah_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3959,7 +4033,7 @@ func (x *AgentDevice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentDevice.ProtoReflect.Descriptor instead.
 func (*AgentDevice) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{55}
+	return file_hannah_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *AgentDevice) GetStateId() string {
@@ -4028,7 +4102,7 @@ type AgentDeviceSnapshot struct {
 
 func (x *AgentDeviceSnapshot) Reset() {
 	*x = AgentDeviceSnapshot{}
-	mi := &file_hannah_proto_msgTypes[56]
+	mi := &file_hannah_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4040,7 +4114,7 @@ func (x *AgentDeviceSnapshot) String() string {
 func (*AgentDeviceSnapshot) ProtoMessage() {}
 
 func (x *AgentDeviceSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[56]
+	mi := &file_hannah_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4053,7 +4127,7 @@ func (x *AgentDeviceSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentDeviceSnapshot.ProtoReflect.Descriptor instead.
 func (*AgentDeviceSnapshot) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{56}
+	return file_hannah_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *AgentDeviceSnapshot) GetDevices() []*AgentDevice {
@@ -4076,7 +4150,7 @@ type AgentRoom struct {
 
 func (x *AgentRoom) Reset() {
 	*x = AgentRoom{}
-	mi := &file_hannah_proto_msgTypes[57]
+	mi := &file_hannah_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4088,7 +4162,7 @@ func (x *AgentRoom) String() string {
 func (*AgentRoom) ProtoMessage() {}
 
 func (x *AgentRoom) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[57]
+	mi := &file_hannah_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4101,7 +4175,7 @@ func (x *AgentRoom) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentRoom.ProtoReflect.Descriptor instead.
 func (*AgentRoom) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{57}
+	return file_hannah_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *AgentRoom) GetRoomId() string {
@@ -4129,7 +4203,7 @@ type AgentRoomSnapshot struct {
 
 func (x *AgentRoomSnapshot) Reset() {
 	*x = AgentRoomSnapshot{}
-	mi := &file_hannah_proto_msgTypes[58]
+	mi := &file_hannah_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4141,7 +4215,7 @@ func (x *AgentRoomSnapshot) String() string {
 func (*AgentRoomSnapshot) ProtoMessage() {}
 
 func (x *AgentRoomSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[58]
+	mi := &file_hannah_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4154,7 +4228,7 @@ func (x *AgentRoomSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentRoomSnapshot.ProtoReflect.Descriptor instead.
 func (*AgentRoomSnapshot) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{58}
+	return file_hannah_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *AgentRoomSnapshot) GetRooms() []*AgentRoom {
@@ -4178,7 +4252,7 @@ type AgentResident struct {
 
 func (x *AgentResident) Reset() {
 	*x = AgentResident{}
-	mi := &file_hannah_proto_msgTypes[59]
+	mi := &file_hannah_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4190,7 +4264,7 @@ func (x *AgentResident) String() string {
 func (*AgentResident) ProtoMessage() {}
 
 func (x *AgentResident) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[59]
+	mi := &file_hannah_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4203,7 +4277,7 @@ func (x *AgentResident) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentResident.ProtoReflect.Descriptor instead.
 func (*AgentResident) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{59}
+	return file_hannah_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *AgentResident) GetRoomieId() string {
@@ -4251,7 +4325,7 @@ type AgentResidentSnapshot struct {
 
 func (x *AgentResidentSnapshot) Reset() {
 	*x = AgentResidentSnapshot{}
-	mi := &file_hannah_proto_msgTypes[60]
+	mi := &file_hannah_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4263,7 +4337,7 @@ func (x *AgentResidentSnapshot) String() string {
 func (*AgentResidentSnapshot) ProtoMessage() {}
 
 func (x *AgentResidentSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[60]
+	mi := &file_hannah_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4276,7 +4350,7 @@ func (x *AgentResidentSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentResidentSnapshot.ProtoReflect.Descriptor instead.
 func (*AgentResidentSnapshot) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{60}
+	return file_hannah_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *AgentResidentSnapshot) GetResidents() []*AgentResident {
@@ -4297,7 +4371,7 @@ type AgentAskResident struct {
 
 func (x *AgentAskResident) Reset() {
 	*x = AgentAskResident{}
-	mi := &file_hannah_proto_msgTypes[61]
+	mi := &file_hannah_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4309,7 +4383,7 @@ func (x *AgentAskResident) String() string {
 func (*AgentAskResident) ProtoMessage() {}
 
 func (x *AgentAskResident) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[61]
+	mi := &file_hannah_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4322,7 +4396,7 @@ func (x *AgentAskResident) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentAskResident.ProtoReflect.Descriptor instead.
 func (*AgentAskResident) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{61}
+	return file_hannah_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *AgentAskResident) GetCorrelationId() string {
@@ -4356,7 +4430,7 @@ type AgentResidentAnswered struct {
 
 func (x *AgentResidentAnswered) Reset() {
 	*x = AgentResidentAnswered{}
-	mi := &file_hannah_proto_msgTypes[62]
+	mi := &file_hannah_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4368,7 +4442,7 @@ func (x *AgentResidentAnswered) String() string {
 func (*AgentResidentAnswered) ProtoMessage() {}
 
 func (x *AgentResidentAnswered) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[62]
+	mi := &file_hannah_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4381,7 +4455,7 @@ func (x *AgentResidentAnswered) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentResidentAnswered.ProtoReflect.Descriptor instead.
 func (*AgentResidentAnswered) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{62}
+	return file_hannah_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *AgentResidentAnswered) GetCorrelationId() string {
@@ -4414,7 +4488,7 @@ type AgentBleUpdate struct {
 
 func (x *AgentBleUpdate) Reset() {
 	*x = AgentBleUpdate{}
-	mi := &file_hannah_proto_msgTypes[63]
+	mi := &file_hannah_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4426,7 +4500,7 @@ func (x *AgentBleUpdate) String() string {
 func (*AgentBleUpdate) ProtoMessage() {}
 
 func (x *AgentBleUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[63]
+	mi := &file_hannah_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4439,7 +4513,7 @@ func (x *AgentBleUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentBleUpdate.ProtoReflect.Descriptor instead.
 func (*AgentBleUpdate) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{63}
+	return file_hannah_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *AgentBleUpdate) GetLabel() string {
@@ -4497,7 +4571,7 @@ type AgentSensorUpdate struct {
 
 func (x *AgentSensorUpdate) Reset() {
 	*x = AgentSensorUpdate{}
-	mi := &file_hannah_proto_msgTypes[64]
+	mi := &file_hannah_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4509,7 +4583,7 @@ func (x *AgentSensorUpdate) String() string {
 func (*AgentSensorUpdate) ProtoMessage() {}
 
 func (x *AgentSensorUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[64]
+	mi := &file_hannah_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4522,7 +4596,7 @@ func (x *AgentSensorUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentSensorUpdate.ProtoReflect.Descriptor instead.
 func (*AgentSensorUpdate) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{64}
+	return file_hannah_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *AgentSensorUpdate) GetDevice() string {
@@ -4594,7 +4668,7 @@ type SatelliteCaptureRequest struct {
 
 func (x *SatelliteCaptureRequest) Reset() {
 	*x = SatelliteCaptureRequest{}
-	mi := &file_hannah_proto_msgTypes[65]
+	mi := &file_hannah_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4606,7 +4680,7 @@ func (x *SatelliteCaptureRequest) String() string {
 func (*SatelliteCaptureRequest) ProtoMessage() {}
 
 func (x *SatelliteCaptureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[65]
+	mi := &file_hannah_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4619,7 +4693,7 @@ func (x *SatelliteCaptureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SatelliteCaptureRequest.ProtoReflect.Descriptor instead.
 func (*SatelliteCaptureRequest) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{65}
+	return file_hannah_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *SatelliteCaptureRequest) GetDeviceId() string {
@@ -4646,7 +4720,7 @@ type TriggerPlinkRequest struct {
 
 func (x *TriggerPlinkRequest) Reset() {
 	*x = TriggerPlinkRequest{}
-	mi := &file_hannah_proto_msgTypes[66]
+	mi := &file_hannah_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4658,7 +4732,7 @@ func (x *TriggerPlinkRequest) String() string {
 func (*TriggerPlinkRequest) ProtoMessage() {}
 
 func (x *TriggerPlinkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[66]
+	mi := &file_hannah_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4671,7 +4745,7 @@ func (x *TriggerPlinkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerPlinkRequest.ProtoReflect.Descriptor instead.
 func (*TriggerPlinkRequest) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{66}
+	return file_hannah_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *TriggerPlinkRequest) GetDeviceId() string {
@@ -4699,7 +4773,7 @@ type SatelliteCaptureResponse struct {
 
 func (x *SatelliteCaptureResponse) Reset() {
 	*x = SatelliteCaptureResponse{}
-	mi := &file_hannah_proto_msgTypes[67]
+	mi := &file_hannah_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4711,7 +4785,7 @@ func (x *SatelliteCaptureResponse) String() string {
 func (*SatelliteCaptureResponse) ProtoMessage() {}
 
 func (x *SatelliteCaptureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[67]
+	mi := &file_hannah_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4724,7 +4798,7 @@ func (x *SatelliteCaptureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SatelliteCaptureResponse.ProtoReflect.Descriptor instead.
 func (*SatelliteCaptureResponse) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{67}
+	return file_hannah_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *SatelliteCaptureResponse) GetOk() bool {
@@ -4755,7 +4829,7 @@ type SatelliteAudioChunk struct {
 
 func (x *SatelliteAudioChunk) Reset() {
 	*x = SatelliteAudioChunk{}
-	mi := &file_hannah_proto_msgTypes[68]
+	mi := &file_hannah_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4767,7 +4841,7 @@ func (x *SatelliteAudioChunk) String() string {
 func (*SatelliteAudioChunk) ProtoMessage() {}
 
 func (x *SatelliteAudioChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[68]
+	mi := &file_hannah_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4780,7 +4854,7 @@ func (x *SatelliteAudioChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SatelliteAudioChunk.ProtoReflect.Descriptor instead.
 func (*SatelliteAudioChunk) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{68}
+	return file_hannah_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *SatelliteAudioChunk) GetPcm() []byte {
@@ -4821,7 +4895,7 @@ type TimerCommand struct {
 
 func (x *TimerCommand) Reset() {
 	*x = TimerCommand{}
-	mi := &file_hannah_proto_msgTypes[69]
+	mi := &file_hannah_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4833,7 +4907,7 @@ func (x *TimerCommand) String() string {
 func (*TimerCommand) ProtoMessage() {}
 
 func (x *TimerCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[69]
+	mi := &file_hannah_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4846,7 +4920,7 @@ func (x *TimerCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerCommand.ProtoReflect.Descriptor instead.
 func (*TimerCommand) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{69}
+	return file_hannah_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *TimerCommand) GetCommand() isTimerCommand_Command {
@@ -4946,7 +5020,7 @@ type TimerReady struct {
 
 func (x *TimerReady) Reset() {
 	*x = TimerReady{}
-	mi := &file_hannah_proto_msgTypes[70]
+	mi := &file_hannah_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4958,7 +5032,7 @@ func (x *TimerReady) String() string {
 func (*TimerReady) ProtoMessage() {}
 
 func (x *TimerReady) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[70]
+	mi := &file_hannah_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4971,7 +5045,7 @@ func (x *TimerReady) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerReady.ProtoReflect.Descriptor instead.
 func (*TimerReady) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{70}
+	return file_hannah_proto_rawDescGZIP(), []int{71}
 }
 
 // Hannah signals a temporary degraded state — the Timer Service should hold
@@ -4986,7 +5060,7 @@ type TimerNotReady struct {
 
 func (x *TimerNotReady) Reset() {
 	*x = TimerNotReady{}
-	mi := &file_hannah_proto_msgTypes[71]
+	mi := &file_hannah_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4998,7 +5072,7 @@ func (x *TimerNotReady) String() string {
 func (*TimerNotReady) ProtoMessage() {}
 
 func (x *TimerNotReady) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[71]
+	mi := &file_hannah_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5011,7 +5085,7 @@ func (x *TimerNotReady) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerNotReady.ProtoReflect.Descriptor instead.
 func (*TimerNotReady) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{71}
+	return file_hannah_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *TimerNotReady) GetReason() string {
@@ -5035,7 +5109,7 @@ type TimerCreate struct {
 
 func (x *TimerCreate) Reset() {
 	*x = TimerCreate{}
-	mi := &file_hannah_proto_msgTypes[72]
+	mi := &file_hannah_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5047,7 +5121,7 @@ func (x *TimerCreate) String() string {
 func (*TimerCreate) ProtoMessage() {}
 
 func (x *TimerCreate) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[72]
+	mi := &file_hannah_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5060,7 +5134,7 @@ func (x *TimerCreate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerCreate.ProtoReflect.Descriptor instead.
 func (*TimerCreate) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{72}
+	return file_hannah_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *TimerCreate) GetTimerId() string {
@@ -5108,7 +5182,7 @@ type TimerCancel struct {
 
 func (x *TimerCancel) Reset() {
 	*x = TimerCancel{}
-	mi := &file_hannah_proto_msgTypes[73]
+	mi := &file_hannah_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5120,7 +5194,7 @@ func (x *TimerCancel) String() string {
 func (*TimerCancel) ProtoMessage() {}
 
 func (x *TimerCancel) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[73]
+	mi := &file_hannah_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5133,7 +5207,7 @@ func (x *TimerCancel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerCancel.ProtoReflect.Descriptor instead.
 func (*TimerCancel) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{73}
+	return file_hannah_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *TimerCancel) GetTimerId() string {
@@ -5152,7 +5226,7 @@ type TimerListRequest struct {
 
 func (x *TimerListRequest) Reset() {
 	*x = TimerListRequest{}
-	mi := &file_hannah_proto_msgTypes[74]
+	mi := &file_hannah_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5164,7 +5238,7 @@ func (x *TimerListRequest) String() string {
 func (*TimerListRequest) ProtoMessage() {}
 
 func (x *TimerListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[74]
+	mi := &file_hannah_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5177,7 +5251,7 @@ func (x *TimerListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerListRequest.ProtoReflect.Descriptor instead.
 func (*TimerListRequest) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{74}
+	return file_hannah_proto_rawDescGZIP(), []int{75}
 }
 
 // Sent by the Timer Service over the TimerConnect stream.
@@ -5195,7 +5269,7 @@ type TimerMessage struct {
 
 func (x *TimerMessage) Reset() {
 	*x = TimerMessage{}
-	mi := &file_hannah_proto_msgTypes[75]
+	mi := &file_hannah_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5207,7 +5281,7 @@ func (x *TimerMessage) String() string {
 func (*TimerMessage) ProtoMessage() {}
 
 func (x *TimerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[75]
+	mi := &file_hannah_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5220,7 +5294,7 @@ func (x *TimerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerMessage.ProtoReflect.Descriptor instead.
 func (*TimerMessage) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{75}
+	return file_hannah_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *TimerMessage) GetPayload() isTimerMessage_Payload {
@@ -5290,7 +5364,7 @@ type TimerAck struct {
 
 func (x *TimerAck) Reset() {
 	*x = TimerAck{}
-	mi := &file_hannah_proto_msgTypes[76]
+	mi := &file_hannah_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5302,7 +5376,7 @@ func (x *TimerAck) String() string {
 func (*TimerAck) ProtoMessage() {}
 
 func (x *TimerAck) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[76]
+	mi := &file_hannah_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5315,7 +5389,7 @@ func (x *TimerAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerAck.ProtoReflect.Descriptor instead.
 func (*TimerAck) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{76}
+	return file_hannah_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *TimerAck) GetMessage() string {
@@ -5344,7 +5418,7 @@ type TimerFired struct {
 
 func (x *TimerFired) Reset() {
 	*x = TimerFired{}
-	mi := &file_hannah_proto_msgTypes[77]
+	mi := &file_hannah_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5356,7 +5430,7 @@ func (x *TimerFired) String() string {
 func (*TimerFired) ProtoMessage() {}
 
 func (x *TimerFired) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[77]
+	mi := &file_hannah_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5369,7 +5443,7 @@ func (x *TimerFired) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerFired.ProtoReflect.Descriptor instead.
 func (*TimerFired) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{77}
+	return file_hannah_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *TimerFired) GetTimerId() string {
@@ -5396,7 +5470,7 @@ type TimerListResponse struct {
 
 func (x *TimerListResponse) Reset() {
 	*x = TimerListResponse{}
-	mi := &file_hannah_proto_msgTypes[78]
+	mi := &file_hannah_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5408,7 +5482,7 @@ func (x *TimerListResponse) String() string {
 func (*TimerListResponse) ProtoMessage() {}
 
 func (x *TimerListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[78]
+	mi := &file_hannah_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5421,7 +5495,7 @@ func (x *TimerListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerListResponse.ProtoReflect.Descriptor instead.
 func (*TimerListResponse) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{78}
+	return file_hannah_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *TimerListResponse) GetTimers() []*TimerInfo {
@@ -5444,7 +5518,7 @@ type TimerInfo struct {
 
 func (x *TimerInfo) Reset() {
 	*x = TimerInfo{}
-	mi := &file_hannah_proto_msgTypes[79]
+	mi := &file_hannah_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5456,7 +5530,7 @@ func (x *TimerInfo) String() string {
 func (*TimerInfo) ProtoMessage() {}
 
 func (x *TimerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_hannah_proto_msgTypes[79]
+	mi := &file_hannah_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5469,7 +5543,7 @@ func (x *TimerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimerInfo.ProtoReflect.Descriptor instead.
 func (*TimerInfo) Descriptor() ([]byte, []int) {
-	return file_hannah_proto_rawDescGZIP(), []int{79}
+	return file_hannah_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *TimerInfo) GetTimerId() string {
@@ -5515,10 +5589,10 @@ const file_hannah_proto_rawDesc = "" +
 	"\x05Empty\":\n" +
 	"\x0eStatusResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xca\x02\n" +
-	"\x04User\x12\x12\n" +
-	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x1b\n" +
-	"\troomie_id\x18\x02 \x01(\tR\broomieId\x12!\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xc6\x02\n" +
+	"\x04User\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tuser_name\x18\x02 \x01(\tR\buserName\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1f\n" +
 	"\vtrust_level\x18\x04 \x01(\x05R\n" +
 	"trustLevel\x12\x16\n" +
@@ -5531,38 +5605,37 @@ const file_hannah_proto_rawDesc = "" +
 	"\x0fGetUsersRequest\x12)\n" +
 	"\x10include_inactive\x18\x01 \x01(\bR\x0fincludeInactive\"6\n" +
 	"\x10GetUsersResponse\x12\"\n" +
-	"\x05users\x18\x01 \x03(\v2\f.hannah.UserR\x05users\"\xbf\x01\n" +
+	"\x05users\x18\x01 \x03(\v2\f.hannah.UserR\x05users\"\xbb\x01\n" +
 	"\x0eGetUserRequest\x12\x1d\n" +
-	"\troomie_id\x18\x01 \x01(\tH\x00R\broomieId\x12\x14\n" +
-	"\x04uuid\x18\x02 \x01(\tH\x00R\x04uuid\x12D\n" +
+	"\tuser_name\x18\x01 \x01(\tH\x00R\buserName\x12\x10\n" +
+	"\x02id\x18\x02 \x01(\tH\x00R\x02id\x12D\n" +
 	"\x0elinked_account\x18\x03 \x01(\v2\x1b.hannah.LinkedAccountLookupH\x00R\rlinkedAccount\x12(\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x14.hannah.ResidentTypeR\x04typeB\b\n" +
-	"\x06lookup\"N\n" +
-	"\x13LinkedAccountLookup\x12\x18\n" +
-	"\aservice\x18\x01 \x01(\tR\aservice\x12\x1d\n" +
-	"\n" +
-	"account_id\x18\x02 \x01(\tR\taccountId\"F\n" +
+	"\x06lookup\"R\n" +
+	"\x13LinkedAccountLookup\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x1f\n" +
+	"\vexternal_id\x18\x02 \x01(\tR\n" +
+	"externalId\"F\n" +
 	"\fUserResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12 \n" +
-	"\x04user\x18\x02 \x01(\v2\f.hannah.UserR\x04user\"\x94\x01\n" +
-	"\x12LinkAccountRequest\x12\x1b\n" +
-	"\troomie_id\x18\x01 \x01(\tR\broomieId\x12\x18\n" +
+	"\x04user\x18\x02 \x01(\v2\f.hannah.UserR\x04user\"\x91\x01\n" +
+	"\x12LinkAccountRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\x03 \x01(\tR\taccountId\x12(\n" +
-	"\x04type\x18\x04 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"O\n" +
-	"\x14UnlinkAccountRequest\x12\x18\n" +
-	"\aservice\x18\x01 \x01(\tR\aservice\x12\x1d\n" +
+	"account_id\x18\x03 \x01(\tR\taccountId\x12)\n" +
+	"\x10provider_payload\x18\x04 \x01(\tR\x0fproviderPayload\"h\n" +
+	"\x14UnlinkAccountRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x18\n" +
+	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\x02 \x01(\tR\taccountId\"s\n" +
-	"\x14SetTrustLevelRequest\x12\x1b\n" +
-	"\troomie_id\x18\x01 \x01(\tR\broomieId\x12\x14\n" +
-	"\x05level\x18\x02 \x01(\x05R\x05level\x12(\n" +
-	"\x04type\x18\x03 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"{\n" +
-	"\x18SetSystemMessagesRequest\x12\x1b\n" +
-	"\troomie_id\x18\x01 \x01(\tR\broomieId\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\x12(\n" +
-	"\x04type\x18\x03 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"t\n" +
+	"account_id\x18\x03 \x01(\tR\taccountId\"E\n" +
+	"\x14SetTrustLevelRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
+	"\x05level\x18\x02 \x01(\x05R\x05level\"M\n" +
+	"\x18SetSystemMessagesRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x18\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\"t\n" +
 	"\x11SubmitTextRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12%\n" +
 	"\x0esource_service\x18\x02 \x01(\tR\rsourceService\x12$\n" +
@@ -5668,14 +5741,14 @@ const file_hannah_proto_rawDesc = "" +
 	"\taudio_pcm\x18\x02 \x01(\fR\baudioPcm\x12\x1f\n" +
 	"\vsample_rate\x18\x03 \x01(\x05R\n" +
 	"sampleRate\x12\x17\n" +
-	"\ais_last\x18\x04 \x01(\bR\x06isLast\"\xb8\x01\n" +
+	"\ais_last\x18\x04 \x01(\bR\x06isLast\"\xb4\x01\n" +
 	"\x1bSubmitSatelliteAudioRequest\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
 	"\x04room\x18\x02 \x01(\tR\x04room\x12\x1b\n" +
 	"\taudio_pcm\x18\x03 \x01(\fR\baudioPcm\x12\x1f\n" +
 	"\vsample_rate\x18\x04 \x01(\x05R\n" +
-	"sampleRate\x12*\n" +
-	"\x11speaker_roomie_id\x18\x05 \x01(\tR\x0fspeakerRoomieId\"\xb5\x01\n" +
+	"sampleRate\x12&\n" +
+	"\x0fspeaker_user_id\x18\x05 \x01(\tR\rspeakerUserId\"\xb5\x01\n" +
 	"\x1cSubmitSatelliteAudioResponse\x12\x1e\n" +
 	"\n" +
 	"transcript\x18\x01 \x01(\tR\n" +
@@ -5709,9 +5782,9 @@ const file_hannah_proto_rawDesc = "" +
 	"\x19ProvisionSatelliteRequest\x12\x12\n" +
 	"\x04seed\x18\x01 \x01(\tR\x04seed\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x17\n" +
-	"\aroom_id\x18\x03 \x01(\tR\x06roomId\"t\n" +
-	"\x17EnrollVoiceprintRequest\x12\x1b\n" +
-	"\troomie_id\x18\x01 \x01(\tR\broomieId\x12\x1b\n" +
+	"\aroom_id\x18\x03 \x01(\tR\x06roomId\"p\n" +
+	"\x17EnrollVoiceprintRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\taudio_pcm\x18\x02 \x01(\fR\baudioPcm\x12\x1f\n" +
 	"\vsample_rate\x18\x03 \x01(\x05R\n" +
 	"sampleRate\"|\n" +
@@ -5746,7 +5819,7 @@ const file_hannah_proto_rawDesc = "" +
 	"\x03ack\x18\x03 \x01(\bR\x03ack\x12\x0e\n" +
 	"\x02ts\x18\x04 \x01(\x03R\x02ts\"&\n" +
 	"\x10AgentTextCommand\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text\"\xaa\x05\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\"\xf6\x05\n" +
 	"\fAgentCommand\x124\n" +
 	"\tset_state\x18\x01 \x01(\v2\x15.hannah.AgentSetStateH\x00R\bsetState\x127\n" +
 	"\n" +
@@ -5761,7 +5834,8 @@ const file_hannah_proto_rawDesc = "" +
 	"\rsensor_update\x18\b \x01(\v2\x19.hannah.AgentSensorUpdateH\x00R\fsensorUpdate\x12L\n" +
 	"\x11resident_answered\x18\t \x01(\v2\x1d.hannah.AgentResidentAnsweredH\x00R\x10residentAnswered\x12L\n" +
 	"\x11satellite_deleted\x18\n" +
-	" \x01(\v2\x1d.hannah.AgentSatelliteDeletedH\x00R\x10satelliteDeletedB\t\n" +
+	" \x01(\v2\x1d.hannah.AgentSatelliteDeletedH\x00R\x10satelliteDeleted\x12J\n" +
+	"\x11set_resident_mood\x18\v \x01(\v2\x1c.hannah.AgentSetResidentMoodH\x00R\x0fsetResidentMoodB\t\n" +
 	"\acommand\"q\n" +
 	"\x12AgentFirmwareEvent\x12\x16\n" +
 	"\x06device\x18\x01 \x01(\tR\x06device\x12\x18\n" +
@@ -5776,6 +5850,11 @@ const file_hannah_proto_rawDesc = "" +
 	"\vresident_id\x18\x01 \x01(\tR\n" +
 	"residentId\x12%\n" +
 	"\x0epresence_state\x18\x02 \x01(\x05R\rpresenceState\x12(\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"u\n" +
+	"\x14AgentSetResidentMood\x12\x1f\n" +
+	"\vresident_id\x18\x01 \x01(\tR\n" +
+	"residentId\x12\x12\n" +
+	"\x04mood\x18\x02 \x01(\x05R\x04mood\x12(\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x14.hannah.ResidentTypeR\x04type\"\xf4\x01\n" +
 	"\x14AgentSatelliteUpdate\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x12\n" +
@@ -5969,7 +6048,7 @@ func file_hannah_proto_rawDescGZIP() []byte {
 }
 
 var file_hannah_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_hannah_proto_msgTypes = make([]protoimpl.MessageInfo, 86)
+var file_hannah_proto_msgTypes = make([]protoimpl.MessageInfo, 87)
 var file_hannah_proto_goTypes = []any{
 	(ResidentType)(0),                    // 0: hannah.ResidentType
 	(*Empty)(nil),                        // 1: hannah.Empty
@@ -6022,164 +6101,164 @@ var file_hannah_proto_goTypes = []any{
 	(*AgentSetState)(nil),                // 48: hannah.AgentSetState
 	(*AgentWatchMore)(nil),               // 49: hannah.AgentWatchMore
 	(*AgentSetResident)(nil),             // 50: hannah.AgentSetResident
-	(*AgentSatelliteUpdate)(nil),         // 51: hannah.AgentSatelliteUpdate
-	(*AgentSatelliteDeleted)(nil),        // 52: hannah.AgentSatelliteDeleted
-	(*AgentTextAnswer)(nil),              // 53: hannah.AgentTextAnswer
-	(*AgentNotification)(nil),            // 54: hannah.AgentNotification
-	(*AgentStateValue)(nil),              // 55: hannah.AgentStateValue
-	(*AgentDevice)(nil),                  // 56: hannah.AgentDevice
-	(*AgentDeviceSnapshot)(nil),          // 57: hannah.AgentDeviceSnapshot
-	(*AgentRoom)(nil),                    // 58: hannah.AgentRoom
-	(*AgentRoomSnapshot)(nil),            // 59: hannah.AgentRoomSnapshot
-	(*AgentResident)(nil),                // 60: hannah.AgentResident
-	(*AgentResidentSnapshot)(nil),        // 61: hannah.AgentResidentSnapshot
-	(*AgentAskResident)(nil),             // 62: hannah.AgentAskResident
-	(*AgentResidentAnswered)(nil),        // 63: hannah.AgentResidentAnswered
-	(*AgentBleUpdate)(nil),               // 64: hannah.AgentBleUpdate
-	(*AgentSensorUpdate)(nil),            // 65: hannah.AgentSensorUpdate
-	(*SatelliteCaptureRequest)(nil),      // 66: hannah.SatelliteCaptureRequest
-	(*TriggerPlinkRequest)(nil),          // 67: hannah.TriggerPlinkRequest
-	(*SatelliteCaptureResponse)(nil),     // 68: hannah.SatelliteCaptureResponse
-	(*SatelliteAudioChunk)(nil),          // 69: hannah.SatelliteAudioChunk
-	(*TimerCommand)(nil),                 // 70: hannah.TimerCommand
-	(*TimerReady)(nil),                   // 71: hannah.TimerReady
-	(*TimerNotReady)(nil),                // 72: hannah.TimerNotReady
-	(*TimerCreate)(nil),                  // 73: hannah.TimerCreate
-	(*TimerCancel)(nil),                  // 74: hannah.TimerCancel
-	(*TimerListRequest)(nil),             // 75: hannah.TimerListRequest
-	(*TimerMessage)(nil),                 // 76: hannah.TimerMessage
-	(*TimerAck)(nil),                     // 77: hannah.TimerAck
-	(*TimerFired)(nil),                   // 78: hannah.TimerFired
-	(*TimerListResponse)(nil),            // 79: hannah.TimerListResponse
-	(*TimerInfo)(nil),                    // 80: hannah.TimerInfo
-	nil,                                  // 81: hannah.User.LinkedAccountsEntry
-	nil,                                  // 82: hannah.CarStateProto.DoorsEntry
-	nil,                                  // 83: hannah.CarStateProto.WindowsEntry
-	nil,                                  // 84: hannah.DeviceInfo.CurrentEntry
-	nil,                                  // 85: hannah.AgentDevice.RoomNamesEntry
-	nil,                                  // 86: hannah.AgentRoom.DisplayNamesEntry
+	(*AgentSetResidentMood)(nil),         // 51: hannah.AgentSetResidentMood
+	(*AgentSatelliteUpdate)(nil),         // 52: hannah.AgentSatelliteUpdate
+	(*AgentSatelliteDeleted)(nil),        // 53: hannah.AgentSatelliteDeleted
+	(*AgentTextAnswer)(nil),              // 54: hannah.AgentTextAnswer
+	(*AgentNotification)(nil),            // 55: hannah.AgentNotification
+	(*AgentStateValue)(nil),              // 56: hannah.AgentStateValue
+	(*AgentDevice)(nil),                  // 57: hannah.AgentDevice
+	(*AgentDeviceSnapshot)(nil),          // 58: hannah.AgentDeviceSnapshot
+	(*AgentRoom)(nil),                    // 59: hannah.AgentRoom
+	(*AgentRoomSnapshot)(nil),            // 60: hannah.AgentRoomSnapshot
+	(*AgentResident)(nil),                // 61: hannah.AgentResident
+	(*AgentResidentSnapshot)(nil),        // 62: hannah.AgentResidentSnapshot
+	(*AgentAskResident)(nil),             // 63: hannah.AgentAskResident
+	(*AgentResidentAnswered)(nil),        // 64: hannah.AgentResidentAnswered
+	(*AgentBleUpdate)(nil),               // 65: hannah.AgentBleUpdate
+	(*AgentSensorUpdate)(nil),            // 66: hannah.AgentSensorUpdate
+	(*SatelliteCaptureRequest)(nil),      // 67: hannah.SatelliteCaptureRequest
+	(*TriggerPlinkRequest)(nil),          // 68: hannah.TriggerPlinkRequest
+	(*SatelliteCaptureResponse)(nil),     // 69: hannah.SatelliteCaptureResponse
+	(*SatelliteAudioChunk)(nil),          // 70: hannah.SatelliteAudioChunk
+	(*TimerCommand)(nil),                 // 71: hannah.TimerCommand
+	(*TimerReady)(nil),                   // 72: hannah.TimerReady
+	(*TimerNotReady)(nil),                // 73: hannah.TimerNotReady
+	(*TimerCreate)(nil),                  // 74: hannah.TimerCreate
+	(*TimerCancel)(nil),                  // 75: hannah.TimerCancel
+	(*TimerListRequest)(nil),             // 76: hannah.TimerListRequest
+	(*TimerMessage)(nil),                 // 77: hannah.TimerMessage
+	(*TimerAck)(nil),                     // 78: hannah.TimerAck
+	(*TimerFired)(nil),                   // 79: hannah.TimerFired
+	(*TimerListResponse)(nil),            // 80: hannah.TimerListResponse
+	(*TimerInfo)(nil),                    // 81: hannah.TimerInfo
+	nil,                                  // 82: hannah.User.LinkedAccountsEntry
+	nil,                                  // 83: hannah.CarStateProto.DoorsEntry
+	nil,                                  // 84: hannah.CarStateProto.WindowsEntry
+	nil,                                  // 85: hannah.DeviceInfo.CurrentEntry
+	nil,                                  // 86: hannah.AgentDevice.RoomNamesEntry
+	nil,                                  // 87: hannah.AgentRoom.DisplayNamesEntry
 }
 var file_hannah_proto_depIdxs = []int32{
-	81, // 0: hannah.User.linked_accounts:type_name -> hannah.User.LinkedAccountsEntry
+	82, // 0: hannah.User.linked_accounts:type_name -> hannah.User.LinkedAccountsEntry
 	3,  // 1: hannah.GetUsersResponse.users:type_name -> hannah.User
 	7,  // 2: hannah.GetUserRequest.linked_account:type_name -> hannah.LinkedAccountLookup
 	0,  // 3: hannah.GetUserRequest.type:type_name -> hannah.ResidentType
 	3,  // 4: hannah.UserResponse.user:type_name -> hannah.User
-	0,  // 5: hannah.LinkAccountRequest.type:type_name -> hannah.ResidentType
-	0,  // 6: hannah.SetTrustLevelRequest.type:type_name -> hannah.ResidentType
-	0,  // 7: hannah.SetSystemMessagesRequest.type:type_name -> hannah.ResidentType
-	18, // 8: hannah.GetSatellitesResponse.satellites:type_name -> hannah.Satellite
-	22, // 9: hannah.CarStateResponse.state:type_name -> hannah.CarStateProto
-	22, // 10: hannah.GetAllCarStatesResponse.states:type_name -> hannah.CarStateProto
-	82, // 11: hannah.CarStateProto.doors:type_name -> hannah.CarStateProto.DoorsEntry
-	83, // 12: hannah.CarStateProto.windows:type_name -> hannah.CarStateProto.WindowsEntry
-	22, // 13: hannah.HannahEvent.car_state:type_name -> hannah.CarStateProto
-	28, // 14: hannah.HannahEvent.resident_event:type_name -> hannah.ResidentEventProto
-	25, // 15: hannah.HannahEvent.system_notification:type_name -> hannah.SystemNotificationEvent
-	26, // 16: hannah.HannahEvent.firmware_event:type_name -> hannah.FirmwareEventProto
-	31, // 17: hannah.ProxyCommand.ack:type_name -> hannah.ProxyAck
-	32, // 18: hannah.ProxyCommand.play_audio:type_name -> hannah.PlayAudioCommand
-	84, // 19: hannah.DeviceInfo.current:type_name -> hannah.DeviceInfo.CurrentEntry
-	35, // 20: hannah.RoomInfo.devices:type_name -> hannah.DeviceInfo
-	36, // 21: hannah.GetDevicesResponse.rooms:type_name -> hannah.RoomInfo
-	44, // 22: hannah.AgentMessage.state_update:type_name -> hannah.AgentStateUpdate
-	60, // 23: hannah.AgentMessage.resident_update:type_name -> hannah.AgentResident
-	45, // 24: hannah.AgentMessage.text_command:type_name -> hannah.AgentTextCommand
-	43, // 25: hannah.AgentMessage.satellite_control:type_name -> hannah.AgentSatelliteControl
-	57, // 26: hannah.AgentMessage.send_snapshot:type_name -> hannah.AgentDeviceSnapshot
-	61, // 27: hannah.AgentMessage.send_residents:type_name -> hannah.AgentResidentSnapshot
-	62, // 28: hannah.AgentMessage.ask_resident:type_name -> hannah.AgentAskResident
-	59, // 29: hannah.AgentMessage.send_rooms:type_name -> hannah.AgentRoomSnapshot
-	48, // 30: hannah.AgentCommand.set_state:type_name -> hannah.AgentSetState
-	49, // 31: hannah.AgentCommand.watch_more:type_name -> hannah.AgentWatchMore
-	50, // 32: hannah.AgentCommand.set_resident:type_name -> hannah.AgentSetResident
-	51, // 33: hannah.AgentCommand.satellite_update:type_name -> hannah.AgentSatelliteUpdate
-	53, // 34: hannah.AgentCommand.text_answer:type_name -> hannah.AgentTextAnswer
-	47, // 35: hannah.AgentCommand.firmware_event:type_name -> hannah.AgentFirmwareEvent
-	64, // 36: hannah.AgentCommand.ble_update:type_name -> hannah.AgentBleUpdate
-	65, // 37: hannah.AgentCommand.sensor_update:type_name -> hannah.AgentSensorUpdate
-	63, // 38: hannah.AgentCommand.resident_answered:type_name -> hannah.AgentResidentAnswered
-	52, // 39: hannah.AgentCommand.satellite_deleted:type_name -> hannah.AgentSatelliteDeleted
-	0,  // 40: hannah.AgentSetResident.type:type_name -> hannah.ResidentType
-	55, // 41: hannah.AgentDevice.value:type_name -> hannah.AgentStateValue
-	85, // 42: hannah.AgentDevice.room_names:type_name -> hannah.AgentDevice.RoomNamesEntry
-	56, // 43: hannah.AgentDeviceSnapshot.devices:type_name -> hannah.AgentDevice
-	86, // 44: hannah.AgentRoom.display_names:type_name -> hannah.AgentRoom.DisplayNamesEntry
-	58, // 45: hannah.AgentRoomSnapshot.rooms:type_name -> hannah.AgentRoom
-	0,  // 46: hannah.AgentResident.type:type_name -> hannah.ResidentType
-	60, // 47: hannah.AgentResidentSnapshot.residents:type_name -> hannah.AgentResident
-	73, // 48: hannah.TimerCommand.create:type_name -> hannah.TimerCreate
-	74, // 49: hannah.TimerCommand.cancel:type_name -> hannah.TimerCancel
-	75, // 50: hannah.TimerCommand.list:type_name -> hannah.TimerListRequest
-	71, // 51: hannah.TimerCommand.ready:type_name -> hannah.TimerReady
-	72, // 52: hannah.TimerCommand.not_ready:type_name -> hannah.TimerNotReady
-	77, // 53: hannah.TimerMessage.ack:type_name -> hannah.TimerAck
-	78, // 54: hannah.TimerMessage.fired:type_name -> hannah.TimerFired
-	79, // 55: hannah.TimerMessage.list:type_name -> hannah.TimerListResponse
-	80, // 56: hannah.TimerListResponse.timers:type_name -> hannah.TimerInfo
-	4,  // 57: hannah.HannahService.GetUsers:input_type -> hannah.GetUsersRequest
-	6,  // 58: hannah.HannahService.GetUser:input_type -> hannah.GetUserRequest
-	9,  // 59: hannah.HannahService.LinkAccount:input_type -> hannah.LinkAccountRequest
-	10, // 60: hannah.HannahService.UnlinkAccount:input_type -> hannah.UnlinkAccountRequest
-	11, // 61: hannah.HannahService.SetTrustLevel:input_type -> hannah.SetTrustLevelRequest
-	12, // 62: hannah.HannahService.SetSystemMessages:input_type -> hannah.SetSystemMessagesRequest
-	1,  // 63: hannah.HannahService.GetDevices:input_type -> hannah.Empty
-	38, // 64: hannah.HannahService.ControlDevice:input_type -> hannah.ControlDeviceRequest
-	13, // 65: hannah.HannahService.SubmitText:input_type -> hannah.SubmitTextRequest
-	15, // 66: hannah.HannahService.SubmitVoice:input_type -> hannah.SubmitVoiceRequest
-	17, // 67: hannah.HannahService.Announce:input_type -> hannah.AnnounceRequest
-	54, // 68: hannah.HannahService.Notify:input_type -> hannah.AgentNotification
-	1,  // 69: hannah.HannahService.GetSatellites:input_type -> hannah.Empty
-	1,  // 70: hannah.HannahService.GetCarState:input_type -> hannah.Empty
-	1,  // 71: hannah.HannahService.GetAllCarStates:input_type -> hannah.Empty
-	23, // 72: hannah.HannahService.SubscribeEvents:input_type -> hannah.EventFilter
-	27, // 73: hannah.HannahService.TriggerFirmwareUpdate:input_type -> hannah.TriggerFirmwareUpdateRequest
-	66, // 74: hannah.HannahService.RequestSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
-	66, // 75: hannah.HannahService.ReleaseSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
-	66, // 76: hannah.HannahService.StreamSatelliteAudio:input_type -> hannah.SatelliteCaptureRequest
-	67, // 77: hannah.HannahService.TriggerPlink:input_type -> hannah.TriggerPlinkRequest
-	29, // 78: hannah.HannahService.RegisterProxy:input_type -> hannah.ProxyHeartbeat
-	33, // 79: hannah.HannahService.SubmitSatelliteAudio:input_type -> hannah.SubmitSatelliteAudioRequest
-	41, // 80: hannah.HannahService.NotifySatelliteRegistered:input_type -> hannah.SatelliteRegistration
-	41, // 81: hannah.HannahService.NotifySatelliteGone:input_type -> hannah.SatelliteRegistration
-	39, // 82: hannah.HannahService.ProvisionSatellite:input_type -> hannah.ProvisionSatelliteRequest
-	40, // 83: hannah.HannahService.EnrollVoiceprint:input_type -> hannah.EnrollVoiceprintRequest
-	76, // 84: hannah.HannahService.TimerConnect:input_type -> hannah.TimerMessage
-	42, // 85: hannah.HannahService.AgentConnect:input_type -> hannah.AgentMessage
-	5,  // 86: hannah.HannahService.GetUsers:output_type -> hannah.GetUsersResponse
-	8,  // 87: hannah.HannahService.GetUser:output_type -> hannah.UserResponse
-	2,  // 88: hannah.HannahService.LinkAccount:output_type -> hannah.StatusResponse
-	2,  // 89: hannah.HannahService.UnlinkAccount:output_type -> hannah.StatusResponse
-	2,  // 90: hannah.HannahService.SetTrustLevel:output_type -> hannah.StatusResponse
-	2,  // 91: hannah.HannahService.SetSystemMessages:output_type -> hannah.StatusResponse
-	37, // 92: hannah.HannahService.GetDevices:output_type -> hannah.GetDevicesResponse
-	2,  // 93: hannah.HannahService.ControlDevice:output_type -> hannah.StatusResponse
-	14, // 94: hannah.HannahService.SubmitText:output_type -> hannah.SubmitTextResponse
-	16, // 95: hannah.HannahService.SubmitVoice:output_type -> hannah.SubmitVoiceResponse
-	2,  // 96: hannah.HannahService.Announce:output_type -> hannah.StatusResponse
-	2,  // 97: hannah.HannahService.Notify:output_type -> hannah.StatusResponse
-	19, // 98: hannah.HannahService.GetSatellites:output_type -> hannah.GetSatellitesResponse
-	20, // 99: hannah.HannahService.GetCarState:output_type -> hannah.CarStateResponse
-	21, // 100: hannah.HannahService.GetAllCarStates:output_type -> hannah.GetAllCarStatesResponse
-	24, // 101: hannah.HannahService.SubscribeEvents:output_type -> hannah.HannahEvent
-	2,  // 102: hannah.HannahService.TriggerFirmwareUpdate:output_type -> hannah.StatusResponse
-	68, // 103: hannah.HannahService.RequestSatelliteCapture:output_type -> hannah.SatelliteCaptureResponse
-	2,  // 104: hannah.HannahService.ReleaseSatelliteCapture:output_type -> hannah.StatusResponse
-	69, // 105: hannah.HannahService.StreamSatelliteAudio:output_type -> hannah.SatelliteAudioChunk
-	2,  // 106: hannah.HannahService.TriggerPlink:output_type -> hannah.StatusResponse
-	30, // 107: hannah.HannahService.RegisterProxy:output_type -> hannah.ProxyCommand
-	34, // 108: hannah.HannahService.SubmitSatelliteAudio:output_type -> hannah.SubmitSatelliteAudioResponse
-	2,  // 109: hannah.HannahService.NotifySatelliteRegistered:output_type -> hannah.StatusResponse
-	2,  // 110: hannah.HannahService.NotifySatelliteGone:output_type -> hannah.StatusResponse
-	2,  // 111: hannah.HannahService.ProvisionSatellite:output_type -> hannah.StatusResponse
-	2,  // 112: hannah.HannahService.EnrollVoiceprint:output_type -> hannah.StatusResponse
-	70, // 113: hannah.HannahService.TimerConnect:output_type -> hannah.TimerCommand
-	46, // 114: hannah.HannahService.AgentConnect:output_type -> hannah.AgentCommand
-	86, // [86:115] is the sub-list for method output_type
-	57, // [57:86] is the sub-list for method input_type
-	57, // [57:57] is the sub-list for extension type_name
-	57, // [57:57] is the sub-list for extension extendee
-	0,  // [0:57] is the sub-list for field type_name
+	18, // 5: hannah.GetSatellitesResponse.satellites:type_name -> hannah.Satellite
+	22, // 6: hannah.CarStateResponse.state:type_name -> hannah.CarStateProto
+	22, // 7: hannah.GetAllCarStatesResponse.states:type_name -> hannah.CarStateProto
+	83, // 8: hannah.CarStateProto.doors:type_name -> hannah.CarStateProto.DoorsEntry
+	84, // 9: hannah.CarStateProto.windows:type_name -> hannah.CarStateProto.WindowsEntry
+	22, // 10: hannah.HannahEvent.car_state:type_name -> hannah.CarStateProto
+	28, // 11: hannah.HannahEvent.resident_event:type_name -> hannah.ResidentEventProto
+	25, // 12: hannah.HannahEvent.system_notification:type_name -> hannah.SystemNotificationEvent
+	26, // 13: hannah.HannahEvent.firmware_event:type_name -> hannah.FirmwareEventProto
+	31, // 14: hannah.ProxyCommand.ack:type_name -> hannah.ProxyAck
+	32, // 15: hannah.ProxyCommand.play_audio:type_name -> hannah.PlayAudioCommand
+	85, // 16: hannah.DeviceInfo.current:type_name -> hannah.DeviceInfo.CurrentEntry
+	35, // 17: hannah.RoomInfo.devices:type_name -> hannah.DeviceInfo
+	36, // 18: hannah.GetDevicesResponse.rooms:type_name -> hannah.RoomInfo
+	44, // 19: hannah.AgentMessage.state_update:type_name -> hannah.AgentStateUpdate
+	61, // 20: hannah.AgentMessage.resident_update:type_name -> hannah.AgentResident
+	45, // 21: hannah.AgentMessage.text_command:type_name -> hannah.AgentTextCommand
+	43, // 22: hannah.AgentMessage.satellite_control:type_name -> hannah.AgentSatelliteControl
+	58, // 23: hannah.AgentMessage.send_snapshot:type_name -> hannah.AgentDeviceSnapshot
+	62, // 24: hannah.AgentMessage.send_residents:type_name -> hannah.AgentResidentSnapshot
+	63, // 25: hannah.AgentMessage.ask_resident:type_name -> hannah.AgentAskResident
+	60, // 26: hannah.AgentMessage.send_rooms:type_name -> hannah.AgentRoomSnapshot
+	48, // 27: hannah.AgentCommand.set_state:type_name -> hannah.AgentSetState
+	49, // 28: hannah.AgentCommand.watch_more:type_name -> hannah.AgentWatchMore
+	50, // 29: hannah.AgentCommand.set_resident:type_name -> hannah.AgentSetResident
+	52, // 30: hannah.AgentCommand.satellite_update:type_name -> hannah.AgentSatelliteUpdate
+	54, // 31: hannah.AgentCommand.text_answer:type_name -> hannah.AgentTextAnswer
+	47, // 32: hannah.AgentCommand.firmware_event:type_name -> hannah.AgentFirmwareEvent
+	65, // 33: hannah.AgentCommand.ble_update:type_name -> hannah.AgentBleUpdate
+	66, // 34: hannah.AgentCommand.sensor_update:type_name -> hannah.AgentSensorUpdate
+	64, // 35: hannah.AgentCommand.resident_answered:type_name -> hannah.AgentResidentAnswered
+	53, // 36: hannah.AgentCommand.satellite_deleted:type_name -> hannah.AgentSatelliteDeleted
+	51, // 37: hannah.AgentCommand.set_resident_mood:type_name -> hannah.AgentSetResidentMood
+	0,  // 38: hannah.AgentSetResident.type:type_name -> hannah.ResidentType
+	0,  // 39: hannah.AgentSetResidentMood.type:type_name -> hannah.ResidentType
+	56, // 40: hannah.AgentDevice.value:type_name -> hannah.AgentStateValue
+	86, // 41: hannah.AgentDevice.room_names:type_name -> hannah.AgentDevice.RoomNamesEntry
+	57, // 42: hannah.AgentDeviceSnapshot.devices:type_name -> hannah.AgentDevice
+	87, // 43: hannah.AgentRoom.display_names:type_name -> hannah.AgentRoom.DisplayNamesEntry
+	59, // 44: hannah.AgentRoomSnapshot.rooms:type_name -> hannah.AgentRoom
+	0,  // 45: hannah.AgentResident.type:type_name -> hannah.ResidentType
+	61, // 46: hannah.AgentResidentSnapshot.residents:type_name -> hannah.AgentResident
+	74, // 47: hannah.TimerCommand.create:type_name -> hannah.TimerCreate
+	75, // 48: hannah.TimerCommand.cancel:type_name -> hannah.TimerCancel
+	76, // 49: hannah.TimerCommand.list:type_name -> hannah.TimerListRequest
+	72, // 50: hannah.TimerCommand.ready:type_name -> hannah.TimerReady
+	73, // 51: hannah.TimerCommand.not_ready:type_name -> hannah.TimerNotReady
+	78, // 52: hannah.TimerMessage.ack:type_name -> hannah.TimerAck
+	79, // 53: hannah.TimerMessage.fired:type_name -> hannah.TimerFired
+	80, // 54: hannah.TimerMessage.list:type_name -> hannah.TimerListResponse
+	81, // 55: hannah.TimerListResponse.timers:type_name -> hannah.TimerInfo
+	4,  // 56: hannah.HannahService.GetUsers:input_type -> hannah.GetUsersRequest
+	6,  // 57: hannah.HannahService.GetUser:input_type -> hannah.GetUserRequest
+	9,  // 58: hannah.HannahService.LinkAccount:input_type -> hannah.LinkAccountRequest
+	10, // 59: hannah.HannahService.UnlinkAccount:input_type -> hannah.UnlinkAccountRequest
+	11, // 60: hannah.HannahService.SetTrustLevel:input_type -> hannah.SetTrustLevelRequest
+	12, // 61: hannah.HannahService.SetSystemMessages:input_type -> hannah.SetSystemMessagesRequest
+	1,  // 62: hannah.HannahService.GetDevices:input_type -> hannah.Empty
+	38, // 63: hannah.HannahService.ControlDevice:input_type -> hannah.ControlDeviceRequest
+	13, // 64: hannah.HannahService.SubmitText:input_type -> hannah.SubmitTextRequest
+	15, // 65: hannah.HannahService.SubmitVoice:input_type -> hannah.SubmitVoiceRequest
+	17, // 66: hannah.HannahService.Announce:input_type -> hannah.AnnounceRequest
+	55, // 67: hannah.HannahService.Notify:input_type -> hannah.AgentNotification
+	1,  // 68: hannah.HannahService.GetSatellites:input_type -> hannah.Empty
+	1,  // 69: hannah.HannahService.GetCarState:input_type -> hannah.Empty
+	1,  // 70: hannah.HannahService.GetAllCarStates:input_type -> hannah.Empty
+	23, // 71: hannah.HannahService.SubscribeEvents:input_type -> hannah.EventFilter
+	27, // 72: hannah.HannahService.TriggerFirmwareUpdate:input_type -> hannah.TriggerFirmwareUpdateRequest
+	67, // 73: hannah.HannahService.RequestSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
+	67, // 74: hannah.HannahService.ReleaseSatelliteCapture:input_type -> hannah.SatelliteCaptureRequest
+	67, // 75: hannah.HannahService.StreamSatelliteAudio:input_type -> hannah.SatelliteCaptureRequest
+	68, // 76: hannah.HannahService.TriggerPlink:input_type -> hannah.TriggerPlinkRequest
+	29, // 77: hannah.HannahService.RegisterProxy:input_type -> hannah.ProxyHeartbeat
+	33, // 78: hannah.HannahService.SubmitSatelliteAudio:input_type -> hannah.SubmitSatelliteAudioRequest
+	41, // 79: hannah.HannahService.NotifySatelliteRegistered:input_type -> hannah.SatelliteRegistration
+	41, // 80: hannah.HannahService.NotifySatelliteGone:input_type -> hannah.SatelliteRegistration
+	39, // 81: hannah.HannahService.ProvisionSatellite:input_type -> hannah.ProvisionSatelliteRequest
+	40, // 82: hannah.HannahService.EnrollVoiceprint:input_type -> hannah.EnrollVoiceprintRequest
+	77, // 83: hannah.HannahService.TimerConnect:input_type -> hannah.TimerMessage
+	42, // 84: hannah.HannahService.AgentConnect:input_type -> hannah.AgentMessage
+	5,  // 85: hannah.HannahService.GetUsers:output_type -> hannah.GetUsersResponse
+	8,  // 86: hannah.HannahService.GetUser:output_type -> hannah.UserResponse
+	2,  // 87: hannah.HannahService.LinkAccount:output_type -> hannah.StatusResponse
+	2,  // 88: hannah.HannahService.UnlinkAccount:output_type -> hannah.StatusResponse
+	2,  // 89: hannah.HannahService.SetTrustLevel:output_type -> hannah.StatusResponse
+	2,  // 90: hannah.HannahService.SetSystemMessages:output_type -> hannah.StatusResponse
+	37, // 91: hannah.HannahService.GetDevices:output_type -> hannah.GetDevicesResponse
+	2,  // 92: hannah.HannahService.ControlDevice:output_type -> hannah.StatusResponse
+	14, // 93: hannah.HannahService.SubmitText:output_type -> hannah.SubmitTextResponse
+	16, // 94: hannah.HannahService.SubmitVoice:output_type -> hannah.SubmitVoiceResponse
+	2,  // 95: hannah.HannahService.Announce:output_type -> hannah.StatusResponse
+	2,  // 96: hannah.HannahService.Notify:output_type -> hannah.StatusResponse
+	19, // 97: hannah.HannahService.GetSatellites:output_type -> hannah.GetSatellitesResponse
+	20, // 98: hannah.HannahService.GetCarState:output_type -> hannah.CarStateResponse
+	21, // 99: hannah.HannahService.GetAllCarStates:output_type -> hannah.GetAllCarStatesResponse
+	24, // 100: hannah.HannahService.SubscribeEvents:output_type -> hannah.HannahEvent
+	2,  // 101: hannah.HannahService.TriggerFirmwareUpdate:output_type -> hannah.StatusResponse
+	69, // 102: hannah.HannahService.RequestSatelliteCapture:output_type -> hannah.SatelliteCaptureResponse
+	2,  // 103: hannah.HannahService.ReleaseSatelliteCapture:output_type -> hannah.StatusResponse
+	70, // 104: hannah.HannahService.StreamSatelliteAudio:output_type -> hannah.SatelliteAudioChunk
+	2,  // 105: hannah.HannahService.TriggerPlink:output_type -> hannah.StatusResponse
+	30, // 106: hannah.HannahService.RegisterProxy:output_type -> hannah.ProxyCommand
+	34, // 107: hannah.HannahService.SubmitSatelliteAudio:output_type -> hannah.SubmitSatelliteAudioResponse
+	2,  // 108: hannah.HannahService.NotifySatelliteRegistered:output_type -> hannah.StatusResponse
+	2,  // 109: hannah.HannahService.NotifySatelliteGone:output_type -> hannah.StatusResponse
+	2,  // 110: hannah.HannahService.ProvisionSatellite:output_type -> hannah.StatusResponse
+	2,  // 111: hannah.HannahService.EnrollVoiceprint:output_type -> hannah.StatusResponse
+	71, // 112: hannah.HannahService.TimerConnect:output_type -> hannah.TimerCommand
+	46, // 113: hannah.HannahService.AgentConnect:output_type -> hannah.AgentCommand
+	85, // [85:114] is the sub-list for method output_type
+	56, // [56:85] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_hannah_proto_init() }
@@ -6188,8 +6267,8 @@ func file_hannah_proto_init() {
 		return
 	}
 	file_hannah_proto_msgTypes[5].OneofWrappers = []any{
-		(*GetUserRequest_RoomieId)(nil),
-		(*GetUserRequest_Uuid)(nil),
+		(*GetUserRequest_UserName)(nil),
+		(*GetUserRequest_Id)(nil),
 		(*GetUserRequest_LinkedAccount)(nil),
 	}
 	file_hannah_proto_msgTypes[23].OneofWrappers = []any{
@@ -6231,31 +6310,32 @@ func file_hannah_proto_init() {
 		(*AgentCommand_SensorUpdate)(nil),
 		(*AgentCommand_ResidentAnswered)(nil),
 		(*AgentCommand_SatelliteDeleted)(nil),
+		(*AgentCommand_SetResidentMood)(nil),
 	}
-	file_hannah_proto_msgTypes[50].OneofWrappers = []any{}
-	file_hannah_proto_msgTypes[59].OneofWrappers = []any{}
-	file_hannah_proto_msgTypes[69].OneofWrappers = []any{
+	file_hannah_proto_msgTypes[51].OneofWrappers = []any{}
+	file_hannah_proto_msgTypes[60].OneofWrappers = []any{}
+	file_hannah_proto_msgTypes[70].OneofWrappers = []any{
 		(*TimerCommand_Create)(nil),
 		(*TimerCommand_Cancel)(nil),
 		(*TimerCommand_List)(nil),
 		(*TimerCommand_Ready)(nil),
 		(*TimerCommand_NotReady)(nil),
 	}
-	file_hannah_proto_msgTypes[71].OneofWrappers = []any{}
 	file_hannah_proto_msgTypes[72].OneofWrappers = []any{}
-	file_hannah_proto_msgTypes[75].OneofWrappers = []any{
+	file_hannah_proto_msgTypes[73].OneofWrappers = []any{}
+	file_hannah_proto_msgTypes[76].OneofWrappers = []any{
 		(*TimerMessage_Ack)(nil),
 		(*TimerMessage_Fired)(nil),
 		(*TimerMessage_List)(nil),
 	}
-	file_hannah_proto_msgTypes[79].OneofWrappers = []any{}
+	file_hannah_proto_msgTypes[80].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hannah_proto_rawDesc), len(file_hannah_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   86,
+			NumMessages:   87,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

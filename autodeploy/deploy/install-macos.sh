@@ -1,36 +1,31 @@
 #!/usr/bin/env bash
-# install-macos.sh — Hannah Voice-ID installer for macOS
+# install-macos.sh — Hannah AutoDeploy installer for macOS
 #
-# Downloads voiceid from the Update Server, sets up a Python venv, and
-# installs a LaunchDaemon. Runs as root (no dedicated service user,
-# analog to Ollama and faster-whisper-server).
-#
-# Code/venv (replaceable, lives in INSTALL_DIR) and voice profiles/cache
-# (persistent, lives in DATA_DIR) are kept in separate trees, so neither
-# an update nor --uninstall can ever touch the other.
+# Downloads autodeploy.py from the Update Server, sets up a Python venv,
+# and installs a LaunchDaemon. Runs as root (no dedicated service user,
+# analog to the voiceid macOS installer).
 #
 # Usage:
 #   sudo bash install-macos.sh              # install or update
-#   sudo bash install-macos.sh --uninstall  # remove service (keeps voice profiles)
+#   sudo bash install-macos.sh --uninstall  # remove service (keeps config/state)
 #
 # Env vars:
 #   UPDATE_SERVER_URL    Base URL of the Hannah Update Server
 #   UPDATE_SERVER_TOKEN  Bearer token for the Update Server
-#   VOICEID_CHANNEL      Channel to install from (default: voiceid-stable)
+#   AUTODEPLOY_CHANNEL   Channel to install from (default: autodeploy-stable)
 #
 set -euo pipefail
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 UPDATE_SERVER_URL="${UPDATE_SERVER_URL:-https://hannah-update.sgessinger.de}"
 UPDATE_SERVER_TOKEN="${UPDATE_SERVER_TOKEN:-}"
-VOICEID_CHANNEL="${VOICEID_CHANNEL:-voiceid-stable}"
-INSTALL_DIR="/opt/hannah/voiceid"
-DATA_DIR="/opt/hannah/voiceid-data"
-PROFILES_DIR="${DATA_DIR}/voice_profiles"
-MEM_DIR="${DATA_DIR}/mem"            # plain dir on macOS — no RAM-disk mount needed
-SERVICE_NAME="com.hannah.voiceid"
+AUTODEPLOY_CHANNEL="${AUTODEPLOY_CHANNEL:-autodeploy-stable}"
+INSTALL_DIR="/opt/hannah/autodeploy"
+CONFIG_DIR="/opt/hannah/etc"
+STATE_DIR="/opt/hannah/var"
+SERVICE_NAME="com.hannah.autodeploy"
 PLIST="/Library/LaunchDaemons/${SERVICE_NAME}.plist"
-LOG="/opt/hannah/voiceid.log"
+LOG="/opt/hannah/autodeploy.log"
 # ──────────────────────────────────────────────────────────────────────────────
 
 info()  { echo "[INFO]  $*"; }
@@ -50,7 +45,7 @@ uninstall() {
     launchctl unload "$PLIST" 2>/dev/null || true
     rm -f "$PLIST"
     rm -rf "$INSTALL_DIR"
-    ok "Uninstalled. Voice profiles in ${PROFILES_DIR} were kept."
+    ok "Uninstalled. Config in ${CONFIG_DIR} and state in ${STATE_DIR} were kept."
 }
 
 [[ "${1:-}" == "--uninstall" ]] && { uninstall; exit 0; }
@@ -60,20 +55,20 @@ if [[ -z "$UPDATE_SERVER_TOKEN" ]]; then
     err "UPDATE_SERVER_TOKEN is not set."
 fi
 
-info "Fetching latest voiceid release from ${UPDATE_SERVER_URL} (channel: ${VOICEID_CHANNEL}) ..."
+info "Fetching latest autodeploy release from ${UPDATE_SERVER_URL} (channel: ${AUTODEPLOY_CHANNEL}) ..."
 LATEST_JSON=$(curl -sf \
     -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
-    "${UPDATE_SERVER_URL}/latest?channel=${VOICEID_CHANNEL}")
+    "${UPDATE_SERVER_URL}/latest?channel=${AUTODEPLOY_CHANNEL}")
 LATEST_VERSION=$(echo "$LATEST_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
 info "Latest version: ${LATEST_VERSION}"
 
-TMPFILE=$(mktemp /tmp/hannah-voiceid-XXXXXX.tar.gz)
+TMPFILE=$(mktemp /tmp/autodeploy-XXXXXX.tar.gz)
 trap 'rm -f "$TMPFILE"' EXIT
 
 curl -sf \
     -H "Authorization: Bearer ${UPDATE_SERVER_TOKEN}" \
     -o "$TMPFILE" \
-    "${UPDATE_SERVER_URL}/releases/${LATEST_VERSION}?channel=${VOICEID_CHANNEL}"
+    "${UPDATE_SERVER_URL}/releases/${LATEST_VERSION}?channel=${AUTODEPLOY_CHANNEL}"
 ok "Downloaded ${LATEST_VERSION}."
 
 # ── Extract to install dir ────────────────────────────────────────────────────
@@ -88,17 +83,18 @@ if [[ ! -d "$VENV" ]]; then
     python3 -m venv "$VENV"
 fi
 
-info "Installing Python dependencies (torch + speechbrain, can take a few minutes) ..."
+info "Installing Python dependencies ..."
 "${VENV}/bin/pip" install --upgrade pip --quiet
 "${VENV}/bin/pip" install --quiet -r "${INSTALL_DIR}/requirements.txt"
-# Standard torch wheel for macOS includes MPS support for Apple Silicon
-"${VENV}/bin/pip" install --quiet torch torchaudio
-"${VENV}/bin/pip" install --quiet speechbrain
 ok "Python dependencies installed."
 
-# ── Data directories (persistent, outside INSTALL_DIR) ────────────────────────
-mkdir -p "$PROFILES_DIR" "$MEM_DIR"
-ok "Data directories: ${PROFILES_DIR}, ${MEM_DIR}"
+# ── Config and state directories ──────────────────────────────────────────────
+mkdir -p "$CONFIG_DIR" "$STATE_DIR"
+
+if [[ ! -f "${CONFIG_DIR}/autodeploy.yaml" ]]; then
+    info "Created ${CONFIG_DIR} — place your autodeploy.yaml there."
+    info "Example: ${INSTALL_DIR}/autodeploy.yaml.example"
+fi
 
 # ── LaunchDaemon ──────────────────────────────────────────────────────────────
 cat > "$PLIST" << EOF
@@ -111,18 +107,14 @@ cat > "$PLIST" << EOF
     <key>ProgramArguments</key>
     <array>
         <string>${VENV}/bin/python</string>
-        <string>${INSTALL_DIR}/app.py</string>
+        <string>${INSTALL_DIR}/autodeploy.py</string>
     </array>
-    <key>WorkingDirectory</key>
-    <string>${INSTALL_DIR}</string>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>HOME</key>
-        <string>${INSTALL_DIR}</string>
-        <key>VOICEID_MEM_PATH</key>
-        <string>${MEM_DIR}</string>
-        <key>VOICEID_DISK_PATH</key>
-        <string>${PROFILES_DIR}</string>
+        <key>AUTODEPLOY_CONFIG</key>
+        <string>${CONFIG_DIR}/autodeploy.yaml</string>
+        <key>AUTODEPLOY_STATE</key>
+        <string>${STATE_DIR}/autodeploy-state.json</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -137,7 +129,13 @@ cat > "$PLIST" << EOF
 EOF
 ok "LaunchDaemon installed: ${PLIST}"
 
-# ── Service starten ───────────────────────────────────────────────────────────
+if [[ ! -f "${CONFIG_DIR}/autodeploy.yaml" ]]; then
+    ok "Installed ${LATEST_VERSION}. Place autodeploy.yaml in ${CONFIG_DIR}, then run:"
+    ok "  sudo launchctl load ${PLIST}"
+    exit 0
+fi
+
+# ── Start / Restart ───────────────────────────────────────────────────────────
 if launchctl list | grep -q "$SERVICE_NAME"; then
     info "Restarting ${SERVICE_NAME} ..."
     launchctl kickstart -k "system/${SERVICE_NAME}"
@@ -148,7 +146,3 @@ fi
 
 ok "${SERVICE_NAME} is running (${LATEST_VERSION})."
 info "Logs: tail -f ${LOG}"
-info ""
-info "Enroll a speaker:"
-info "  cd ${INSTALL_DIR} && source venv/bin/activate"
-info "  python enroll_voice.py"

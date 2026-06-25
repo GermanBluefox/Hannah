@@ -1,13 +1,13 @@
 from unittest.mock import MagicMock
 
 from hannah.grpc_server import HannahServicer
-from hannah.user_registry import UserRegistry
+from hannah.user_manager import UserManager
 from hannah.iobroker import IoBrokerClient
 from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType
 
-def _make_server(registry=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None):
+def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None):
     return HannahServicer(
-        registry=registry or MagicMock(),
+        user_manager=user_manager or MagicMock(),
         handle_text=handle_text or MagicMock(),
         handle_voice=handle_voice or MagicMock(),
         announce=announce or MagicMock(),
@@ -37,24 +37,6 @@ def test_device_snapshot_dispatched():
     ]
     servicer._on_agent_device_snapshot(devices)
     assert "wohnzimmer" in client.rooms
-
-def test_resident_snapshot_dispatched():
-    registry = MagicMock(spec=UserRegistry)
-    servicer = _make_server(on_agent_send_residents=registry.sync)
-    residents = [
-        AgentResident(
-            roomie_id="test1",
-            name="Test 1",
-            type=ResidentType.ROOMIE
-        ),
-        AgentResident(
-            roomie_id="test2",
-            name="Test 2",
-            type=ResidentType.GUEST
-        )
-    ]
-    servicer._on_agent_send_residents(residents)
-    registry.sync.assert_called_once_with(residents)
 
 def test_room_snapshot_dispatched():
     sync_rooms = MagicMock()

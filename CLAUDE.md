@@ -16,7 +16,6 @@ Hannah ist ein **lokal betriebener, deutschsprachiger Sprachassistent** für das
 hannah/                          ← Mono-Repo
 ├── core/                        ← Hannah Core (Python, Raspberry Pi)
 │   ├── hannah/
-│   │   ├── main.py              ← Einstiegspunkt, Orchestrierung
 │   │   ├── nlu.py               ← NLU (regelbasiert)
 │   │   ├── iobroker.py          ← ioBroker REST API Client (Port 8093)
 │   │   ├── mqtt_handler.py      ← MQTT Pub/Sub
@@ -40,6 +39,7 @@ hannah/                          ← Mono-Repo
 │   │   ├── weather.py           ← Wetter (OpenWeatherMap)
 │   │   ├── audio.py             ← Audio-Utilities (Resampling, VAD)
 │   │   └── proto/               ← Generierte gRPC-Stubs
+|   ├── main.py                  ← Einstiegspunkt, Orchestrierung
 │   ├── config.yaml
 │   ├── triggers.yaml            ← hot-reload
 │   └── routines.yaml            ← hot-reload
@@ -115,7 +115,7 @@ ESP-IDF (C), FreeRTOS, **ESP32-S3** (AI-Beschleuniger + mehr RAM benötigt).
 
 **ESP-IDF Umgebung aktivieren:**
 ```powershell
-C:\Users\rene\esp\v6.0\esp-idf\export.ps1
+C:\esp\v6.0.1\esp-idf\export.ps1
 ```
 
 ---
@@ -345,6 +345,26 @@ Zweiteilig: **Topf (Unterteil) + Deckel (Oberteil)**, eigenes FreeCAD-Design ori
 
 ---
 
+## Git-Workflow
+
+Gilt für das Hannah-Mono-Repo **und** das `iobroker.hannah`-Submodule (eigener Branch-Stand).
+
+1. **Nie direkt auf `master`/`main` arbeiten.** Immer zuerst einen Feature-/Topic-Branch anlegen — in beiden Repos.
+2. **Changelog parallel zu jeder Änderung pflegen.** `CHANGELOG.md` im Hannah-Repo, `README.md` im `iobroker.hannah`-Submodule — jeweils Englisch, WIP-Sektion. `en.json` im Adapter manuell pflegen; andere Sprachen kommen vom ioBroker-Translator.
+3. **In sinnvollen, thematisch gruppierten Paketen committen** — kein Mega-Commit, kein Commit-pro-Keystroke. Changelog-Eintrag gehört in denselben Commit wie die Änderung, die er dokumentiert.
+4. **Commits nur auf explizite Anfrage**, nie unaufgefordert.
+5. **Pushen, wenn:** die Arbeit abgeschlossen ist, ODER eine Pause eingelegt wird, ODER Arbeit dezentral gesichert werden soll (auch zwischendurch, auf Zuruf) — Standard-Erwartung, kein Einzelfall.
+6. **Landung auf master ausschließlich über Merge Request (Hannah-Repo) bzw. Pull Request (`iobroker.hannah`-Submodule).** Nie direkt mergen.
+7. **Für jede funktionale Änderung muss ein Work Item (GitLab Issue, project 319) existieren.** Anlegen ist Aufgabe von Claude, proaktiv, bevor mit der Umsetzung begonnen wird — nicht erst hinterher.
+8. **Commit Messages bei funktionalen Änderungen referenzieren das Work Item** mit `Refs #ID`.
+9. **MR-Beschreibungen schließen das Work Item** mit `Closes #ID`.
+
+Punkte 7–9 gelten für funktionale Änderungen (Features, Bugfixes) — nicht für reine Doku-/Chore-Änderungen wie diesen Abschnitt selbst.
+
+Nach MR-Erstellung: siehe CI-Pipeline-Hinweise unten zur Beobachtung.
+
+---
+
 ## Status
 
 Aktueller Versionsstand und Änderungshistorie: siehe `CHANGELOG.md`. Offene Bugs/Features/Ideen: siehe GitLab Issues (project 319, `mcp__gitlab-private-voice__*`) — nicht hier duplizieren, GitLab ist die live abrufbare Quelle.
@@ -371,7 +391,4 @@ Aktueller Versionsstand und Änderungshistorie: siehe `CHANGELOG.md`. Offene Bug
 - Nach Pipeline-Ende: MR-Status prüfen; bei `merged` → Release auslösen.
 - Auto-Merge nach MR-Erstellung sofort aktivieren.
 
-### Allgemein
-- **Commits nur auf explizite Anfrage**, nie unaufgefordert.
-- Changelog-Einträge (`CHANGELOG.md`) immer auf Englisch, immer in WIP-Sektion.
-- `ioBroker.hannah`: Changelog (`README.md`) auf Englisch, WIP-Sektion. `en.json` manuell pflegen; andere Sprachen kommen vom ioBroker-Translator.
+Siehe `## Git-Workflow` oben für Branch-/Commit-/Push-/Changelog-Regeln.

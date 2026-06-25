@@ -23,6 +23,10 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from hannah.models.linked_account import LinkedAccount
+from hannah.models.user import User
+from hannah.user_manager import UserManager
+from hannah.utils.db import get_db, init_db
 from hannah.residents import Roomie, Guest, Pet, Resident, HOME_PRESENCE_STATE
 from hannah import audio as audio_mod
 from hannah import config as config_mod
@@ -40,7 +44,6 @@ from hannah.conversation import ConversationContext
 from hannah.llm import load as load_llm, prepare_prompt
 from hannah.tool_agent import ToolAgent
 from hannah.memory import LongTermMemory
-from hannah.user_registry import UserRegistry
 from hannah.room_manager import RoomManager
 from hannah.webui import create_app as create_webui
 from hannah.weather import WeatherCache
@@ -99,18 +102,30 @@ def main():
 
     _asset_manifest: dict = _load_asset_manifest()
 
+    # User-Registry (SQLite, Hannah-eigene Quelle der Wahrheit statt ioBroker)
+    init_db()
+    _user_manager = UserManager(get_db)
+
+    # Hannah selbst als Roomie verlinken (für Trust-Level/Announcements über die
+    # residents-Bridge) — einmalig, danach bereits über linked_accounts auffindbar.
+    # external_id ist typ-qualifiziert (siehe Roomie.id) — vermeidet Kollisionen mit
+    # einem gleichnamigen Guest/Pet; provider_payload trägt den Typ zurück, den die
+    # ioBroker-Bridge für AgentSetResident braucht.
+    _hannah_roomie = cfg.get("user_registry", {}).get("hannah_roomie", "hannah")
+    _hannah_external_id = f"{_hannah_roomie}_roomie"
+    if not _user_manager.get_user_by_linked_account("residents", _hannah_external_id):
+        _hannah_user = _user_manager.get_user_by_username("hannah")
+        if _hannah_user:
+            _hannah_user.link_account(
+                "residents", _hannah_external_id,
+                provider_payload={"resident_type": "roomie", "roomie_id": _hannah_roomie},
+            )
+
     # ioBroker
     iobroker = IoBrokerClient(cfg.get("iobroker", {}))
 
     if not iobroker.rooms:
         log.warning("Keine Räume aus ioBroker geladen — NLU arbeitet ohne Raum-Erkennung.")
-
-    # User Registry
-    residents_cfg = cfg.get("residents", {})
-    registry = UserRegistry(
-        cfg.get("user_registry", {}),
-        hannah_roomie=residents_cfg.get("hannah_roomie", "hannah"),
-    )
 
     # Room Manager (Räume, Gruppen, Satellit-Zuweisung)
     room_manager = RoomManager(cfg.get("room_manager", {}))
@@ -314,33 +329,49 @@ def main():
                 _handle_feedback(device, False, "Tut mir leid, ich weiß nicht was du meinst.")
 
     # ------------------------------------------------------------------
-    def _speaker_context(speaker_roomie_id: str) -> str:
+    def _speaker_context(speaker_user_id: str) -> str:
         """Gibt einen Zusatz-Abschnitt für den System-Prompt zurück der Sprecher-Info enthält."""
-        if not speaker_roomie_id:
+        if not speaker_user_id:
             return ""
-        user = registry.get_by_roomie(speaker_roomie_id)
+        user = User.get(get_db(), id=speaker_user_id)
         if not user:
-            return f"\n\nDie Person die gerade mit dir spricht heißt {speaker_roomie_id}."
-        name        = user["display_name"]
-        trust_level = user.get("trust_level", 5)
+            return f"\n\nDie Person die gerade mit dir spricht heißt {speaker_user_id}."
+        name        = user.display_name
+        trust_level = user.trust_level
         # relationship_level: noch nicht implementiert, Platzhalter für spätere Erweiterung
-        mem = memory.format_for_prompt(speaker_roomie_id)
+        mem = memory.format_for_prompt(speaker_user_id)
         return (
             f"\n\nDie Person die gerade mit dir spricht heißt {name}."
             f" Vertrauenslevel: {trust_level}/10."
             f"{mem}"
         )
 
-    def _handle_text(text: str, speaker_roomie_id: str = "", source: str = "") -> tuple[str, str]:
+    def _resolve_roomie_id(speaker_user_id: str) -> str:
+        """Löst eine Hannah-User-ID auf die verlinkte ioBroker-Roomie-ID auf (sofern verlinkt).
+
+        Roomie-IDs leben in residents/car_tracker (ioBroker-Welt), die User-ID ist Hannahs
+        eigene, davon entkoppelte Identität — hier wird zwischen beiden vermittelt.
+        """
+        if not speaker_user_id:
+            return ""
+        user = User.get(get_db(), id=speaker_user_id)
+        if not user:
+            return ""
+        for la in user.linked_accounts:
+            if la.provider == "residents":
+                return (la.provider_payload or {}).get("roomie_id", "")
+        return ""
+
+    def _handle_text(text: str, speaker_user_id: str = "", source: str = "") -> tuple[str, str]:
         """
         Verarbeitet einen Text-Befehl durch NLU und gibt (Antwort, Intent-Name) zurück.
         Kein TTS — reines Text-in/Text-out.
         Wird vom gRPC-Server (Telegram/Satelliten/ioBroker-Adapter) genutzt.
 
-        speaker_roomie_id: optionale Roomie-ID aus Voice-ID-Erkennung.
-        source: Kontext-Schlüssel (Gerät, Roomie-ID, Kanal). Leer = speaker_roomie_id oder "anon".
+        speaker_user_id: optionale Hannah-User-ID aus Voice-ID-Erkennung.
+        source: Kontext-Schlüssel (Gerät, Roomie-ID, Kanal). Leer = speaker_user_id oder "anon".
         """
-        _source = source or speaker_roomie_id or "anon"
+        _source = source or speaker_user_id or "anon"
 
         routine = routine_manager.match(text)
         if routine:
@@ -355,7 +386,7 @@ def main():
         if conv_ctx.is_smalltalk_active(_source):
             if not llm.classify(text):
                 log.debug(f"[{_source}] Classifier → SMALLTALK (Modus aktiv)")
-                sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_roomie_id)
+                sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_user_id)
                 history = conv_ctx.get_llm_history(_source)
                 answer = llm.chat(text, system_prompt=sp, history=history)
                 conv_ctx.add_llm_exchange(_source, text, answer)
@@ -383,7 +414,7 @@ def main():
 
         log.info(
             f"[textcmd] Text: '{text}' → Intent: {intent.name} | "
-            f"Raum: {intent.room} | Gerät: {intent.device} | Wert: {intent.value} | SpeakerRoomie: {speaker_roomie_id}"
+            f"Raum: {intent.room} | Gerät: {intent.device} | Wert: {intent.value} | SpeakerUser: {speaker_user_id}"
         )
 
         if intent.candidates:
@@ -392,21 +423,22 @@ def main():
             return question, "Clarification"
 
         if intent.name == "CarQuery":
-            answer = car_manager.answer_for_roomie(scope=intent.value or "all", roomie_id=speaker_roomie_id)
+            answer = car_manager.answer_for_roomie(scope=intent.value or "all", roomie_id=_resolve_roomie_id(speaker_user_id))
         elif intent.name == "WeatherQuery":
             answer = weather.build_answer(scope=intent.value or "today")
         elif intent.name == "SetPresence":
+            roomie_id = _resolve_roomie_id(speaker_user_id) if speaker_user_id else ""
             if intent.value == "away":
-                if speaker_roomie_id:
-                    residents.set_user_away(speaker_roomie_id)
+                if roomie_id:
+                    residents.set_user_away(roomie_id)
                 else:
-                    log.info("SetPresence away — Sprecher anonym, Status nicht gesetzt.")
+                    log.info("SetPresence away — Sprecher anonym oder ohne Residents-Link, Status nicht gesetzt.")
                 answer = "Tschüss!"
             else:
-                if speaker_roomie_id:
-                    residents.set_user_home(speaker_roomie_id)
+                if roomie_id:
+                    residents.set_user_home(roomie_id)
                 else:
-                    log.info("SetPresence home — Sprecher anonym, Status nicht gesetzt.")
+                    log.info("SetPresence home — Sprecher anonym oder ohne Residents-Link, Status nicht gesetzt.")
                 answer = "Willkommen zuhause!"
         elif intent.name in ("StopIntent", "PauseIntent", "ResumeIntent"):
             cmd_type = {"StopIntent": "stop", "PauseIntent": "pause", "ResumeIntent": "resume"}[intent.name]
@@ -442,7 +474,7 @@ def main():
             label = f"morgen um {dt.strftime('%H:%M')} Uhr" if dt.date() > datetime.datetime.now().date() else f"um {dt.strftime('%H:%M')} Uhr"
             answer = f"Wecker gestellt {label}."
         elif intent.name == "Smalltalk":
-            sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_roomie_id)
+            sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_user_id)
             history = conv_ctx.get_llm_history(_source)
             answer = tool_agent.run(text, system_prompt=sp, history=history)
             if answer:
@@ -454,7 +486,7 @@ def main():
             answer = iobroker.answer_query(intent) or "Keine Antwort verfügbar."
             conv_ctx.update_from_intent(_source, intent)
         elif intent.name == "Unknown":
-            sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_roomie_id)
+            sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_user_id)
             history = conv_ctx.get_llm_history(_source)
             answer = tool_agent.run(text, system_prompt=sp, history=history)
             if answer:
@@ -789,7 +821,7 @@ def main():
     # Voice-Pipeline für gRPC: OGG/Opus → STT → NLU → TTS → OGG/Opus
     # Wird von SubmitVoice (Telegram, zukünftige Services) genutzt.
 
-    def _handle_voice(audio_ogg: bytes, speaker_roomie_id: str = "") -> tuple[str, str, str, bytes]:
+    def _handle_voice(audio_ogg: bytes, speaker_user_id: str = "") -> tuple[str, str, str, bytes]:
         """OGG/Opus bytes → (transcript, answer, intent_name, audio_ogg_out)"""
         # OGG → raw PCM (16kHz, mono, s16le) via ffmpeg
         with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
@@ -820,7 +852,7 @@ def main():
             return "", "Ich konnte dich leider nicht verstehen.", "Unknown", b""
 
         log.info(f"[grpc/voice] Transkript: {transcript!r}")
-        answer, intent_name = _handle_text(transcript, speaker_roomie_id, source=speaker_roomie_id or "grpc-voice")
+        answer, intent_name = _handle_text(transcript, speaker_user_id, source=speaker_user_id or "grpc-voice")
 
         # TTS → PCM → OGG/Opus via ffmpeg
         audio_ogg_out = b""
@@ -853,12 +885,12 @@ def main():
         ).astype(np.int16)
         return resampled.tobytes(), 16000
 
-    def _handle_satellite_audio(device: str, pcm_bytes: bytes, speaker_roomie_id: str = "") -> tuple[str, str, str, bytes, int]:
+    def _handle_satellite_audio(device: str, pcm_bytes: bytes, speaker_user_id: str = "") -> tuple[str, str, str, bytes, int]:
         """
         Verarbeitet eine vollständige Satellit-Aufnahme via Go-Proxy:
         Raw PCM → STT → NLU → TTS → (transcript, answer, intent_name, tts_pcm, sample_rate)
 
-        speaker_roomie_id: vom Proxy per Voice-ID identifizierter Sprecher (leer = anonym).
+        speaker_user_id: vom Proxy per Voice-ID identifizierter Sprecher (leer = anonym).
         """
         try:
             audio_array = audio_mod.from_raw_pcm(pcm_bytes, audio_cfg)
@@ -876,14 +908,14 @@ def main():
             return "", "Ich konnte dich leider nicht verstehen.", "Unknown", b"", 0
 
         log.info(f"[{device}] Satellit-Transkript: {transcript!r}"
-                 + (f" (Sprecher: {speaker_roomie_id})" if speaker_roomie_id else ""))
+                 + (f" (Sprecher: {speaker_user_id})" if speaker_user_id else ""))
 
         # Offene Trigger-Frage? Dann Äußerung als Antwort konsumieren statt NLU-Routing.
         room = _get_satellite_room(device) or ""
         if room and _try_answer_pending(device, room, transcript):
             return transcript, "", "AnswerPending", b"", 0
 
-        answer, intent_name = _handle_text(transcript, speaker_roomie_id=speaker_roomie_id, source=device)
+        answer, intent_name = _handle_text(transcript, speaker_user_id=speaker_user_id, source=device)
 
         tts_pcm = b""
         sample_rate = 0
@@ -935,6 +967,11 @@ def main():
         pb.ResidentType.ROOMIE: Roomie,
         pb.ResidentType.GUEST: Guest,
         pb.ResidentType.PET: Pet,
+    }
+    _RESIDENT_TYPE_BY_SEGMENT = {
+        "roomie": pb.ResidentType.ROOMIE,
+        "guest": pb.ResidentType.GUEST,
+        "pet": pb.ResidentType.PET,
     }
 
     def _on_agent_resident(roomie_id: str, display_name: str, presence_state: int, resident_type: pb.ResidentType, mood_level: int | None = None):
@@ -1084,7 +1121,7 @@ def main():
     # get_satellites und get_car_state sind Lambdas (late binding) — udp_server ist
     # zum Zeitpunkt des Aufrufs bereits gesetzt.
     grpc_servicer = HannahServicer(
-        registry=registry,
+        user_manager=_user_manager,
         handle_text=_handle_text,
         handle_voice=_handle_voice,
         announce=process_announcement,
@@ -1109,7 +1146,7 @@ def main():
         on_agent_set_resident=_on_agent_set_resident,
         on_agent_satellite_control=_on_agent_satellite_control,
         on_agent_device_snapshot=_on_agent_device_snapshot,
-        on_agent_send_residents=registry.sync,
+        on_agent_send_residents=None, #TODO: neue Funktion schaffen
         on_agent_room_snapshot=_on_agent_room_snapshot,
         on_trigger_firmware_update=lambda device: mqtt_handler.publish_ota_ok(device),
         on_timer_fired=_on_timer_fired,
@@ -1133,13 +1170,30 @@ def main():
 
     residents = ResidentsClient(cfg.get("residents", {}))
     residents.set_setter(grpc_servicer.agent_set_resident)
-    registry.set_residents_client(residents)
+    residents.set_mood_setter(grpc_servicer.agent_set_resident_mood)
+
+    # Rückrichtung: wenn Hannah (nicht ioBroker) als erstes von einer Presence-Änderung
+    # eines verlinkten Users erfährt, an den Residents-Adapter zurückpushen.
+    def _push_user_presence(roomie_id: str, is_home: bool, resident_type: str):
+        if resident_type == "guest":
+            (residents.set_guest_home if is_home else residents.set_guest_away)(roomie_id)
+        else:
+            (residents.set_user_home if is_home else residents.set_user_away)(roomie_id)
+
+    _user_manager.set_residents_pusher(_push_user_presence)
+
+    def _push_user_mood(roomie_id: str, mood: int, resident_type: str):
+        residents.set_mood(roomie_id, mood, _RESIDENT_TYPE_BY_SEGMENT.get(resident_type, pb.ResidentType.ROOMIE))
+
+    _user_manager.set_mood_pusher(_push_user_mood)
 
     def _on_resident_arrival(resident: Resident):
         if isinstance(resident, Roomie):
             process_announcement("all", "Willkommen zuhause!")
-            user = registry.get_by_roomie(resident.roomie_id)
-            display = user["display_name"] if user else resident.roomie_id
+            user = _user_manager.get_user_by_linked_account("residents", resident.id)
+            if user:
+                user.presence = True
+            display = user.display_name if user else resident.roomie_id
             grpc_servicer.publish_event(make_resident_event(resident.roomie_id, display, "arrived"))
         elif isinstance(resident, Guest):
             process_announcement("all", "Es ist Besuch angekommen!")
@@ -1171,14 +1225,23 @@ def main():
 
     def _on_resident_departure(resident: Resident):
         if isinstance(resident, Roomie):
-            user = registry.get_by_roomie(resident.roomie_id)
-            display = user["display_name"] if user else resident.roomie_id
+            user = _user_manager.get_user_by_linked_account("residents", resident.id)
+            if user:
+                user.presence = False
+            display = user.display_name if user else resident.roomie_id
             grpc_servicer.publish_event(make_resident_event(resident.roomie_id, display, "departed"))
             if not residents.is_home() and _ota_pending:
                 log.info("Alle weg — OTA-Updates freigeben.")
                 _release_ota_updates()
         elif isinstance(resident, Guest):
             grpc_servicer.publish_event(make_resident_event(f"guest:{resident.roomie_id}", resident.roomie_id, "departed"))
+
+    def _on_resident_mood_changed(resident: Resident, _old_mood: int, mood: int):
+        """Pull-Richtung: ioBroker meldet eine Stimmungsänderung -> auf den verlinkten Hannah-User übertragen.
+        Push-Richtung (Hannah-User -> ioBroker) fehlt noch, AgentSetResident hat aktuell kein mood-Feld."""
+        user = _user_manager.get_user_by_linked_account("residents", resident.id)
+        if user:
+            user.mood = mood
 
     def _on_sensor(device: str, temperature: float, pressure: float,
                    humidity: float, iaq: float, iaq_accuracy: int,
@@ -1193,6 +1256,7 @@ def main():
     mqtt_handler.set_sensor_handler(_on_sensor)
     residents.on_arrival(_on_resident_arrival)
     residents.on_departure(_on_resident_departure)
+    residents.on_mood_changed(_on_resident_mood_changed)
 
     # Auto-Einpark-Event → gRPC-Stream (pro Tracker, damit home_address bekannt ist)
     for _ct in car_manager:
@@ -1366,6 +1430,8 @@ def main():
                 **grpc_servicer.proxy_satellites(),
             },
             notify_satellite_deleted=grpc_servicer.agent_satellite_deleted,
+            user_manager=_user_manager,
+            get_residents=residents.all_residents,
         )
         web_host = web_cfg.get("host", "0.0.0.0")
         web_port = int(web_cfg.get("port", 8080))

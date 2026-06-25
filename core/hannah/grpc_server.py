@@ -13,9 +13,10 @@ from typing import Callable, Iterable, Optional
 
 import grpc
 
+from hannah.user_manager import UserManager
 from hannah.proto import hannah_pb2 as pb
 from hannah.proto import hannah_pb2_grpc as pb_grpc
-from hannah.user_registry import UserRegistry, AmbiguousResidentError
+from hannah.models.user import User
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def __init__(
         self,
-        registry: UserRegistry,
+        user_manager: UserManager,
         handle_text: Callable[[str], tuple[str, str]],
         handle_voice: Callable[[bytes], tuple[str, str, str, bytes]],
         announce: Callable[[str, str], None],
@@ -70,7 +71,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_proxy_discovery: Optional[Callable[[str, int], None]] = None,  # (host, port) — None args = restore own address
         get_devices: Optional[Callable[[], list]] = None,           # → [{key,name,devices:[...]}]
         control_device: Optional[Callable[[str, str, str], bool]] = None,  # (device_id, state, value) → bool
-        enroll_voiceprint: Optional[Callable[[str, bytes, int], tuple]] = None,  # (roomie_id, pcm, rate) → (ok, msg)
+        enroll_voiceprint: Optional[Callable[[str, bytes, int], tuple]] = None,  # (user_id, pcm, rate) → (ok, msg)
         on_satellite_change: Optional[Callable[[dict], None]] = None,           # ({device: room}) bei Register/Disconnect via Proxy
         on_agent_state: Optional[Callable[[str, str, bool, int], None]] = None,      # (state_id, value, ack, ts)
         on_agent_resident: Optional[Callable[[str, str, int, pb.ResidentType, int], None]] = None,   # (roomie_id, name, presence_state, type, mood_level)
@@ -93,7 +94,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         resolve_satellite_name: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → display_name | None
         resolve_satellite_room: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → room_id | None
     ):
-        self._registry              = registry
+        self._user_manager          = user_manager
         self._handle_text           = handle_text
         self._handle_voice          = handle_voice
         self._announce              = announce
@@ -233,93 +234,97 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
     # User Registry
 
     def GetUsers(self, request, _context):
-        users = self._registry.get_all(include_inactive=request.include_inactive)
+        users = self._user_manager.users(include_inactive=request.include_inactive)
         return pb.GetUsersResponse(users=[_user_to_pb(u) for u in users])
 
     def GetUser(self, request, context):
-        resident_type = _resident_type_name(request.type)
         lookup = request.WhichOneof("lookup")
-        try:
-            if lookup == "roomie_id":
-                raw = self._registry.get_by_roomie(request.roomie_id, resident_type)
-            elif lookup == "uuid":
-                raw = self._registry.get_by_uuid(request.uuid)
-            elif lookup == "linked_account":
+        match lookup:
+            case "user_name":
+                raw = self._user_manager.get_user_by_username(request.user_name)
+            case "id":
+                raw = self._user_manager.get_user_by_id(request.id)
+            case "linked_account":
                 la = request.linked_account
-                raw = self._registry.get_by_linked_account(la.service, la.account_id)
-            else:
-                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-                context.set_details("Exactly one lookup field must be set.")
-                return pb.UserResponse()
-        except AmbiguousResidentError as exc:
-            context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
-            context.set_details(_ambiguous_message(exc))
-            return pb.UserResponse()
-
-        if raw is None:
+                raw = self._user_manager.get_user_by_linked_account(la.provider, la.external_id)
+        if not raw:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details("User nicht gefunden.")
             return pb.UserResponse(found=False)
+
         return pb.UserResponse(found=True, user=_user_to_pb(raw))
 
     def LinkAccount(self, request, context):
-        try:
-            ok = self._registry.link_account(
-                request.roomie_id, request.service, request.account_id, _resident_type_name(request.type)
-            )
-        except AmbiguousResidentError as exc:
-            context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
-            context.set_details(_ambiguous_message(exc))
-            return pb.StatusResponse(ok=False, message=_ambiguous_message(exc))
-        msg = "verknüpft" if ok else f"Roomie {request.roomie_id!r} nicht gefunden"
-        return pb.StatusResponse(ok=ok, message=msg)
+        user = self._user_manager.get_user_by_id(request.user_id)
+        if not user:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details("User nicht gefunden.")
+            return pb.StatusResponse(ok=False, message="User nicht gefunden.")
+        
+        user.link_account(request.service, request.account_id, provider_payload=request.provider_payload)
+        msg = "verknüpft" if user else "Fehler bei Verknüpfung"
+        return pb.StatusResponse(ok=(True if user else False), message=msg)
 
-    def UnlinkAccount(self, request, _context):
-        ok = self._registry.unlink_account(request.service, request.account_id)
-        msg = "entfernt" if ok else "Account nicht gefunden"
-        return pb.StatusResponse(ok=ok, message=msg)
+    def UnlinkAccount(self, request, context):
+        user = self._user_manager.get_user_by_id(request.user_id)
+        if not user:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details("User nicht gefunden.")
+            return pb.StatusResponse(ok=False, message="User nicht gefunden.")
+        
+        msg = "entfernt" if user else "Fehler bei Aufhebung der Verknüpfung"
+        return pb.StatusResponse(ok=(True if user else False), message=msg)
 
     def SetTrustLevel(self, request, context):
-        try:
-            ok = self._registry.set_trust_level(request.roomie_id, request.level, _resident_type_name(request.type))
-        except AmbiguousResidentError as exc:
-            context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
-            context.set_details(_ambiguous_message(exc))
-            return pb.StatusResponse(ok=False, message=_ambiguous_message(exc))
-        msg = "aktualisiert" if ok else f"Roomie {request.roomie_id!r} nicht gefunden"
-        return pb.StatusResponse(ok=ok, message=msg)
+        user = self._user_manager.get_user_by_id(request.user_id)
+        if not user:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details("User nicht gefunden.")
+            return pb.StatusResponse(ok=False, message="User nicht gefunden.")
+        
+        user.trust_level = request.level
+        user.save()
+        msg = "aktualisiert" if user else f"User {request.user_id!r} nicht gefunden"
+        return pb.StatusResponse(ok=(True if user else False), message=msg)
 
     def SetSystemMessages(self, request, _context):
-        # uuid ist immer eindeutig (PRIMARY KEY) — anders als roomie_id keine Kollisionsgefahr,
-        # daher kein AmbiguousResidentError-Handling nötig.
-        ok = self._registry.set_system_messages(request.uuid, request.enabled)
-        msg = "aktualisiert" if ok else f"User {request.uuid!r} nicht gefunden"
-        return pb.StatusResponse(ok=ok, message=msg)
+        # user_id ist immer eindeutig (PRIMARY KEY), wird immer vom User aufgerufen, daher keine Unterscheidung zwischen get und get_or_404 nötig
+        user = self._user_manager.get_user_by_id(request.user_id)
+        user.system_messages = 1 if request.enabled else 0
+        user.save()
+        msg = "aktualisiert"
+        return pb.StatusResponse(ok=True, message=msg)
 
     # ------------------------------------------------------------------
     # Control
 
-    def _roomie_from_request(self, source_service: str, source_user_id: str) -> str:
+    def _user_from_request(self, source_service: str, source_user_id: str) -> str:
         """Löst source_service + source_user_id via linked_accounts auf eine roomie_id auf."""
         if not source_service or not source_user_id:
             return ""
-        user = self._registry.get_by_linked_account(source_service, source_user_id)
-        return user.get("roomie_id", "") if user else ""
+        user = self._user_manager.get_user_by_linked_account(source_service, source_user_id)
+
+        if not user:
+            return ""
+        
+        return user.id
 
     def SubmitText(self, request, _context):
-        roomie_id = self._roomie_from_request(request.source_service, request.source_user_id)
+        user_id = self._user_from_request(request.source_service, request.source_user_id)
         log.info(
             f"[grpc] SubmitText von {request.source_service}:{request.source_user_id}"
-            f" (roomie={roomie_id or 'anonym'}) — {request.text!r}"
+            f" (user={user_id or 'anonym'}) — {request.text!r}"
         )
-        answer, intent_name = self._handle_text(request.text, roomie_id)
+        answer, intent_name = self._handle_text(request.text, user_id)
         return pb.SubmitTextResponse(answer=answer, intent_name=intent_name)
 
     def SubmitVoice(self, request, _context):
-        roomie_id = self._roomie_from_request(request.source_service, request.source_user_id)
+        user_id = self._user_from_request(request.source_service, request.source_user_id)
         log.info(
             f"[grpc] SubmitVoice von {request.source_service}:{request.source_user_id}"
-            f" (roomie={roomie_id or 'anonym'}, {len(request.audio)} bytes)"
+            f" (user={user_id or 'anonym'}, {len(request.audio)} bytes)"
         )
-        transcript, answer, intent_name, audio_ogg = self._handle_voice(request.audio, roomie_id)
+        transcript, answer, intent_name, audio_ogg = self._handle_voice(request.audio, user_id)
         return pb.SubmitVoiceResponse(
             transcript=transcript,
             answer=answer,
@@ -518,7 +523,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             context.set_details("handle_satellite_audio not configured")
             return pb.SubmitSatelliteAudioResponse()
 
-        speaker = request.speaker_roomie_id or ""
+        speaker = request.speaker_user_id or ""
         with self._proxy_sat_lock:
             known = self._proxy_satellites.get(request.device_id)
         room_id = (known or {}).get("room") or self._resolve_satellite_room(request.device_id) or ""
@@ -628,6 +633,18 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         cmd = pb.AgentCommand(set_resident=pb.AgentSetResident(
             resident_id=resident_id,
             presence_state=presence_state,
+            type=resident_type,
+        ))
+        with self._agent_lock:
+            for q in self._agent_queues:
+                q.put(cmd)
+            return len(self._agent_queues) > 0
+
+    def agent_set_resident_mood(self, resident_id: str, mood: int, resident_type: pb.ResidentType) -> bool:
+        """Push SetResidentMood command to all connected adapters."""
+        cmd = pb.AgentCommand(set_resident_mood=pb.AgentSetResidentMood(
+            resident_id=resident_id,
+            mood=mood,
             type=resident_type,
         ))
         with self._agent_lock:
@@ -1012,11 +1029,11 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 message="Kein Voice-ID-Backend konfiguriert.",
             )
         log.info(
-            f"[grpc] EnrollVoiceprint: roomie={request.roomie_id!r}"
+            f"[grpc] EnrollVoiceprint: user={request.user_id!r}"
             f" bytes={len(request.audio_pcm)} rate={request.sample_rate}"
         )
         ok, msg = self._enroll_voiceprint(
-            request.roomie_id, request.audio_pcm, request.sample_rate
+            request.user_id, request.audio_pcm, request.sample_rate
         )
         return pb.StatusResponse(ok=ok, message=msg)
 
@@ -1088,26 +1105,15 @@ def make_system_notification_event(text: str) -> pb.HannahEvent:
 # ------------------------------------------------------------------
 # Conversion helpers
 
-def _resident_type_name(t: "pb.ResidentType") -> Optional[str]:
-    """None for UNSPECIFIED (caller didn't disambiguate), else the enum name (e.g. 'ROOMIE')."""
-    if t == pb.ResidentType.RESIDENT_TYPE_UNSPECIFIED:
-        return None
-    return pb.ResidentType.Name(t)
-
-
-def _ambiguous_message(exc: "AmbiguousResidentError") -> str:
-    return f"'{exc.roomie_id}' ist mehrdeutig ({', '.join(exc.types)}) — bitte type angeben."
-
-
-def _user_to_pb(u: dict) -> pb.User:
+def _user_to_pb(u: User) -> pb.User:
     return pb.User(
-        uuid=u.get("uuid", ""),
-        roomie_id=u.get("roomie_id", ""),
-        display_name=u.get("display_name", ""),
-        trust_level=u.get("trust_level", 5),
-        active=bool(u.get("active", True)),
-        linked_accounts=u.get("linked_accounts") or {},
-        system_messages=bool(u.get("system_messages", False)),
+        id=str(u.id or ""),
+        user_name=u.username or "",
+        display_name=u.display_name or "",
+        trust_level=int(u.trust_level or 5),
+        active=bool(u.is_active),
+        system_messages=bool(u.system_messages),
+        linked_accounts={acc.service: acc.external_id for acc in u.linked_accounts}
     )
 
 

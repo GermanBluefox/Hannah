@@ -66,29 +66,29 @@ def get_embedding(classifier, audio_bytes: bytes) -> torch.Tensor:
 
 
 @router.post("/enroll")
-async def enroll(request: Request, x_roomie_id: str = Header(...)):
+async def enroll(request: Request, x_user_id: str = Header(...)):
     audio_data  = await request.body()
     classifier  = request.app.state.classifier
     disk_path   = request.app.state.disk_path
     mem_path    = request.app.state.mem_path
 
-    print(f"Enrollment-Probe empfangen für: {x_roomie_id}")
+    print(f"Enrollment-Probe empfangen für: {x_user_id}")
     new_emb   = get_embedding(classifier, audio_data)
-    filename  = f"{x_roomie_id}.pt"
+    filename  = f"{x_user_id}.pt"
     disk_file = os.path.join(disk_path, filename)
     ram_file  = os.path.join(mem_path,  filename)
 
     if os.path.exists(disk_file):
         old_emb      = torch.load(disk_file, map_location="cpu").squeeze()
         combined_emb = (old_emb * 0.8) + (new_emb * 0.2)
-        print(f"Update: Bestehendes Profil für {x_roomie_id} verfeinert.")
+        print(f"Update: Bestehendes Profil für {x_user_id} verfeinert.")
     else:
         combined_emb = new_emb
-        print(f"Neu: Erstes Profil für {x_roomie_id} erstellt.")
+        print(f"Neu: Erstes Profil für {x_user_id} erstellt.")
 
     torch.save(combined_emb, disk_file)
     torch.save(combined_emb, ram_file)
-    return {"ok": True, "message": f"Profil für {x_roomie_id} gespeichert."}
+    return {"ok": True, "message": f"Profil für {x_user_id} gespeichert."}
 
 
 @router.post("/identify")
@@ -117,7 +117,7 @@ async def identify(request: Request):
         print(f"⚠️  Unsichere Erkennung: {best_match} ({max_score:.4f})")
 
     print(f"Ergebnis: {best_match} (Score: {max_score:.4f})")
-    return {"roomie_id": best_match, "confidence": max_score}
+    return {"user_id": best_match, "confidence": max_score}
 
 
 def create_app(

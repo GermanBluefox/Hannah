@@ -104,7 +104,7 @@ func main() {
 			if err != nil {
 				slog.Warn("voice-id identify failed", "device", device, "err", err)
 			} else if id != "" {
-				slog.Info("speaker identified", "device", device, "roomie_id", id)
+				slog.Info("speaker identified", "device", device, "user_id", id)
 				speakerID = id
 			}
 		}

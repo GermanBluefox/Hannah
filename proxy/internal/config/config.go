@@ -29,7 +29,7 @@ type UDPCfg struct {
 }
 
 type VoiceIDCfg struct {
-	// Enabled: false = Voice-ID disabled, speaker_roomie_id is always ""
+	// Enabled: false = Voice-ID disabled, speaker_user_id is always ""
 	Enabled bool `json:"enabled"`
 	// BaseURL: HTTP base URL of the Voice-ID service, e.g. "http://localhost:8765"
 	BaseURL string `json:"base_url"`

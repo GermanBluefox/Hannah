@@ -123,7 +123,12 @@ def _extract_and_copy(archive: Path, install_dir: Path) -> None:
 
 
 def _restart_service(service: str) -> None:
-    subprocess.run(["systemctl", "restart", service], check=True)
+    """Restart a managed service. `service` is the systemd unit name on Linux,
+    or the launchd label (e.g. com.hannah.voiceid) on macOS."""
+    if sys.platform == "darwin":
+        subprocess.run(["launchctl", "kickstart", "-k", f"system/{service}"], check=True)
+    else:
+        subprocess.run(["systemctl", "restart", service], check=True)
     log.info("Service %s restarted.", service)
 
 

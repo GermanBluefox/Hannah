@@ -9,7 +9,7 @@ import time
 SAMPLERATE = 16000
 DURATION = 10  # 10 Sekunden sind ideal für ein stabiles Stimmprofil
 PI_URL = "http://192.168.8.2:8080/enroll"  # IP deines Pi 5 einsetzen
-ROOMIE_ID = "leonie"  # Dein Name für die Stimm-ID
+USER_ID = "1"  # Deine Hannah-User-ID (users.id), nicht der Username
 
 # Ein Text, der viele verschiedene Laute abdeckt
 ENROLL_TEXT = """
@@ -43,21 +43,21 @@ def record_audio(mic_id):
     print("✅ Aufnahme beendet.")
     return audio
 
-def save_and_send(audio, roomie_id):
-    filename = f"enroll_{roomie_id}.wav"
+def save_and_send(audio, user_id):
+    filename = f"enroll_{user_id}.wav"
     # Lokal speichern
     sf.write(filename, audio, SAMPLERATE)
     print(f"Lokal gespeichert als: {filename}")
-    
+
     # An den Pi senden
     try:
         with open(filename, 'rb') as f:
             audio_bytes = f.read()
-            
+
         headers = {
             "Content-Type": "application/octet-stream",
             "X-Sample-Rate": str(SAMPLERATE),
-            "X-Roomie-ID": roomie_id
+            "X-User-ID": user_id
         }
         
         print(f"Sende Daten an Hannah Identity Service ({PI_URL})...")
@@ -79,7 +79,7 @@ def main():
         
         confirm = input("\nBist du mit der Aufnahme zufrieden? (j/n): ")
         if confirm.lower() == 'j':
-            save_and_send(audio, ROOMIE_ID)
+            save_and_send(audio, USER_ID)
         else:
             print("Abgebrochen. Starte das Script einfach neu.")
             

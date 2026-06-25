@@ -18,11 +18,11 @@ from hannah_telegram.bot import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-def _make_user(trust_level: int = 5, display_name: str = "Test", roomie_id: str = "test"):
+def _make_user(trust_level: int = 5, display_name: str = "Test", user_id: int = 1):
     user = MagicMock()
+    user.id = user_id
     user.trust_level = trust_level
     user.display_name = display_name
-    user.roomie_id = roomie_id
     user.linked_accounts = {}
     return user
 
@@ -38,7 +38,7 @@ def _make_hannah(
     hannah = MagicMock()
     _user = user or (_make_user() if known else None)
     hannah.get_user_by_telegram = AsyncMock(return_value=(known, _user))
-    hannah.get_user_by_roomie = AsyncMock(return_value=(False, None, None))
+    hannah.get_user_by_username = AsyncMock(return_value=(False, None, None))
     hannah.link_account = AsyncMock(return_value=(True, "ok"))
     hannah.get_all_car_states = AsyncMock(return_value=[])
     resp = MagicMock()
@@ -206,15 +206,15 @@ class TestCmdStart:
 
 class TestCmdLink:
     @pytest.mark.asyncio
-    async def test_no_args_prompts_for_roomie_id(self):
+    async def test_no_args_prompts_for_username(self):
         bot = _make_bot()
         update, ctx = _make_update(args=[])
         await bot._cmd_link(update, ctx)
         text = update.message.reply_text.call_args[0][0]
-        assert "roomie" in text.lower() or "Roomie" in text
+        assert "username" in text.lower() or "Benutzernamen" in text
 
     @pytest.mark.asyncio
-    async def test_unknown_roomie_id_reports_error(self):
+    async def test_unknown_username_reports_error(self):
         bot = _make_bot(_make_hannah(known=False))
         update, ctx = _make_update(args=["unbekannt"])
         await bot._cmd_link(update, ctx)
@@ -222,15 +222,15 @@ class TestCmdLink:
         assert "nicht gefunden" in text
 
     @pytest.mark.asyncio
-    async def test_valid_roomie_id_calls_link_account(self):
-        user = _make_user(trust_level=5)
+    async def test_valid_username_calls_link_account(self):
+        user = _make_user(trust_level=5, user_id=42)
         hannah = _make_hannah(known=False)
-        hannah.get_user_by_roomie = AsyncMock(return_value=(True, user, None))
+        hannah.get_user_by_username = AsyncMock(return_value=(True, user, None))
         hannah.link_account = AsyncMock(return_value=(True, "ok"))
         bot = _make_bot(hannah)
         update, ctx = _make_update(chat_id=99999, args=["leonie"])
         await bot._cmd_link(update, ctx)
-        hannah.link_account.assert_called_once_with("leonie", "99999", None)
+        hannah.link_account.assert_called_once_with(42, "99999")
 
     @pytest.mark.asyncio
     async def test_group_chat_rejected(self):

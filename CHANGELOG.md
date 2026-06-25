@@ -5,6 +5,10 @@
 -->
 
 
+## 0.40.1
+### AutoDeploy
+* Fixed: the self-update restart path (when autodeploy deploys a newer version of itself) still hardcoded `systemctl restart` — `_restart_service()` got the macOS/launchd platform switch earlier, but this is a separate call site that was missed, crashing with `FileNotFoundError` on the Mac Mini as soon as a newer autodeploy release was available
+
 ## 0.40.0
 ### Hannah Core
 * Added: new SQLite-backed user/linked-account model (`users`, `linked_accounts`), replacing ioBroker Residents as the source of authority for Hannah's users — accounts, trust levels, and provider links now live natively in Hannah Core (Refs #72)

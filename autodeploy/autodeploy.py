@@ -252,9 +252,12 @@ def main() -> None:
                 log.error("[%s] Unexpected error: %s", component.get("name", "?"), e)
 
         if updated_self:
-            # Self-update: systemd will restart us with the new code.
+            # Self-update: systemd/launchd will restart us with the new code.
             log.info("Self-update deployed — restarting service.")
-            subprocess.run(["systemctl", "restart", config["self_service"]], check=False)
+            if sys.platform == "darwin":
+                subprocess.run(["launchctl", "kickstart", "-k", f"system/{config['self_service']}"], check=False)
+            else:
+                subprocess.run(["systemctl", "restart", config["self_service"]], check=False)
             sys.exit(0)
 
         time.sleep(poll_interval)

@@ -5,6 +5,11 @@
 -->
 
 
+
+## 0.40.4
+### Hannah Core
+* Fixed: the adapter's initial `send_residents` snapshot (sent once per `AgentConnect`, all currently known residents in one message) was never wired up on the Core side — `on_agent_send_residents` was passed as `None` with a `#TODO`, so `HannahServicer` always fell through to `log.warning("[grpc] Unrecognized AgentMessage payload: send_residents")` and Core had to wait for the next individual `resident_update` per resident instead (Refs #73)
+
 ## 0.40.3
 ### Hannah Core
 * Changed: `User.id` and every `*Request.user_id`/`GetUserRequest.id` field (LinkAccount, UnlinkAccount, SetTrustLevel, SetSystemMessages, GetUser) are now `int32` instead of `string` on the wire, matching the actual `users.id` SQLite column — found while debugging `/verknuepfen` always failing with `Exception calling application: '3'`. `EnrollVoiceprintRequest.user_id`/`SubmitSatelliteAudioRequest.speaker_user_id` stay `string` on purpose — those cross into the Voice-ID HTTP service, which treats the identifier as an opaque key

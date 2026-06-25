@@ -983,6 +983,15 @@ def main():
             return
         residents.get_or_create(roomie_id, cls).update(display_name, presence_state, mood_level)
 
+    def _on_agent_send_residents(residents_list):
+        # Initial-Snapshot beim Adapter-Connect: alle Residents in einem Schwung
+        # nachziehen, statt auf das nächste Einzel-Update pro Resident zu warten.
+        for r in residents_list:
+            if r.HasField("mood_level"):
+                _on_agent_resident(r.roomie_id, r.name, r.presence_state, r.type, r.mood_level)
+            else:
+                _on_agent_resident(r.roomie_id, r.name, r.presence_state, r.type)
+
     def _on_agent_text_command(text: str) -> tuple[str, str]:
         return _handle_text(text, source="iobroker")
 
@@ -1146,7 +1155,7 @@ def main():
         on_agent_set_resident=_on_agent_set_resident,
         on_agent_satellite_control=_on_agent_satellite_control,
         on_agent_device_snapshot=_on_agent_device_snapshot,
-        on_agent_send_residents=None, #TODO: neue Funktion schaffen
+        on_agent_send_residents=_on_agent_send_residents,
         on_agent_room_snapshot=_on_agent_room_snapshot,
         on_trigger_firmware_update=lambda device: mqtt_handler.publish_ota_ok(device),
         on_timer_fired=_on_timer_fired,

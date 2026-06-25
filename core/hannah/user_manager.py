@@ -123,12 +123,17 @@ class UserManager:
         return self._cache(user)
 
     def get_user_by_id(self, user_id):
-        """Gibt den Benutzer mit der angegebenen ID zurück.
+        """Gibt den Benutzer mit der angegebenen ID zurück, oder None.
 
         Normalisiert auf int, damit ein versehentlich als String übergebenes
-        user_id nicht den (int-keyed) Cache mit einem KeyError verfehlt.
+        user_id nicht den (int-keyed) Cache mit einem KeyError verfehlt. Nicht-numerische
+        IDs (z.B. Voice-IDs "unknown"-Sentinel bei unsicherer Sprechererkennung) geben
+        ebenfalls None zurück, statt mit ValueError zu crashen.
         """
-        user_id = int(user_id)
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            return None
         if user_id not in self._users:
             user = User.get(self._db(), id=user_id)
             if not user:

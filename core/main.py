@@ -24,7 +24,6 @@ from typing import Callable, Optional
 import numpy as np
 
 from hannah.models.linked_account import LinkedAccount
-from hannah.models.user import User
 from hannah.user_manager import UserManager
 from hannah.utils.db import get_db, init_db
 from hannah.residents import Roomie, Guest, Pet, Resident, HOME_PRESENCE_STATE
@@ -333,7 +332,7 @@ def main():
         """Gibt einen Zusatz-Abschnitt für den System-Prompt zurück der Sprecher-Info enthält."""
         if not speaker_user_id:
             return ""
-        user = User.get(get_db(), id=speaker_user_id)
+        user = _user_manager.get_user_by_id(speaker_user_id)
         if not user:
             return f"\n\nDie Person die gerade mit dir spricht heißt {speaker_user_id}."
         name        = user.display_name
@@ -354,7 +353,7 @@ def main():
         """
         if not speaker_user_id:
             return ""
-        user = User.get(get_db(), id=speaker_user_id)
+        user = _user_manager.get_user_by_id(speaker_user_id)
         if not user:
             return ""
         for la in user.linked_accounts:

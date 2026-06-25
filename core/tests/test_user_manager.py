@@ -16,6 +16,23 @@ def _make_user_manager(tmp_path):
     return UserManager(db_module.get_db)
 
 
+class TestGetUserById:
+    def test_unknown_sentinel_returns_none_instead_of_raising(self, tmp_path):
+        """Regression: Voice-ID returns the literal string "unknown" as speaker_user_id
+        when recognition confidence is too low (app.py: best_match = "unknown"). That flows
+        straight into get_user_by_id() via main.py's _speaker_context()/_resolve_roomie_id() —
+        int("unknown") must not crash, it has to resolve like any other unknown user: None."""
+        user_manager = _make_user_manager(tmp_path)
+
+        assert user_manager.get_user_by_id("unknown") is None
+
+    def test_numeric_string_still_resolves(self, tmp_path):
+        user_manager = _make_user_manager(tmp_path)
+        user = user_manager.create_user("leonie", generate_password_hash("x"), email="leonie@example.com")
+
+        assert user_manager.get_user_by_id(str(user.id)).id == user.id
+
+
 class TestDumpPresentUsers:
     def test_present_user_with_residents_link_gets_pushed(self, tmp_path):
         user_manager = _make_user_manager(tmp_path)

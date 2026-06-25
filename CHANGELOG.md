@@ -6,6 +6,11 @@
 
 
 
+
+## 0.42.1
+### Hannah Core
+* Fixed: `UserManager.get_user_by_id()` crashed with `ValueError` on a non-numeric `user_id` instead of returning `None` — Voice-ID returns the literal string `"unknown"` as `speaker_user_id` when recognition confidence is too low, which flows straight into this lookup via `main.py`'s `_speaker_context()`/`_resolve_roomie_id()`. Those two call sites also bypassed `UserManager`'s cache entirely by calling `User.get()` directly; now go through `get_user_by_id()` like everything else (Refs #84)
+
 ## 0.42.0
 ### Hannah Core
 * Changed: BLE-Indoor-Lokalisierung (`ble_location.py`) ist jetzt von ioBroker Residents entkoppelt und setzt direkt `User.presence`, statt über `ResidentsClient`/`Resident` zu laufen. Grund: `ResidentsClient._residents` wird nur asynchron über die gRPC-Verbindung zum Adapter befüllt (Einzel-Updates oder das `send_residents`-Snapshot, #73) — BLE-Reports kommen aber unabhängig per MQTT und können direkt nach einem Core-Neustart schon eintreffen, bevor der Adapter verbunden ist, was zu `log.warning(...Tippfehler in config.yaml?)` führte, obwohl kein Tippfehler vorlag. `UserManager` lädt dagegen synchron aus der lokalen SQLite-DB, keine Race möglich

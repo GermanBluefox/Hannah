@@ -5,10 +5,9 @@
 -->
 
 
-
-
-
-
+## 0.41.2
+### Hannah Core
+* Fixed: the `/satellites` WebUI page's "Meldet sich als" warning compared a live-resolved room *ID* (e.g. `leonie_schlafzimmer`) against the assigned room's *display name* (e.g. `Leonie Schlafzimmer`) — a false positive for every room whose ID isn't spelled identically to its display name, even though the satellite was correctly assigned. The satellite/proxy never sends a room at all (`SatelliteRegistration.room` was deliberately removed — RoomManager is the sole authority); the mismatch check now compares room ID against room ID, resolving the live ID to a display name only for the message text (Refs #81)
 
 ## 0.41.1
 ### Hannah Core

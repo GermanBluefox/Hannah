@@ -108,6 +108,7 @@ def create_app(
     def satellites():
         connected = get_connected_satellites()
         db_satellites = {s["device_id"]: s for s in room_manager.get_satellites()}
+        room_display_names = {r["room_id"]: r["display_name"] for r in room_manager.get_rooms()}
         # Aktuell verbundene Satelliten die noch nicht in der DB sind eintragen
         for device_id in connected:
             if device_id not in db_satellites:
@@ -117,9 +118,19 @@ def create_app(
         seen = set()
         for device_id, sat in db_satellites.items():
             seen.add(device_id)
-            all_sats.append({**sat, "connected": device_id in connected,
-                             "connected_room": connected.get(device_id, "")})
-        for device_id, room in connected.items():
+            connected_room_id = connected.get(device_id)
+            all_sats.append({
+                **sat,
+                "connected": device_id in connected,
+                # Anzeigename der live gemeldeten Raum-ID, fürs Anzeigen — der eigentliche
+                # Mismatch-Check vergleicht unten IDs, nicht Anzeigenamen (room_id und
+                # display_name sind unterschiedliche Strings, sobald ein Raum nicht 1:1
+                # gleich benannt ist wie seine ID, z.B. "leonie_schlafzimmer" vs.
+                # "Leonie Schlafzimmer" — das ist kein Mismatch, nur eine andere Schreibweise)
+                "connected_room": room_display_names.get(connected_room_id, connected_room_id or ""),
+                "room_mismatch": device_id in connected and connected_room_id != sat.get("room_id"),
+            })
+        for device_id, room_id in connected.items():
             if device_id not in seen:
                 all_sats.append({
                     "device_id": device_id,
@@ -128,7 +139,8 @@ def create_app(
                     "room_display_name": None,
                     "last_seen": None,
                     "connected": True,
-                    "connected_room": room,
+                    "connected_room": room_display_names.get(room_id, room_id),
+                    "room_mismatch": True,
                 })
         all_sats.sort(key=lambda s: s["device_id"])
         return render_template(

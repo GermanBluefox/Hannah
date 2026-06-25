@@ -62,7 +62,7 @@
               </select>
               <button class="btn btn-sm btn-outline-primary">Setzen</button>
             </form>
-            {% if sat.connected and sat.connected_room and sat.connected_room != (sat.room_display_name or '') %}
+            {% if sat.connected and sat.connected_room and sat.room_mismatch %}
             <small class="text-muted d-block mt-1">
               Meldet sich als: <em>{{ sat.connected_room }}</em>
             </small>

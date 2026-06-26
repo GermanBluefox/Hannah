@@ -1,0 +1,12 @@
+menu "Hannah NVS Update API"
+
+    config HANNAH_NVS_TOKEN
+        string "NVS Update Bearer Token"
+        default ""
+        help
+            Bearer-Token für POST /nvs (Refs #36). Eigener, von ota_token
+            getrennter Token — ota_token ist nicht zwingend über die Flotte
+            identisch, kann also nicht als gemeinsames Geheimnis dienen.
+            Leer = Endpoint lehnt alle Requests ab (fail closed).
+
+endmenu

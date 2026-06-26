@@ -20,6 +20,7 @@ typedef struct {
     char     asset_token[128];
     bool     tls_skip_verify;  /* Skip TLS certificate validation (insecure, for self-signed certs) */
     char     seed[64];         /* one-time pairing token written by WebFlash; cleared after "paired" ACK */
+    char     nvs_token[128];   /* shared secret for the inbound POST /nvs endpoint (Refs #36) */
 } hannah_config_t;
 
 /* Lädt Einstellungen aus NVS — sdkconfig-Werte als Fallback beim Erststart. */

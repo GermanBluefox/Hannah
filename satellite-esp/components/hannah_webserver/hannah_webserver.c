@@ -14,6 +14,7 @@
 #include "freertos/task.h"
 #include "freertos/portmacro.h"
 #include "esp_http_server.h"
+#include "cJSON.h"
 
 #include "hannah_config.h"
 #include "hannah_net.h"
@@ -235,6 +236,9 @@ static esp_err_t settings_get_handler(httpd_req_t *req)
         "<h3>Asset Server</h3>"
         "<label>URL<input name=asset_url value='%s'></label>"
         "<label>Token<input type=password name=asset_token placeholder='(unverändert lassen)'></label>"
+        "<h3>NVS Update API</h3>"
+        "<label>Bearer-Token für POST /nvs<input type=password name=nvs_token "
+          "placeholder='(unverändert lassen, leer = deaktiviert)'></label>"
         "<h3>Sicherheit</h3>"
         "<label><input type=checkbox name=tls_skip_verify value=1%s> "
           "TLS-Zertifikatsprüfung deaktivieren <span style='color:#c00'>(unsicher)</span></label>"
@@ -330,6 +334,9 @@ static esp_err_t settings_post_handler(httpd_req_t *req)
     memset(tok, 0, sizeof(tok));
     if (form_get(body, "asset_token", tok, sizeof(tok)) && tok[0])
         strncpy(new_cfg.asset_token, tok, sizeof(new_cfg.asset_token) - 1);
+    memset(tok, 0, sizeof(tok));
+    if (form_get(body, "nvs_token", tok, sizeof(tok)) && tok[0])
+        strncpy(new_cfg.nvs_token, tok, sizeof(new_cfg.nvs_token) - 1);
 
     char vad_str[8] = {0};
     if (form_get(body, "vad_ms", vad_str, sizeof(vad_str))) {
@@ -576,6 +583,113 @@ static esp_err_t log_clear_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* ── Handler: POST /nvs (Refs #36) ───────────────────────────────────────── */
+
+/* Nur diese Keys sind über /nvs schreibbar. Alles andere wird abgelehnt —
+ * insbesondere nvs_token selbst, das bleibt /settings vorbehalten. */
+static const char *NVS_ALLOWED_KEYS[] = {
+    "wifi_ssid", "wifi_pass", "mqtt_broker", "mqtt_port",
+    "ota_channel", "seed", "ww_threshold",
+};
+
+static esp_err_t nvs_post_handler(httpd_req_t *req)
+{
+    const hannah_config_t *cfg = hannah_config_get();
+
+    /* Fail closed: kein Token konfiguriert = Endpoint komplett deaktiviert. */
+    if (cfg->nvs_token[0] == '\0') {
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "NVS-Token nicht konfiguriert");
+        return ESP_FAIL;
+    }
+
+    size_t hdr_len = httpd_req_get_hdr_value_len(req, "Authorization");
+    if (hdr_len == 0) {
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Authorization-Header fehlt");
+        return ESP_FAIL;
+    }
+
+    char *auth = malloc(hdr_len + 1);
+    if (!auth) return ESP_ERR_NO_MEM;
+    esp_err_t hdr_err = httpd_req_get_hdr_value_str(req, "Authorization", auth, hdr_len + 1);
+
+    char expected[7 + sizeof(cfg->nvs_token)];
+    snprintf(expected, sizeof(expected), "Bearer %s", cfg->nvs_token);
+    bool authorized = (hdr_err == ESP_OK) && (strcmp(auth, expected) == 0);
+    free(auth);
+
+    if (!authorized) {
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Token ungültig");
+        return ESP_FAIL;
+    }
+
+    if (req->content_len == 0 || req->content_len > 2048) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body fehlt oder zu groß");
+        return ESP_FAIL;
+    }
+
+    char *body = malloc(req->content_len + 1);
+    if (!body) return ESP_ERR_NO_MEM;
+    int got = httpd_req_recv(req, body, req->content_len);
+    if (got <= 0) { free(body); return ESP_FAIL; }
+    body[got] = '\0';
+
+    cJSON *root = cJSON_Parse(body);
+    free(body);
+    if (!root || !cJSON_IsObject(root)) {
+        if (root) cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Ungültiges JSON");
+        return ESP_FAIL;
+    }
+
+    /* Erst validieren (alle Keys bekannt), dann erst übernehmen — kein Teilerfolg. */
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, root) {
+        bool known = false;
+        for (size_t i = 0; i < sizeof(NVS_ALLOWED_KEYS) / sizeof(NVS_ALLOWED_KEYS[0]); i++) {
+            if (strcmp(item->string, NVS_ALLOWED_KEYS[i]) == 0) { known = true; break; }
+        }
+        if (!known) {
+            ESP_LOGW(TAG, "/nvs: unbekannter Key '%s' abgelehnt", item->string);
+            cJSON_Delete(root);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Unbekannter Key");
+            return ESP_FAIL;
+        }
+    }
+
+    hannah_config_t new_cfg = *cfg;
+    cJSON *v;
+
+    if ((v = cJSON_GetObjectItemCaseSensitive(root, "wifi_ssid")) && cJSON_IsString(v))
+        strncpy(new_cfg.wifi_ssid, v->valuestring, sizeof(new_cfg.wifi_ssid) - 1);
+    if ((v = cJSON_GetObjectItemCaseSensitive(root, "wifi_pass")) && cJSON_IsString(v))
+        strncpy(new_cfg.wifi_pass, v->valuestring, sizeof(new_cfg.wifi_pass) - 1);
+    if ((v = cJSON_GetObjectItemCaseSensitive(root, "mqtt_broker")) && cJSON_IsString(v))
+        strncpy(new_cfg.mqtt_broker, v->valuestring, sizeof(new_cfg.mqtt_broker) - 1);
+    if ((v = cJSON_GetObjectItemCaseSensitive(root, "mqtt_port")) && cJSON_IsNumber(v)) {
+        int p = v->valueint;
+        if (p > 0 && p < 65536) new_cfg.mqtt_port = (uint16_t)p;
+    }
+    if ((v = cJSON_GetObjectItemCaseSensitive(root, "ota_channel")) && cJSON_IsString(v))
+        strncpy(new_cfg.ota_channel, v->valuestring, sizeof(new_cfg.ota_channel) - 1);
+    if ((v = cJSON_GetObjectItemCaseSensitive(root, "seed")) && cJSON_IsString(v))
+        strncpy(new_cfg.seed, v->valuestring, sizeof(new_cfg.seed) - 1);
+    if ((v = cJSON_GetObjectItemCaseSensitive(root, "ww_threshold")) && cJSON_IsNumber(v)) {
+        int t = v->valueint;
+        if (t >= 0 && t <= 100) new_cfg.wakeword_threshold = (uint8_t)t;
+    }
+
+    cJSON_Delete(root);
+    hannah_config_save(&new_cfg);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+
+    ESP_LOGI(TAG, "NVS per POST /nvs aktualisiert. Neustart.");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;
+}
+
 /* ── Öffentliche API ─────────────────────────────────────────────────────── */
 
 void hannah_webserver_start(void)
@@ -602,6 +716,7 @@ void hannah_webserver_start(void)
         { .uri = "/log",       .method = HTTP_GET,  .handler = log_page_handler     },
         { .uri = "/log/data",  .method = HTTP_GET,  .handler = log_data_handler     },
         { .uri = "/log/clear", .method = HTTP_POST, .handler = log_clear_handler    },
+        { .uri = "/nvs",       .method = HTTP_POST, .handler = nvs_post_handler     },
     };
     for (size_t i = 0; i < sizeof(routes)/sizeof(routes[0]); i++)
         httpd_register_uri_handler(s_server, &routes[i]);

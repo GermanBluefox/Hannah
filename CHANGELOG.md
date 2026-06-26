@@ -5,7 +5,9 @@
 -->
 
 
-
+## 0.43.0
+### Satellite Firmware
+* Added: `POST /nvs` HTTP endpoint — lets the ioBroker adapter remotely update whitelisted NVS keys (`wifi_ssid`, `wifi_pass`, `mqtt_broker`, `mqtt_port`, `ota_channel`, `seed`, `ww_threshold`) over WiFi without physical/WebSerial access, then restarts. Secured by a new, dedicated `nvs_token` — kept separate from `ota_token` since that one isn't guaranteed identical across the fleet (overridable per-device via `/settings`) and can't double as a shared secret. Empty `nvs_token` = endpoint fully disabled (fail closed) (Refs #36)
 
 ## 0.42.1
 ### Hannah Core

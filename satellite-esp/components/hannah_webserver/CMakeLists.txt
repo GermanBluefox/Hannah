@@ -11,4 +11,5 @@ idf_component_register(
         esp_wifi
         esp_system
         freertos
+        espressif__cjson
 )

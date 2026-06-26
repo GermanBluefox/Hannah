@@ -98,6 +98,17 @@ class UserManager:
             roomie_id, resident_type = link
             self._residents_pusher(roomie_id, True, resident_type)
 
+    def get_roomie_ids(self) -> set[str]:
+        """Roomie-IDs aller User mit verlinktem Residents-Account vom Typ 'roomie' —
+        maßgebliche Quelle für "echte Bewohner" (vs. Gäste/Pets), ersetzt die frühere
+        statische user_roomie-Config (siehe #87)."""
+        ids = set()
+        for user in self.users():
+            link = self._resident_link(user)
+            if link and link[1] == "roomie":
+                ids.add(link[0])
+        return ids
+
     def _loadAll(self):
         users = User.select(self._db()).order_by("id").all()
         for user in users:

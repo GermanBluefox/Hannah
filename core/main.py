@@ -76,9 +76,6 @@ def main():
         log.error(str(e))
         sys.exit(1)
 
-    # Statische Raum-Zuordnung aus Config (Fallback für MQTT-Satelliten ohne Registrierung)
-    device_rooms: dict[str, str] = cfg.get("device_rooms", {})
-
     # Asset-Manifest (einmalig beim Start abrufen — enthält u.a. duration_s für Jingles)
     def _load_asset_manifest() -> dict:
         import urllib.request as _urlreq
@@ -240,11 +237,11 @@ def main():
         conv_ctx.fill_intent(device, intent)
         conv_ctx.inherit_action(device, intent)
 
-        # Raum-Fallback: UDP-Registrierung → Config → nichts
+        # Raum-Fallback: zugewiesener Raum aus RoomManager → nichts
         # Bei Query-Intents nur anwenden wenn der Raum explizit im Text genannt wurde —
         # ohne Raum soll die globale Abfrage greifen.
         if intent.room is None and intent.name not in ("Query", "CarQuery"):
-            room = udp_server.get_registered_room(device) or device_rooms.get(device)
+            room = room_manager.get_satellite_room(device)
             if room:
                 intent.room    = room
                 intent.room_id = room.lower()
@@ -1170,7 +1167,7 @@ def main():
     # Presence-Updates kommen via gRPC (_on_agent_resident); MQTT wird nur noch
     # für das Zurückschreiben von Presence-States in den Residents-Adapter genutzt.
 
-    residents = ResidentsClient(cfg.get("residents", {}))
+    residents = ResidentsClient(cfg.get("residents", {}), _user_manager)
     residents.set_setter(grpc_servicer.agent_set_resident)
     residents.set_mood_setter(grpc_servicer.agent_set_resident_mood)
 

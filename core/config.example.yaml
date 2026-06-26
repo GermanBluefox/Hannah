@@ -5,9 +5,6 @@ triggers_file: "triggers.yaml"  # Pfad zur Trigger-Datei (hot-reload bei Änderu
 # extra_state_prefixes:
 #   - "0_userdata.0"
 
-device_rooms:
-  rpi-test: "Wohnzimmer"  # Fallback für MQTT-Satelliten ohne UDP-Registrierung
-
 groups:
   erdgeschoss:
     - Wohnzimmer
@@ -85,8 +82,6 @@ residents:
   topic_prefix_read:  "residents/0/roomie"          # ioBroker → Hannah (subscribe)
   state_key: "presence/state"   # Datenpunkt-Suffix unterhalb von /{name}/
   hannah_roomie: "hannah"
-  user_roomie:                  # Roomie-IDs aller Bewohner (außer Hannah)
-    - "bewohner1"
   state_home: 1   # 🏠 zu Hause
   state_away: 0   # ⏸️ Abwesend
 

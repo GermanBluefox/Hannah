@@ -5,6 +5,12 @@
 -->
 
 
+## 0.43.1
+### Hannah Core
+* Fixed: the room fallback for voice commands without an explicit room (`main.py`) only checked `udp_server.get_registered_room()` — proxy-connected satellites are tracked separately (`grpc_servicer._proxy_satellites`) and were never consulted, even though RoomManager already had a room assigned for them at registration time. Now resolves directly via `room_manager.get_satellite_room()`, independent of the live connection type (Refs #87)
+* Removed: `device_rooms` config (static MQTT-satellite room fallback) — dead since #35 removed room reporting from satellite NVS entirely, making RoomManager the sole authority; no legacy satellites needing this fallback remain in active use (Refs #87)
+* Removed: `residents.user_roomie`/`user_roomies` config (static list of "real" roomie IDs used to tell residents apart from guests in unscoped presence queries) — `ResidentsClient.is_home()` now derives this from the User Registry (new `UserManager.get_roomie_ids()`, based on `User.type == "roomie"` via the linked `residents` account) instead of duplicating it in config, consistent with #72 (Refs #87)
+
 ## 0.43.0
 ### Satellite Firmware
 * Added: `POST /nvs` HTTP endpoint — lets the ioBroker adapter remotely update whitelisted NVS keys (`wifi_ssid`, `wifi_pass`, `mqtt_broker`, `mqtt_port`, `ota_channel`, `seed`, `ww_threshold`) over WiFi without physical/WebSerial access, then restarts. Secured by a new, dedicated `nvs_token` — kept separate from `ota_token` since that one isn't guaranteed identical across the fleet (overridable per-device via `/settings`) and can't double as a shared secret. Empty `nvs_token` = endpoint fully disabled (fail closed) (Refs #36)

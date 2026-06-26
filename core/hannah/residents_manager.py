@@ -19,7 +19,7 @@ class ResidentsClient:
     Auf Ankunft/Abreise von Roomies und Gästen wird mit Callbacks reagiert.
     """
 
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, user_manager):
         self._lock = threading.Lock()
         # Key ist (resident_cls, roomie_id), nicht nur roomie_id — ein Gast und ein
         # Roomie können denselben Namen haben (separate Präfixe im Residents-Adapter).
@@ -27,9 +27,10 @@ class ResidentsClient:
 
         self.hannah_name = cfg.get("hannah_roomie", "hannah")
 
-        # user_roomies akzeptiert Liste oder einzelnen String (Rückwärtskompatibilität)
-        raw = cfg.get("user_roomies", cfg.get("user_roomie", []))
-        self.user_names: set[str] = {raw} if isinstance(raw, str) else set(raw)
+        # Maßgebliche Quelle für "echte Bewohner" (vs. Gäste/Pets) ist die User Registry
+        # (User.type == "roomie" über den verlinkten Residents-Account), nicht mehr eine
+        # statische Config-Liste — vermeidet doppelte Pflege seit #72.
+        self._user_manager = user_manager
 
         # Set by main.py: fn(resident_id, presence_state, resident_type) → sends SetResident via gRPC adapter
         self._setter: Optional[Callable[[str, int, "pb.ResidentType"], bool]] = None
@@ -153,8 +154,9 @@ class ResidentsClient:
                 for resident in self._residents.values()
                 if resident.roomie_id == roomie_id
             )
+        roomie_ids = self._user_manager.get_roomie_ids()
         return any(
             resident.is_home()
             for resident in self._residents.values()
-            if resident.roomie_id in self.user_names
+            if resident.roomie_id in roomie_ids
         )

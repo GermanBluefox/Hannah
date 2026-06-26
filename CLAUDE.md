@@ -310,13 +310,7 @@ Vollständiger Pfad von einem Satelliten-Sensorwert bis zur Sprachantwort — al
 
 Zweiteilig: **Topf (Unterteil) + Deckel (Oberteil)**, eigenes FreeCAD-Design orientiert an FPH Satellite1 (Innendurchmesser 88mm, 4 Montageloch-Bosses).
 
-**Topf:** Grundlegend fertig. Speaker-Öffnung noch nicht final modelliert. Speaker-Gitter wird separat gedruckt (steckbar, auswechselbar).
-
-**Deckel — offene Punkte:**
-- Ring-Schlitz für Membran-Taster: 1mm (war 0.5mm — zu eng für 0.4mm Nozzle)
-- Stützen für PCB-Höhe: noch nicht modelliert
-- USB-C Ausschnitt seitlich: noch nicht modelliert
-- Montagelöcher (4×): noch nicht modelliert
+**Status: Für Rev. 4 fertig geplant und gedruckt** (Topf + Deckel), keine offenen Punkte mehr. Speaker-Öffnung am Topf fertig modelliert, Speaker-Gitter separat gedruckt (steckbar, auswechselbar). Deckel: Ring-Schlitz für Membran-Taster (1mm — 0.5mm war zu eng für 0.4mm Nozzle), USB-C-Ausschnitt, 4× Montagelöcher — alles modelliert.
 
 **Taster-Geometrie:** ALPS SKRPABE010, Höhe 2.5mm. Pocket-Tiefe 2.5mm, Membrandicke 0.5mm, Deckeldicke 3mm → PCB-Oberseite liegt direkt an Deckel-Innenfläche an (keine Stützen nötig). Fixierung durch 4 Montageschrauben.
 
@@ -358,6 +352,7 @@ Gilt für das Hannah-Mono-Repo **und** das `iobroker.hannah`-Submodule (eigener 
 7. **Für jede funktionale Änderung muss ein Work Item (GitLab Issue, project 319) existieren.** Anlegen ist Aufgabe von Claude, proaktiv, bevor mit der Umsetzung begonnen wird — nicht erst hinterher.
 8. **Commit Messages bei funktionalen Änderungen referenzieren das Work Item** mit `Refs #ID`.
 9. **MR-Beschreibungen schließen das Work Item** mit `Closes #ID`.
+10. **Submodule-Pointer im Hannah-Repo (`iobroker.hannah`, `audiolib`) zeigen immer auf einen Release-Tag**, nie auf einen Branch-/Feature-Commit. Ablauf: PR im Submodule mergen → Release schneiden (Tag entsteht) → erst dann den Pointer im Hannah-Repo auf diesen Tag bumpen (eigener, fokussierter Commit, getrennt von der eigentlichen Feature-Arbeit). **Dabei immer auch das jeweilige `branch`-Feld in `.gitmodules` auf denselben Tag aktualisieren** — sonst hält Renovate den Pointer für veraltet (vergleicht gegen `.gitmodules`) und versucht ihn auf den alten Tag zurückzudrehen.
 
 Punkte 7–9 gelten für funktionale Änderungen (Features, Bugfixes) — nicht für reine Doku-/Chore-Änderungen wie diesen Abschnitt selbst.
 

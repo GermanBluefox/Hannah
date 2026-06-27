@@ -4,6 +4,7 @@ Hannah gRPC Server
 Exposes HannahService to external services (Telegram bot, web UI, …).
 Runs in its own thread pool alongside the main event loop.
 """
+import json
 import logging
 import queue
 import threading
@@ -91,9 +92,30 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         on_agent_ask_resident: Optional[Callable[[str, str, str], None]] = None,  # (correlation_id, room, question)
         provision_satellite: Optional[Callable[[str, str, str], bool]] = None,   # (seed, display_name, room_id) → bool
         pair_satellite: Optional[Callable[[str, str], bool]] = None,             # (device_id, seed) → bool
-        resolve_satellite_name: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → display_name | None
         resolve_satellite_room: Optional[Callable[[str], Optional[str]]] = None,  # (device_id) → room_id | None
         upsert_satellite: Optional[Callable[[str], None]] = None,                # (device_id) → refresh last_seen
+        get_rooms: Optional[Callable[[], list]] = None,                          # () → [{room_id, display_name}]
+        get_groups: Optional[Callable[[], list]] = None,                         # () → [{group_id, display_name, rooms}]
+        create_group: Optional[Callable[[str, str], bool]] = None,               # (group_id, display_name) → bool
+        update_group: Optional[Callable[[str, str], bool]] = None,               # (group_id, display_name) → bool
+        delete_group: Optional[Callable[[str], bool]] = None,                    # (group_id) → bool
+        set_group_rooms: Optional[Callable[[str, list], None]] = None,           # (group_id, room_ids)
+        get_db_satellites: Optional[Callable[[], list]] = None,                  # () → [{device_id, display_name, room_id, last_seen, room_display_name}]
+        set_satellite_room: Optional[Callable[[str, Optional[str]], bool]] = None,         # (device_id, room_id) → bool
+        set_satellite_display_name: Optional[Callable[[str, str], bool]] = None,          # (device_id, display_name) → bool
+        get_routine_records: Optional[Callable[[], list]] = None,                # () → [{id, name, triggers, actions, reply}]
+        create_routine: Optional[Callable[..., Optional[dict]]] = None,          # (name, triggers, actions, reply) → dict | None
+        update_routine: Optional[Callable[..., bool]] = None,                    # (id, name, triggers, actions, reply) → bool
+        delete_routine: Optional[Callable[[int], bool]] = None,                  # (id) → bool
+        get_trigger_records: Optional[Callable[[], list]] = None,                # () → [{id, when, cancel_when, on_response, say, ask, rephrase, room, cooldown, delay}]
+        create_trigger: Optional[Callable[..., bool]] = None,                    # (id, when, cancel_when, on_response, say, ask, rephrase, room, cooldown, delay) → bool
+        update_trigger: Optional[Callable[..., bool]] = None,                    # gleiche Signatur wie create_trigger → bool
+        delete_trigger: Optional[Callable[[str], bool]] = None,                  # (id) → bool
+        get_categories: Optional[Callable[[], list]] = None,                     # () → [{id, name, parent}]
+        get_settings_records: Optional[Callable[[], list]] = None,               # () → [{id, category, name, value}]
+        create_setting: Optional[Callable[[int, str, object], Optional[dict]]] = None,  # (category_id, name, value) → dict | None
+        update_setting_value: Optional[Callable[[int, object], bool]] = None,    # (setting_id, value) → bool
+        delete_setting: Optional[Callable[[int], bool]] = None,                  # (setting_id) → bool
     ):
         self._user_manager          = user_manager
         self._handle_text           = handle_text
@@ -129,9 +151,30 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._on_agent_ask_resident   = on_agent_ask_resident
         self._provision_satellite     = provision_satellite or (lambda *_: False)
         self._pair_satellite          = pair_satellite or (lambda *_: False)
-        self._resolve_satellite_name  = resolve_satellite_name or (lambda *_: None)
         self._resolve_satellite_room  = resolve_satellite_room or (lambda *_: None)
         self._upsert_satellite        = upsert_satellite or (lambda *_: None)
+        self._get_rooms                = get_rooms or (lambda: [])
+        self._get_groups               = get_groups or (lambda: [])
+        self._create_group             = create_group or (lambda *_: False)
+        self._update_group             = update_group or (lambda *_: False)
+        self._delete_group             = delete_group or (lambda *_: False)
+        self._set_group_rooms          = set_group_rooms or (lambda *_: None)
+        self._get_db_satellites        = get_db_satellites or (lambda: [])
+        self._set_satellite_room       = set_satellite_room or (lambda *_: False)
+        self._set_satellite_display_name = set_satellite_display_name or (lambda *_: False)
+        self._get_routine_records       = get_routine_records or (lambda: [])
+        self._create_routine            = create_routine or (lambda *_: None)
+        self._update_routine            = update_routine or (lambda *_: False)
+        self._delete_routine            = delete_routine or (lambda *_: False)
+        self._get_trigger_records       = get_trigger_records or (lambda: [])
+        self._create_trigger            = create_trigger or (lambda *_: False)
+        self._update_trigger            = update_trigger or (lambda *_: False)
+        self._delete_trigger            = delete_trigger or (lambda *_: False)
+        self._get_categories            = get_categories or (lambda: [])
+        self._get_settings_records      = get_settings_records or (lambda: [])
+        self._create_setting            = create_setting or (lambda *_: None)
+        self._update_setting_value      = update_setting_value or (lambda *_: False)
+        self._delete_setting            = delete_setting or (lambda *_: False)
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -297,6 +340,14 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         msg = "aktualisiert"
         return pb.StatusResponse(ok=True, message=msg)
 
+    def Login(self, request, context):
+        user = self._user_manager.login_user(request.username, request.password)
+        if not user:
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details("Ungültige Zugangsdaten.")
+            return pb.UserResponse(found=False)
+        return pb.UserResponse(found=True, user=_user_to_pb(user))
+
     # ------------------------------------------------------------------
     # Control
 
@@ -357,17 +408,183 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             return pb.StatusResponse(ok=False, message=str(e))
 
     def GetSatellites(self, _request, _context):
-        sats = self._get_satellites()
+        connected = self._get_satellites()
+        db_sats = {s["device_id"]: s for s in self._get_db_satellites()}
+        for device_id in connected:
+            if device_id not in db_sats:
+                self._upsert_satellite(device_id)
         result = []
-        for device_id, info in sats.items():
-            name = self._resolve_satellite_name(device_id) or ""
+        seen = set()
+        for device_id, sat in db_sats.items():
+            seen.add(device_id)
+            info = connected.get(device_id)
+            room_id = sat.get("room_id") or ""
             result.append(pb.Satellite(
                 device_id=device_id,
-                room=info.get("room", ""),
-                address=info.get("addr", ""),
-                display_name=name,
+                room=info.get("room", "") if info else "",
+                address=info.get("addr", "") if info else "",
+                display_name=sat.get("display_name") or "",
+                room_id=room_id,
+                room_display_name=sat.get("room_display_name") or "",
+                last_seen=sat.get("last_seen") or "",
+                connected=info is not None,
+                room_mismatch=info is not None and info.get("room") != room_id,
             ))
+        for device_id, info in connected.items():
+            if device_id not in seen:
+                result.append(pb.Satellite(
+                    device_id=device_id,
+                    room=info.get("room", ""),
+                    address=info.get("addr", ""),
+                    connected=True,
+                    room_mismatch=True,
+                ))
         return pb.GetSatellitesResponse(satellites=result)
+
+    def SetSatelliteRoom(self, request, _context):
+        self._upsert_satellite(request.device_id)
+        ok = self._set_satellite_room(request.device_id, request.room_id or None)
+        return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
+
+    def SetSatelliteDisplayName(self, request, _context):
+        if not request.display_name:
+            return pb.StatusResponse(ok=False, message="display_name required")
+        self._upsert_satellite(request.device_id)
+        ok = self._set_satellite_display_name(request.device_id, request.display_name)
+        return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
+
+    # ------------------------------------------------------------------
+    # Rooms/Groups (Admin-UI, #27 Phase 1)
+
+    def GetRooms(self, _request, _context):
+        rooms = self._get_rooms()
+        return pb.GetRoomsResponse(
+            rooms=[pb.Room(room_id=r["room_id"], display_name=r["display_name"]) for r in rooms]
+        )
+
+    def GetGroups(self, _request, _context):
+        groups = self._get_groups()
+        return pb.GetGroupsResponse(groups=[
+            pb.Group(
+                group_id=g["group_id"],
+                display_name=g["display_name"],
+                rooms=[pb.Room(room_id=r["room_id"], display_name=r["display_name"]) for r in g["rooms"]],
+            )
+            for g in groups
+        ])
+
+    def CreateGroup(self, request, _context):
+        ok = self._create_group(request.group_id, request.display_name)
+        return pb.StatusResponse(ok=ok, message="created" if ok else "group_id existiert bereits")
+
+    def UpdateGroup(self, request, _context):
+        ok = self._update_group(request.group_id, request.display_name)
+        return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
+
+    def DeleteGroup(self, request, _context):
+        ok = self._delete_group(request.group_id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
+
+    def SetGroupRooms(self, request, _context):
+        self._set_group_rooms(request.group_id, list(request.room_ids))
+        return pb.StatusResponse(ok=True, message="set")
+
+    # ------------------------------------------------------------------
+    # Routines/Triggers (Admin-UI, #27 Phase 4)
+
+    def GetRoutines(self, _request, _context):
+        return pb.GetRoutinesResponse(routines=[_routine_to_pb(r) for r in self._get_routine_records()])
+
+    def CreateRoutine(self, request, _context):
+        try:
+            actions = json.loads(request.actions_json) if request.actions_json else []
+        except json.JSONDecodeError as e:
+            return pb.CreateRoutineResponse(ok=False, message=f"invalid actions_json: {e}")
+        result = self._create_routine(request.name, list(request.triggers), actions, request.reply)
+        if result is None:
+            return pb.CreateRoutineResponse(ok=False, message="name existiert bereits")
+        return pb.CreateRoutineResponse(ok=True, id=result["id"], message="created")
+
+    def UpdateRoutine(self, request, _context):
+        try:
+            actions = json.loads(request.actions_json) if request.actions_json else []
+        except json.JSONDecodeError as e:
+            return pb.StatusResponse(ok=False, message=f"invalid actions_json: {e}")
+        ok = self._update_routine(request.id, request.name, list(request.triggers), actions, request.reply)
+        return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
+
+    def DeleteRoutine(self, request, _context):
+        ok = self._delete_routine(request.id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
+
+    def GetTriggers(self, _request, _context):
+        return pb.GetTriggersResponse(triggers=[_trigger_to_pb(t) for t in self._get_trigger_records()])
+
+    def _parse_trigger_json(self, request):
+        """Gibt (when, cancel_when, on_response) zurück; wirft json.JSONDecodeError bei kaputtem Input."""
+        when = json.loads(request.when_json) if request.when_json else {}
+        cancel_when = json.loads(request.cancel_when_json) if request.cancel_when_json else None
+        on_response = json.loads(request.on_response_json) if request.on_response_json else []
+        return when, cancel_when, on_response
+
+    def CreateTrigger(self, request, _context):
+        try:
+            when, cancel_when, on_response = self._parse_trigger_json(request)
+        except json.JSONDecodeError as e:
+            return pb.StatusResponse(ok=False, message=f"invalid JSON: {e}")
+        room = request.room or "all"
+        cooldown = request.cooldown if request.cooldown > 0 else 3600
+        ok = self._create_trigger(request.id, when, cancel_when, on_response, request.say, request.ask,
+                                   request.rephrase, room, cooldown, request.delay)
+        return pb.StatusResponse(ok=ok, message="created" if ok else "id existiert bereits")
+
+    def UpdateTrigger(self, request, _context):
+        try:
+            when, cancel_when, on_response = self._parse_trigger_json(request)
+        except json.JSONDecodeError as e:
+            return pb.StatusResponse(ok=False, message=f"invalid JSON: {e}")
+        room = request.room or "all"
+        cooldown = request.cooldown if request.cooldown > 0 else 3600
+        ok = self._update_trigger(request.id, when, cancel_when, on_response, request.say, request.ask,
+                                   request.rephrase, room, cooldown, request.delay)
+        return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
+
+    def DeleteTrigger(self, request, _context):
+        ok = self._delete_trigger(request.id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
+
+    # ------------------------------------------------------------------
+    # Settings (Admin-UI, #27 Phase 5)
+
+    def GetSettings(self, _request, _context):
+        return pb.GetSettingsResponse(
+            categories=[_category_to_pb(c) for c in self._get_categories()],
+            settings=[_setting_to_pb(s) for s in self._get_settings_records()],
+        )
+
+    def UpdateConfig(self, request, _context):
+        for u in request.updates:
+            try:
+                value = json.loads(u.value)
+            except json.JSONDecodeError as e:
+                return pb.StatusResponse(ok=False, message=f"invalid JSON for setting {u.setting_id}: {e}")
+            if not self._update_setting_value(u.setting_id, value):
+                return pb.StatusResponse(ok=False, message=f"setting {u.setting_id} not found")
+        return pb.StatusResponse(ok=True, message="updated")
+
+    def CreateSetting(self, request, _context):
+        try:
+            value = json.loads(request.value) if request.value else None
+        except json.JSONDecodeError as e:
+            return pb.CreateSettingResponse(ok=False, message=f"invalid JSON: {e}")
+        result = self._create_setting(request.category_id, request.name, value)
+        if result is None:
+            return pb.CreateSettingResponse(ok=False, message="name existiert bereits in dieser Kategorie")
+        return pb.CreateSettingResponse(ok=True, id=result["id"], message="created")
+
+    def DeleteSetting(self, request, _context):
+        ok = self._delete_setting(request.setting_id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
 
     def TriggerFirmwareUpdate(self, request, _context):
         device = request.device
@@ -1125,6 +1342,48 @@ def _user_to_pb(u: User) -> pb.User:
         active=bool(u.is_active),
         system_messages=bool(u.system_messages),
         linked_accounts={acc.provider: acc.external_id for acc in u.linked_accounts}
+    )
+
+
+def _routine_to_pb(r: dict) -> pb.Routine:
+    return pb.Routine(
+        id=r["id"],
+        name=r["name"],
+        triggers=r.get("triggers") or [],
+        actions_json=json.dumps(r.get("actions") or []),
+        reply=r.get("reply") or "",
+    )
+
+
+def _trigger_to_pb(t: dict) -> pb.Trigger:
+    return pb.Trigger(
+        id=t["id"],
+        when_json=json.dumps(t.get("when") or {}),
+        cancel_when_json=json.dumps(t["cancel_when"]) if t.get("cancel_when") else "",
+        on_response_json=json.dumps(t.get("on_response") or []),
+        say=t.get("say") or "",
+        ask=t.get("ask") or "",
+        rephrase=bool(t.get("rephrase")),
+        room=t.get("room") or "all",
+        cooldown=int(t.get("cooldown") or 3600),
+        delay=t.get("delay") or "",
+    )
+
+
+def _category_to_pb(c: dict) -> pb.Category:
+    return pb.Category(
+        id=c["id"],
+        name=c["name"],
+        parent_id=c.get("parent") or 0,
+    )
+
+
+def _setting_to_pb(s: dict) -> pb.Setting:
+    return pb.Setting(
+        id=s["id"],
+        category_id=s["category"],
+        name=s["name"],
+        value=json.dumps(s.get("value")),
     )
 
 

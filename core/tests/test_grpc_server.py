@@ -1,3 +1,4 @@
+import json
 import os
 from unittest.mock import MagicMock
 
@@ -7,9 +8,9 @@ from hannah.grpc_server import HannahServicer, _user_to_pb
 from hannah.user_manager import UserManager
 from hannah.models.user import User
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest
 
-def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None):
+def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None):
     return HannahServicer(
         user_manager=user_manager or MagicMock(),
         handle_text=handle_text or MagicMock(),
@@ -24,6 +25,28 @@ def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satell
         on_satellite_change=on_satellite_change,
         resolve_satellite_room=resolve_satellite_room,
         upsert_satellite=upsert_satellite,
+        get_rooms=get_rooms,
+        get_groups=get_groups,
+        create_group=create_group,
+        update_group=update_group,
+        delete_group=delete_group,
+        set_group_rooms=set_group_rooms,
+        get_db_satellites=get_db_satellites,
+        set_satellite_room=set_satellite_room,
+        set_satellite_display_name=set_satellite_display_name,
+        get_routine_records=get_routine_records,
+        create_routine=create_routine,
+        update_routine=update_routine,
+        delete_routine=delete_routine,
+        get_trigger_records=get_trigger_records,
+        create_trigger=create_trigger,
+        update_trigger=update_trigger,
+        delete_trigger=delete_trigger,
+        get_categories=get_categories,
+        get_settings_records=get_settings_records,
+        create_setting=create_setting,
+        update_setting_value=update_setting_value,
+        delete_setting=delete_setting,
     )
 
 def test_device_snapshot_dispatched():
@@ -95,6 +118,428 @@ def test_register_proxy_heartbeat_upserts_known_satellites():
     list(servicer.RegisterProxy(iter([ProxyHeartbeat(proxy_id="proxy-1")]), _FakeContext()))
 
     upsert.assert_called_once_with("wz-sat")
+
+class TestRoomsGroupsRpcs:
+    """#27 Phase 1 — reine Verdrahtung, RoomManager selbst ist in test_room_manager.py
+    abgedeckt. Hier nur: ruft die RPC den richtigen Callback auf und baut die richtige
+    Response-Shape."""
+
+    def test_get_rooms(self):
+        get_rooms = MagicMock(return_value=[{"room_id": "wohnzimmer", "display_name": "Wohnzimmer"}])
+        servicer = _make_server(get_rooms=get_rooms)
+
+        response = servicer.GetRooms(None, None)
+
+        get_rooms.assert_called_once_with()
+        assert len(response.rooms) == 1
+        assert response.rooms[0].room_id == "wohnzimmer"
+        assert response.rooms[0].display_name == "Wohnzimmer"
+
+    def test_get_groups(self):
+        get_groups = MagicMock(return_value=[{
+            "group_id": "og", "display_name": "Obergeschoss",
+            "rooms": [{"room_id": "bad", "display_name": "Bad"}],
+        }])
+        servicer = _make_server(get_groups=get_groups)
+
+        response = servicer.GetGroups(None, None)
+
+        assert len(response.groups) == 1
+        group = response.groups[0]
+        assert group.group_id == "og"
+        assert group.display_name == "Obergeschoss"
+        assert len(group.rooms) == 1
+        assert group.rooms[0].room_id == "bad"
+
+    def test_create_group_ok(self):
+        create_group = MagicMock(return_value=True)
+        servicer = _make_server(create_group=create_group)
+
+        response = servicer.CreateGroup(CreateGroupRequest(group_id="og", display_name="Obergeschoss"), None)
+
+        create_group.assert_called_once_with("og", "Obergeschoss")
+        assert response.ok is True
+
+    def test_create_group_duplicate(self):
+        servicer = _make_server(create_group=MagicMock(return_value=False))
+
+        response = servicer.CreateGroup(CreateGroupRequest(group_id="og", display_name="Obergeschoss"), None)
+
+        assert response.ok is False
+
+    def test_update_group(self):
+        update_group = MagicMock(return_value=True)
+        servicer = _make_server(update_group=update_group)
+
+        response = servicer.UpdateGroup(UpdateGroupRequest(group_id="og", display_name="OG neu"), None)
+
+        update_group.assert_called_once_with("og", "OG neu")
+        assert response.ok is True
+
+    def test_delete_group(self):
+        delete_group = MagicMock(return_value=True)
+        servicer = _make_server(delete_group=delete_group)
+
+        response = servicer.DeleteGroup(DeleteGroupRequest(group_id="og"), None)
+
+        delete_group.assert_called_once_with("og")
+        assert response.ok is True
+
+    def test_set_group_rooms(self):
+        set_group_rooms = MagicMock()
+        servicer = _make_server(set_group_rooms=set_group_rooms)
+
+        response = servicer.SetGroupRooms(SetGroupRoomsRequest(group_id="og", room_ids=["bad", "schlafzimmer"]), None)
+
+        set_group_rooms.assert_called_once_with("og", ["bad", "schlafzimmer"])
+        assert response.ok is True
+
+class TestSatelliteRpcs:
+    """#27 Phase 2 — GetSatellites merged DB-Status (RoomManager.get_satellites) mit
+    Live-Status (get_satellites-Closure aus udp_server/Proxy); SetSatelliteRoom/
+    SetSatelliteDisplayName sind reine Verdrahtung auf RoomManager."""
+
+    def test_get_satellites_connected_no_mismatch(self):
+        servicer = _make_server(
+            get_satellites=lambda: {"wz-sat": {"room": "wohnzimmer", "addr": "10.0.0.5:7775"}},
+            get_db_satellites=lambda: [{"device_id": "wz-sat", "display_name": "Wohnzimmer-Sat", "room_id": "wohnzimmer", "room_display_name": "Wohnzimmer", "last_seen": "2026-06-27 10:00:00"}],
+        )
+
+        response = servicer.GetSatellites(None, None)
+
+        assert len(response.satellites) == 1
+        sat = response.satellites[0]
+        assert sat.device_id == "wz-sat"
+        assert sat.connected is True
+        assert sat.room == "wohnzimmer"
+        assert sat.address == "10.0.0.5:7775"
+        assert sat.display_name == "Wohnzimmer-Sat"
+        assert sat.room_id == "wohnzimmer"
+        assert sat.room_display_name == "Wohnzimmer"
+        assert sat.last_seen == "2026-06-27 10:00:00"
+        assert sat.room_mismatch is False
+
+    def test_get_satellites_connected_with_mismatch(self):
+        servicer = _make_server(
+            get_satellites=lambda: {"wz-sat": {"room": "kueche", "addr": "10.0.0.5:7775"}},
+            get_db_satellites=lambda: [{"device_id": "wz-sat", "display_name": "", "room_id": "wohnzimmer", "room_display_name": "Wohnzimmer", "last_seen": None}],
+        )
+
+        response = servicer.GetSatellites(None, None)
+
+        assert response.satellites[0].room_mismatch is True
+
+    def test_get_satellites_disconnected_db_only(self):
+        servicer = _make_server(
+            get_satellites=lambda: {},
+            get_db_satellites=lambda: [{"device_id": "bad-sat", "display_name": "Bad-Sat", "room_id": "bad", "room_display_name": "Bad", "last_seen": "2026-06-20 08:00:00"}],
+        )
+
+        response = servicer.GetSatellites(None, None)
+
+        assert len(response.satellites) == 1
+        sat = response.satellites[0]
+        assert sat.connected is False
+        assert sat.room == ""
+        assert sat.address == ""
+        assert sat.room_id == "bad"
+        assert sat.room_mismatch is False
+
+    def test_get_satellites_connected_but_unknown_to_db_gets_upserted(self):
+        upsert = MagicMock()
+        servicer = _make_server(
+            get_satellites=lambda: {"new-sat": {"room": "flur", "addr": "10.0.0.9:7775"}},
+            get_db_satellites=lambda: [],
+            upsert_satellite=upsert,
+        )
+
+        response = servicer.GetSatellites(None, None)
+
+        upsert.assert_called_once_with("new-sat")
+        assert len(response.satellites) == 1
+        sat = response.satellites[0]
+        assert sat.connected is True
+        assert sat.room_mismatch is True
+        assert sat.device_id == "new-sat"
+
+    def test_set_satellite_room_ok(self):
+        set_satellite_room = MagicMock(return_value=True)
+        upsert = MagicMock()
+        servicer = _make_server(set_satellite_room=set_satellite_room, upsert_satellite=upsert)
+
+        response = servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="wz-sat", room_id="wohnzimmer"), None)
+
+        upsert.assert_called_once_with("wz-sat")
+        set_satellite_room.assert_called_once_with("wz-sat", "wohnzimmer")
+        assert response.ok is True
+
+    def test_set_satellite_room_unassign(self):
+        set_satellite_room = MagicMock(return_value=True)
+        servicer = _make_server(set_satellite_room=set_satellite_room)
+
+        servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="wz-sat", room_id=""), None)
+
+        set_satellite_room.assert_called_once_with("wz-sat", None)
+
+    def test_set_satellite_room_not_found(self):
+        servicer = _make_server(set_satellite_room=MagicMock(return_value=False))
+
+        response = servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="unknown", room_id="bad"), None)
+
+        assert response.ok is False
+
+    def test_set_satellite_display_name_ok(self):
+        set_satellite_display_name = MagicMock(return_value=True)
+        servicer = _make_server(set_satellite_display_name=set_satellite_display_name)
+
+        response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name="Wohnzimmer-Sat"), None)
+
+        set_satellite_display_name.assert_called_once_with("wz-sat", "Wohnzimmer-Sat")
+        assert response.ok is True
+
+    def test_set_satellite_display_name_rejects_empty(self):
+        set_satellite_display_name = MagicMock()
+        servicer = _make_server(set_satellite_display_name=set_satellite_display_name)
+
+        response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name=""), None)
+
+        set_satellite_display_name.assert_not_called()
+        assert response.ok is False
+
+class TestLoginRpc:
+    """#27 Phase 3 — reine Verdrahtung auf UserManager.login_user(), kein eigener Callback
+    (user_manager ist bereits Pflichtparameter)."""
+
+    def test_login_ok(self):
+        user = User(row={"id": 1, "username": "leonie", "display_name": "Leonie", "trust_level": 8,
+                          "is_active": True, "system_messages": True}, db=None)
+        user_manager = MagicMock(login_user=MagicMock(return_value=user))
+        servicer = _make_server(user_manager=user_manager)
+
+        response = servicer.Login(LoginRequest(username="leonie", password="geheim"), MagicMock())
+
+        user_manager.login_user.assert_called_once_with("leonie", "geheim")
+        assert response.found is True
+        assert response.user.user_name == "leonie"
+
+    def test_login_wrong_password(self):
+        user_manager = MagicMock(login_user=MagicMock(return_value=None))
+        servicer = _make_server(user_manager=user_manager)
+        context = MagicMock()
+
+        response = servicer.Login(LoginRequest(username="leonie", password="falsch"), context)
+
+        assert response.found is False
+        context.set_code.assert_called_once()
+
+class TestRoutineRpcs:
+    """#27 Phase 4 — Verdrahtung auf RoutineManager.get_routine_records/create_routine/
+    update_routine/delete_routine."""
+
+    def test_get_routines(self):
+        get_routine_records = MagicMock(return_value=[{
+            "id": 1, "name": "gute_nacht", "triggers": ["gute nacht"],
+            "actions": [{"say": "Schlaf gut!", "room": "all"}], "reply": "",
+        }])
+        servicer = _make_server(get_routine_records=get_routine_records)
+
+        response = servicer.GetRoutines(None, None)
+
+        assert len(response.routines) == 1
+        r = response.routines[0]
+        assert r.id == 1
+        assert r.name == "gute_nacht"
+        assert list(r.triggers) == ["gute nacht"]
+        assert json.loads(r.actions_json) == [{"say": "Schlaf gut!", "room": "all"}]
+
+    def test_create_routine_ok(self):
+        create_routine = MagicMock(return_value={"id": 5, "name": "gute_nacht", "triggers": [], "actions": [], "reply": ""})
+        servicer = _make_server(create_routine=create_routine)
+
+        response = servicer.CreateRoutine(CreateRoutineRequest(
+            name="gute_nacht", triggers=["gute nacht"], actions_json=json.dumps([{"say": "Schlaf gut!"}]), reply="",
+        ), None)
+
+        create_routine.assert_called_once_with("gute_nacht", ["gute nacht"], [{"say": "Schlaf gut!"}], "")
+        assert response.ok is True
+        assert response.id == 5
+
+    def test_create_routine_duplicate_name(self):
+        servicer = _make_server(create_routine=MagicMock(return_value=None))
+
+        response = servicer.CreateRoutine(CreateRoutineRequest(name="gute_nacht"), None)
+
+        assert response.ok is False
+
+    def test_create_routine_invalid_json(self):
+        servicer = _make_server(create_routine=MagicMock())
+
+        response = servicer.CreateRoutine(CreateRoutineRequest(name="x", actions_json="{not json"), None)
+
+        assert response.ok is False
+
+    def test_update_routine_not_found(self):
+        servicer = _make_server(update_routine=MagicMock(return_value=False))
+
+        response = servicer.UpdateRoutine(UpdateRoutineRequest(id=99, name="x"), None)
+
+        assert response.ok is False
+
+    def test_delete_routine_ok(self):
+        delete_routine = MagicMock(return_value=True)
+        servicer = _make_server(delete_routine=delete_routine)
+
+        response = servicer.DeleteRoutine(DeleteRoutineRequest(id=5), None)
+
+        delete_routine.assert_called_once_with(5)
+        assert response.ok is True
+
+class TestTriggerRpcs:
+    """#27 Phase 4 — Verdrahtung auf TriggerEngine.get_trigger_records/create_trigger/
+    update_trigger/delete_trigger."""
+
+    def test_get_triggers(self):
+        get_trigger_records = MagicMock(return_value=[{
+            "id": "aussentuer_abend", "when": {"time": "23:00"}, "cancel_when": None, "on_response": [],
+            "say": "Denk an die Außentüren.", "ask": "", "rephrase": 1, "room": "all", "cooldown": 3600, "delay": "",
+        }])
+        servicer = _make_server(get_trigger_records=get_trigger_records)
+
+        response = servicer.GetTriggers(None, None)
+
+        assert len(response.triggers) == 1
+        t = response.triggers[0]
+        assert t.id == "aussentuer_abend"
+        assert json.loads(t.when_json) == {"time": "23:00"}
+        assert t.cancel_when_json == ""
+        assert t.rephrase is True
+
+    def test_create_trigger_ok(self):
+        create_trigger = MagicMock(return_value=True)
+        servicer = _make_server(create_trigger=create_trigger)
+
+        response = servicer.CreateTrigger(CreateTriggerRequest(
+            id="fenster_kalt", when_json=json.dumps({"state": "x", "value": True}), say="Fenster offen.",
+        ), None)
+
+        create_trigger.assert_called_once_with("fenster_kalt", {"state": "x", "value": True}, None, [],
+                                                "Fenster offen.", "", False, "all", 3600, "")
+        assert response.ok is True
+
+    def test_create_trigger_duplicate_id(self):
+        servicer = _make_server(create_trigger=MagicMock(return_value=False))
+
+        response = servicer.CreateTrigger(CreateTriggerRequest(id="x", when_json="{}"), None)
+
+        assert response.ok is False
+
+    def test_create_trigger_invalid_json(self):
+        servicer = _make_server(create_trigger=MagicMock())
+
+        response = servicer.CreateTrigger(CreateTriggerRequest(id="x", when_json="{not json"), None)
+
+        assert response.ok is False
+
+    def test_update_trigger_not_found(self):
+        servicer = _make_server(update_trigger=MagicMock(return_value=False))
+
+        response = servicer.UpdateTrigger(UpdateTriggerRequest(id="unknown", when_json="{}"), None)
+
+        assert response.ok is False
+
+    def test_delete_trigger_ok(self):
+        delete_trigger = MagicMock(return_value=True)
+        servicer = _make_server(delete_trigger=delete_trigger)
+
+        response = servicer.DeleteTrigger(DeleteTriggerRequest(id="fenster_kalt"), None)
+
+        delete_trigger.assert_called_once_with("fenster_kalt")
+        assert response.ok is True
+
+class TestSettingsRpcs:
+    """#27 Phase 5 — Verdrahtung auf SettingsManager.get_categories/get_settings/
+    create_setting/update_setting_value/delete_setting."""
+
+    def test_get_settings(self):
+        get_categories = MagicMock(return_value=[
+            {"id": 1, "name": "ble", "parent": None},
+            {"id": 2, "name": "ble.tags", "parent": 1},
+        ])
+        get_settings_records = MagicMock(return_value=[
+            {"id": 1, "category": 2, "name": "leonie", "value": {"mac": "aa:bb", "username": "leonie"}},
+        ])
+        servicer = _make_server(get_categories=get_categories, get_settings_records=get_settings_records)
+
+        response = servicer.GetSettings(None, None)
+
+        assert len(response.categories) == 2
+        assert response.categories[0].parent_id == 0
+        assert response.categories[1].parent_id == 1
+        assert len(response.settings) == 1
+        s = response.settings[0]
+        assert s.id == 1
+        assert s.category_id == 2
+        assert s.name == "leonie"
+        assert json.loads(s.value) == {"mac": "aa:bb", "username": "leonie"}
+
+    def test_update_config_ok(self):
+        update_setting_value = MagicMock(return_value=True)
+        servicer = _make_server(update_setting_value=update_setting_value)
+
+        response = servicer.UpdateConfig(UpdateConfigRequest(updates=[
+            SettingUpdate(setting_id=1, value=json.dumps({"mac": "aa:bb"})),
+        ]), None)
+
+        update_setting_value.assert_called_once_with(1, {"mac": "aa:bb"})
+        assert response.ok is True
+
+    def test_update_config_not_found(self):
+        servicer = _make_server(update_setting_value=MagicMock(return_value=False))
+
+        response = servicer.UpdateConfig(UpdateConfigRequest(updates=[
+            SettingUpdate(setting_id=99, value="{}"),
+        ]), None)
+
+        assert response.ok is False
+
+    def test_update_config_invalid_json(self):
+        update_setting_value = MagicMock()
+        servicer = _make_server(update_setting_value=update_setting_value)
+
+        response = servicer.UpdateConfig(UpdateConfigRequest(updates=[
+            SettingUpdate(setting_id=1, value="{not json"),
+        ]), None)
+
+        update_setting_value.assert_not_called()
+        assert response.ok is False
+
+    def test_create_setting_ok(self):
+        create_setting = MagicMock(return_value={"id": 5, "category": 2, "name": "zoey", "value": {"mac": "11:22"}})
+        servicer = _make_server(create_setting=create_setting)
+
+        response = servicer.CreateSetting(CreateSettingRequest(
+            category_id=2, name="zoey", value=json.dumps({"mac": "11:22"}),
+        ), None)
+
+        create_setting.assert_called_once_with(2, "zoey", {"mac": "11:22"})
+        assert response.ok is True
+        assert response.id == 5
+
+    def test_create_setting_duplicate_name(self):
+        servicer = _make_server(create_setting=MagicMock(return_value=None))
+
+        response = servicer.CreateSetting(CreateSettingRequest(category_id=2, name="zoey", value="{}"), None)
+
+        assert response.ok is False
+
+    def test_delete_setting_ok(self):
+        delete_setting = MagicMock(return_value=True)
+        servicer = _make_server(delete_setting=delete_setting)
+
+        response = servicer.DeleteSetting(DeleteSettingRequest(setting_id=5), None)
+
+        delete_setting.assert_called_once_with(5)
+        assert response.ok is True
 
 def test_notify_satellite_gone_does_not_double_send():
     on_satellite_change = MagicMock()

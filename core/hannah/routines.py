@@ -1,4 +1,5 @@
 import logging
+import sqlite3
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -44,6 +45,35 @@ class RoutineManager:
                     log.info(f"Routine '{routine.name}' getriggert durch '{trigger}'")
                     return routine
         return None
+
+    def get_routine_records(self) -> list[dict]:
+        """Alle Routinen als rohe DB-Dicts (id, name, triggers, actions, reply) — fürs Admin-UI."""
+        return [r.to_dict() for r in RoutineModel.select(self._db()).all()]
+
+    def create_routine(self, name: str, triggers: list[str], actions: list[dict], reply: str = "") -> Optional[dict]:
+        """Legt eine neue Routine an. Gibt None zurück wenn der Name bereits existiert."""
+        try:
+            r = RoutineModel.create(self._db(), name=name, triggers=triggers, actions=actions, reply=reply)
+        except sqlite3.IntegrityError:
+            return None
+        self._load()
+        return r.to_dict()
+
+    def update_routine(self, id: int, name: str, triggers: list[str], actions: list[dict], reply: str) -> bool:
+        r = RoutineModel.get(self._db(), id=id)
+        if not r:
+            return False
+        r.update(name=name, triggers=triggers, actions=actions, reply=reply)
+        self._load()
+        return True
+
+    def delete_routine(self, id: int) -> bool:
+        r = RoutineModel.get(self._db(), id=id)
+        if not r:
+            return False
+        r.delete()
+        self._load()
+        return True
 
     def _load(self) -> None:
         try:

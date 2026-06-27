@@ -96,6 +96,25 @@ CREATE TABLE IF NOT EXISTS "routines" (
 	PRIMARY KEY("id" AUTOINCREMENT),
 	UNIQUE("name")
 );
+
+CREATE TABLE IF NOT EXISTS "settings_category" (
+	"id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	"parent"	INTEGER,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("name"),
+	FOREIGN KEY("parent") REFERENCES "settings_category"("id") ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "settings" (
+	"id"	INTEGER NOT NULL,
+	"category"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	"value"	TEXT NOT NULL,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("category","name"),
+	FOREIGN KEY("category") REFERENCES "settings_category"("id") ON DELETE CASCADE
+);
 """
 
 

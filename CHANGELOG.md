@@ -5,6 +5,24 @@
 -->
 
 
+
+## 0.45.0
+### Hannah Core
+* Added: new unary gRPC RPCs `GetRooms`/`GetGroups`/`CreateGroup`/`UpdateGroup`/`DeleteGroup`/`SetGroupRooms` on `HannahServicer` — first phase of #27's planned WebUI gRPC surface. Pure wiring onto `RoomManager`'s existing methods (#77), no new business logic; no consumer yet, this just adds the server-side API surface ahead of the future standalone `webui/` service (Refs #88, #27)
+* Added: `UserManager.login_user(username, password)` — verifies via `check_password_hash` against the stored hash, constant-time even for unknown usernames (checks against a dummy hash instead of short-circuiting). Prep work for #27 Phase 3's planned `Login` RPC, not wired into gRPC yet (Refs #27)
+* Changed: `GetSatellites` RPC now returns every satellite known to `RoomManager`'s DB (not just currently-connected ones), with new `room_id`/`room_display_name`/`last_seen`/`connected`/`room_mismatch` fields — the "full status" merge logic (DB + live state + room-mismatch detection) that used to live only in-process in `webui.py`'s `/satellites` route moved into the RPC itself, since the future standalone `webui/` service won't have direct `RoomManager` access. Breaking change for existing consumers, intentionally — `iobroker.hannah` updated in the same step (Refs #89, #27)
+* Added: `SetSatelliteRoom`/`SetSatelliteDisplayName` RPCs on `HannahServicer` — second phase of #27's WebUI gRPC surface, pure wiring onto `RoomManager`'s existing methods, same pattern as Phase 1's Rooms/Groups RPCs (Refs #89, #27)
+* Added: `Login` RPC on `HannahServicer` — third phase of #27's WebUI gRPC surface, wires the already-prepared `UserManager.login_user()` to the existing `UserResponse` shape (same as `GetUser`); failed logins return `found=false` with gRPC `UNAUTHENTICATED` (Refs #90, #27)
+* Added: `GetRoutines`/`CreateRoutine`/`UpdateRoutine`/`DeleteRoutine`/`GetTriggers`/`CreateTrigger`/`UpdateTrigger`/`DeleteTrigger` RPCs on `HannahServicer` — fourth phase of #27's WebUI gRPC surface. `RoutineManager`/`TriggerEngine` gain new CRUD methods (thin wrappers around `BaseModel.create/update/delete`, no new business logic) since they previously only supported read-only matching/runtime checks. `when`/`cancel_when`/`on_response`/`actions` stay JSON-encoded string fields in the proto rather than structured messages — both are deliberately open-ended/union-shaped, modeling them rigidly would force a proto change on every new trigger condition kind (Refs #91, #27)
+* Fixed: a state-based trigger created via the new `CreateTrigger`/`UpdateTrigger` RPCs would never fire until the next ioBroker-adapter reconnect, because the adapter only re-subscribes to trigger-referenced states (`WatchMore`) on connect. `TriggerEngine` now takes an `on_change` callback that re-pushes the current `WatchMore` set right after a create/update (Refs #91, #27)
+* Added: new `SettingsManager` (`settings_category`/`settings` tables, hierarchical via self-referencing `parent`) plus `GetSettings`/`UpdateConfig`/`CreateSetting`/`DeleteSetting` RPCs on `HannahServicer` — final phase of #27's WebUI gRPC surface. Moves `ble.tags`, `cars`, `nlu.*`, `llm.system_prompt` and `iobroker.state_names` out of static `config.yaml` into editable DB storage; `core/deploy/migrate_config_settings.py` does the one-time cutover. Unlike earlier phases, this one is wired into runtime immediately: `main.py` now builds the same `cfg`-shaped dicts `NLU`/`CarTracker`/`BleLocationEngine`/`IoBrokerClient` already expected, just sourced from `SettingsManager` instead of `cfg.get(...)` for these 5 areas — no changes needed in those 4 modules themselves, with a fallback to the old `cfg`/code defaults wherever a category hasn't been migrated yet (Refs #92, #27)
+
+### Hannah Proxy
+* Changed: updated proto files to reflect the newest Core changes (#27 Phases 1–5: Rooms/Groups, Satellites, Login, Routines/Triggers, Settings) (Refs #27)
+
+### Telegram
+* Changed: updated proto files to reflect the newest Core changes (#27 Phases 1–5: Rooms/Groups, Satellites, Login, Routines/Triggers, Settings) (Refs #27)
+
 ## 0.44.0
 ### Hannah Core
 * Changed: `routines.yaml`/`triggers.yaml` replaced by SQLite (`routines`/`triggers` tables, `hannah.db`) — new `Routine`/`Trigger` models (`hannah.models.routine`/`hannah.models.trigger`), nested condition/action structures (`when`, `cancel_when`, `on_response`, `triggers`, `actions`) stored as JSON columns, same pattern as `LinkedAccount.provider_payload`. `RoutineManager`/`TriggerEngine` now take a `db` callable instead of a file path; eliminates the mtime-based hot-reload entirely (SQL query is always current). Part of #27's planned WebUI scope — Routinen/Trigger get full CRUD via the WebUI once it lands (Refs #27)

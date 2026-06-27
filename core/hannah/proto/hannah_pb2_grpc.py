@@ -5,7 +5,7 @@ import warnings
 
 from . import hannah_pb2 as hannah__pb2
 
-GRPC_GENERATED_VERSION = '1.80.0'
+GRPC_GENERATED_VERSION = '1.81.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class HannahServiceStub(object):
+class HannahServiceStub:
     """============================================================
     Hannah gRPC Service
 
@@ -77,6 +77,11 @@ class HannahServiceStub(object):
                 request_serializer=hannah__pb2.SetSystemMessagesRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.Login = channel.unary_unary(
+                '/hannah.HannahService/Login',
+                request_serializer=hannah__pb2.LoginRequest.SerializeToString,
+                response_deserializer=hannah__pb2.UserResponse.FromString,
+                _registered_method=True)
         self.GetDevices = channel.unary_unary(
                 '/hannah.HannahService/GetDevices',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
@@ -111,6 +116,106 @@ class HannahServiceStub(object):
                 '/hannah.HannahService/GetSatellites',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
                 response_deserializer=hannah__pb2.GetSatellitesResponse.FromString,
+                _registered_method=True)
+        self.SetSatelliteRoom = channel.unary_unary(
+                '/hannah.HannahService/SetSatelliteRoom',
+                request_serializer=hannah__pb2.SetSatelliteRoomRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.SetSatelliteDisplayName = channel.unary_unary(
+                '/hannah.HannahService/SetSatelliteDisplayName',
+                request_serializer=hannah__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetRooms = channel.unary_unary(
+                '/hannah.HannahService/GetRooms',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetRoomsResponse.FromString,
+                _registered_method=True)
+        self.GetGroups = channel.unary_unary(
+                '/hannah.HannahService/GetGroups',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetGroupsResponse.FromString,
+                _registered_method=True)
+        self.CreateGroup = channel.unary_unary(
+                '/hannah.HannahService/CreateGroup',
+                request_serializer=hannah__pb2.CreateGroupRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.UpdateGroup = channel.unary_unary(
+                '/hannah.HannahService/UpdateGroup',
+                request_serializer=hannah__pb2.UpdateGroupRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteGroup = channel.unary_unary(
+                '/hannah.HannahService/DeleteGroup',
+                request_serializer=hannah__pb2.DeleteGroupRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.SetGroupRooms = channel.unary_unary(
+                '/hannah.HannahService/SetGroupRooms',
+                request_serializer=hannah__pb2.SetGroupRoomsRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetRoutines = channel.unary_unary(
+                '/hannah.HannahService/GetRoutines',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetRoutinesResponse.FromString,
+                _registered_method=True)
+        self.CreateRoutine = channel.unary_unary(
+                '/hannah.HannahService/CreateRoutine',
+                request_serializer=hannah__pb2.CreateRoutineRequest.SerializeToString,
+                response_deserializer=hannah__pb2.CreateRoutineResponse.FromString,
+                _registered_method=True)
+        self.UpdateRoutine = channel.unary_unary(
+                '/hannah.HannahService/UpdateRoutine',
+                request_serializer=hannah__pb2.UpdateRoutineRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteRoutine = channel.unary_unary(
+                '/hannah.HannahService/DeleteRoutine',
+                request_serializer=hannah__pb2.DeleteRoutineRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetTriggers = channel.unary_unary(
+                '/hannah.HannahService/GetTriggers',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetTriggersResponse.FromString,
+                _registered_method=True)
+        self.CreateTrigger = channel.unary_unary(
+                '/hannah.HannahService/CreateTrigger',
+                request_serializer=hannah__pb2.CreateTriggerRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.UpdateTrigger = channel.unary_unary(
+                '/hannah.HannahService/UpdateTrigger',
+                request_serializer=hannah__pb2.UpdateTriggerRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteTrigger = channel.unary_unary(
+                '/hannah.HannahService/DeleteTrigger',
+                request_serializer=hannah__pb2.DeleteTriggerRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetSettings = channel.unary_unary(
+                '/hannah.HannahService/GetSettings',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetSettingsResponse.FromString,
+                _registered_method=True)
+        self.UpdateConfig = channel.unary_unary(
+                '/hannah.HannahService/UpdateConfig',
+                request_serializer=hannah__pb2.UpdateConfigRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.CreateSetting = channel.unary_unary(
+                '/hannah.HannahService/CreateSetting',
+                request_serializer=hannah__pb2.CreateSettingRequest.SerializeToString,
+                response_deserializer=hannah__pb2.CreateSettingResponse.FromString,
+                _registered_method=True)
+        self.DeleteSetting = channel.unary_unary(
+                '/hannah.HannahService/DeleteSetting',
+                request_serializer=hannah__pb2.DeleteSettingRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetCarState = channel.unary_unary(
                 '/hannah.HannahService/GetCarState',
@@ -194,7 +299,7 @@ class HannahServiceStub(object):
                 _registered_method=True)
 
 
-class HannahServiceServicer(object):
+class HannahServiceServicer:
     """============================================================
     Hannah gRPC Service
 
@@ -247,6 +352,12 @@ class HannahServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Login(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetDevices(self, request, context):
         """--- Device Control Menu ---
         Returns all rooms and devices with current state — for building control menus.
@@ -293,8 +404,132 @@ class HannahServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetSatellites(self, request, context):
-        """List all currently registered UDP satellites.
+        """List all known satellites (DB + live status merged).
         """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetSatelliteRoom(self, request, context):
+        """--- Satellites (Admin-UI, #27 Phase 2) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetSatelliteDisplayName(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetRooms(self, request, context):
+        """--- Rooms/Groups (Admin-UI, #27 Phase 1) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetGroups(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateGroup(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateGroup(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteGroup(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetGroupRooms(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetRoutines(self, request, context):
+        """--- Routines/Triggers (Admin-UI, #27 Phase 4) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateRoutine(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateRoutine(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteRoutine(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetTriggers(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateTrigger(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateTrigger(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteTrigger(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetSettings(self, request, context):
+        """--- Settings (Admin-UI, #27 Phase 5) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateConfig(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateSetting(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteSetting(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -466,6 +701,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.SetSystemMessagesRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
+            'Login': grpc.unary_unary_rpc_method_handler(
+                    servicer.Login,
+                    request_deserializer=hannah__pb2.LoginRequest.FromString,
+                    response_serializer=hannah__pb2.UserResponse.SerializeToString,
+            ),
             'GetDevices': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDevices,
                     request_deserializer=hannah__pb2.Empty.FromString,
@@ -500,6 +740,106 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     servicer.GetSatellites,
                     request_deserializer=hannah__pb2.Empty.FromString,
                     response_serializer=hannah__pb2.GetSatellitesResponse.SerializeToString,
+            ),
+            'SetSatelliteRoom': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSatelliteRoom,
+                    request_deserializer=hannah__pb2.SetSatelliteRoomRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'SetSatelliteDisplayName': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSatelliteDisplayName,
+                    request_deserializer=hannah__pb2.SetSatelliteDisplayNameRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetRooms': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetRooms,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetRoomsResponse.SerializeToString,
+            ),
+            'GetGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetGroups,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetGroupsResponse.SerializeToString,
+            ),
+            'CreateGroup': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateGroup,
+                    request_deserializer=hannah__pb2.CreateGroupRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'UpdateGroup': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateGroup,
+                    request_deserializer=hannah__pb2.UpdateGroupRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteGroup': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteGroup,
+                    request_deserializer=hannah__pb2.DeleteGroupRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'SetGroupRooms': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetGroupRooms,
+                    request_deserializer=hannah__pb2.SetGroupRoomsRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetRoutines': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetRoutines,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetRoutinesResponse.SerializeToString,
+            ),
+            'CreateRoutine': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateRoutine,
+                    request_deserializer=hannah__pb2.CreateRoutineRequest.FromString,
+                    response_serializer=hannah__pb2.CreateRoutineResponse.SerializeToString,
+            ),
+            'UpdateRoutine': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateRoutine,
+                    request_deserializer=hannah__pb2.UpdateRoutineRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteRoutine': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteRoutine,
+                    request_deserializer=hannah__pb2.DeleteRoutineRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetTriggers': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTriggers,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetTriggersResponse.SerializeToString,
+            ),
+            'CreateTrigger': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateTrigger,
+                    request_deserializer=hannah__pb2.CreateTriggerRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'UpdateTrigger': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateTrigger,
+                    request_deserializer=hannah__pb2.UpdateTriggerRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteTrigger': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteTrigger,
+                    request_deserializer=hannah__pb2.DeleteTriggerRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetSettings': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSettings,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetSettingsResponse.SerializeToString,
+            ),
+            'UpdateConfig': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateConfig,
+                    request_deserializer=hannah__pb2.UpdateConfigRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'CreateSetting': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateSetting,
+                    request_deserializer=hannah__pb2.CreateSettingRequest.FromString,
+                    response_serializer=hannah__pb2.CreateSettingResponse.SerializeToString,
+            ),
+            'DeleteSetting': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteSetting,
+                    request_deserializer=hannah__pb2.DeleteSettingRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
             'GetCarState': grpc.unary_unary_rpc_method_handler(
                     servicer.GetCarState,
@@ -589,7 +929,7 @@ def add_HannahServiceServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class HannahService(object):
+class HannahService:
     """============================================================
     Hannah gRPC Service
 
@@ -757,6 +1097,33 @@ class HannahService(object):
             '/hannah.HannahService/SetSystemMessages',
             hannah__pb2.SetSystemMessagesRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Login(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/Login',
+            hannah__pb2.LoginRequest.SerializeToString,
+            hannah__pb2.UserResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -946,6 +1313,546 @@ class HannahService(object):
             '/hannah.HannahService/GetSatellites',
             hannah__pb2.Empty.SerializeToString,
             hannah__pb2.GetSatellitesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetSatelliteRoom(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/SetSatelliteRoom',
+            hannah__pb2.SetSatelliteRoomRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetSatelliteDisplayName(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/SetSatelliteDisplayName',
+            hannah__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetRooms(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetRooms',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetRoomsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetGroups',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetGroupsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateGroup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateGroup',
+            hannah__pb2.CreateGroupRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateGroup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateGroup',
+            hannah__pb2.UpdateGroupRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteGroup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteGroup',
+            hannah__pb2.DeleteGroupRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetGroupRooms(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/SetGroupRooms',
+            hannah__pb2.SetGroupRoomsRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetRoutines(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetRoutines',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetRoutinesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateRoutine(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateRoutine',
+            hannah__pb2.CreateRoutineRequest.SerializeToString,
+            hannah__pb2.CreateRoutineResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateRoutine(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateRoutine',
+            hannah__pb2.UpdateRoutineRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteRoutine(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteRoutine',
+            hannah__pb2.DeleteRoutineRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTriggers(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetTriggers',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetTriggersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateTrigger(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateTrigger',
+            hannah__pb2.CreateTriggerRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateTrigger(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateTrigger',
+            hannah__pb2.UpdateTriggerRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteTrigger(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteTrigger',
+            hannah__pb2.DeleteTriggerRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSettings(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetSettings',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetSettingsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateConfig(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateConfig',
+            hannah__pb2.UpdateConfigRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateSetting(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateSetting',
+            hannah__pb2.CreateSettingRequest.SerializeToString,
+            hannah__pb2.CreateSettingResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteSetting(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteSetting',
+            hannah__pb2.DeleteSettingRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,

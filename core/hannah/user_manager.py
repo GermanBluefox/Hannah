@@ -1,8 +1,10 @@
 import re
 from typing import Callable, Optional
 from hannah.models.user import User
+from werkzeug.security import check_password_hash, generate_password_hash
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+DUMMY_HASH = "scrypt:32768:8:1$3vcmJuZVX7ZD6OJj$71778a0231aec9c7a99d239f115f3a6a25bef7118dbba606c8f62883d252f6d71bd974519f90785827c1e45704ed7b867f31a374f26efe895241de19d448091a"
 
 class UserManager:
     """Verwaltet die Benutzerkonten und deren Authentifizierung."""
@@ -123,7 +125,7 @@ class UserManager:
             
         return all_users
 
-    def create_user(self, username, password_hash, email=None, display_name=None, type="roomie"):
+    def create_user(self, username, password_hash, email=None, display_name=None, type="roomie") -> User:
         """Erstellt einen neuen Benutzer."""
         if not email or not _EMAIL_RE.match(email):
             raise ValueError(f"Ungültige E-Mail-Adresse: {email!r}")
@@ -132,8 +134,26 @@ class UserManager:
             display_name=display_name or username, type=type,
         )
         return self._cache(user)
+    
+    def login_user(self, username, password) -> User:
+        """Loggt einen User ein und gibt das Objekt oder None zurück"""
+        user = self.get_user_by_username(username=username)
+        
+        # Wenn der User existiert, nimm seinen Hash.
+        # Wenn nicht, nimm den Dummy-Hash, damit die Prüfung gleich lange dauert.
+        hash_to_check = user.password_hash if user else DUMMY_HASH
+        
+        # Passwort prüfen
+        is_valid = check_password_hash(hash_to_check, password)
+        
+        # Nur einloggen, wenn der User wirklich existiert UND das Passwort stimmt
+        if user and is_valid:
+            return user
+            
+        return None
+        
 
-    def get_user_by_id(self, user_id):
+    def get_user_by_id(self, user_id) -> User:
         """Gibt den Benutzer mit der angegebenen ID zurück, oder None.
 
         Normalisiert auf int, damit ein versehentlich als String übergebenes
@@ -153,7 +173,7 @@ class UserManager:
 
         return self._users[user_id]
 
-    def get_user_by_username(self, username):
+    def get_user_by_username(self, username) -> User:
         """Gibt den Benutzer mit dem angegebenen Benutzernamen zurück."""
         for user in self._users.values():
             if user.username == username:
@@ -164,7 +184,7 @@ class UserManager:
             return self._cache(user)
         return None
 
-    def delete_user(self, user_id):
+    def delete_user(self, user_id) -> bool:
         """Löscht den Benutzer dauerhaft (inkl. Linked Accounts, per ON DELETE CASCADE)."""
         user = self.get_user_by_id(user_id)
         if not user:
@@ -175,7 +195,7 @@ class UserManager:
         self._wired_mood.discard(user.id)
         return True
 
-    def get_user_by_linked_account(self, provider, external_id):
+    def get_user_by_linked_account(self, provider, external_id) -> User:
         """Gibt den Benutzer mit der angegebenen external ID zurück."""
         user = User.select(self._db()).join(
             "linked_accounts", on="linked_accounts.user_id = users.id"

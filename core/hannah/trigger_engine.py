@@ -73,6 +73,7 @@ SQL-Query ist immer aktuell, kein Hot-Reload-Mechanismus mehr nötig.
 """
 import logging
 import re
+import sqlite3
 import threading
 import time
 import uuid as _uuid
@@ -95,6 +96,7 @@ class TriggerEngine:
         set_state_fn: Callable[[str, Any], None] | None = None,
         schedule_timer_fn: Callable[[str, str, int, str], None] | None = None,  # (timer_id, label, fire_at, room)
         cancel_timer_fn: Callable[[str], None] | None = None,                    # (timer_id)
+        on_change: Callable[[], None] | None = None,                            # nach Create/Update: WatchMore neu pushen
     ):
         """
         db:            Callable → sqlite3.Connection (siehe hannah.utils.db.get_db)
@@ -104,6 +106,10 @@ class TriggerEngine:
                        callback(answer_text) auf wenn der Nutzer antwortet
         match_fn:      fn(text, category) → bool — LLM-Klassifikation für on_response
         set_state_fn:  fn(state_id, value) — setzt einen ioBroker-State; für set_state in on_response
+        on_change:     fn() — nach create_trigger/update_trigger; lässt den Aufrufer die aktuelle
+                       Menge referenzierter State-IDs erneut per WatchMore an den Adapter pushen,
+                       sonst würde ein frisch angelegter State-Trigger erst beim nächsten
+                       Adapter-Reconnect live werden
         """
         self._db = db
         self._announce = announce_fn
@@ -113,6 +119,7 @@ class TriggerEngine:
         self._set_state_fn = set_state_fn
         self._schedule_timer_fn = schedule_timer_fn
         self._cancel_timer_fn = cancel_timer_fn
+        self._on_change = on_change
         self._triggers: list[dict] = []
 
         # State-Cache: {state_id: parsed_value} — wird von on_state_update befüllt
@@ -215,6 +222,44 @@ class TriggerEngine:
                 if isinstance(cancel_when, dict) and "state" in cancel_when:
                     ids.add(cancel_when["state"])
         return ids
+
+    def get_trigger_records(self) -> list[dict]:
+        """Alle Trigger als rohe DB-Dicts (id, when, cancel_when, on_response, say, ask,
+        rephrase, room, cooldown, delay) — fürs Admin-UI."""
+        return [t.to_dict() for t in Trigger.select(self._db()).all()]
+
+    def create_trigger(self, id: str, when: dict, cancel_when: Optional[dict], on_response: list,
+                        say: str, ask: str, rephrase: bool, room: str, cooldown: int, delay: str) -> bool:
+        """Legt einen neuen Trigger an. Gibt False zurück wenn die ID bereits existiert."""
+        try:
+            Trigger.create(self._db(), id=id, when=when, cancel_when=cancel_when, on_response=on_response,
+                            say=say, ask=ask, rephrase=rephrase, room=room, cooldown=cooldown, delay=delay)
+        except sqlite3.IntegrityError:
+            return False
+        self._load()
+        if self._on_change:
+            self._on_change()
+        return True
+
+    def update_trigger(self, id: str, when: dict, cancel_when: Optional[dict], on_response: list,
+                        say: str, ask: str, rephrase: bool, room: str, cooldown: int, delay: str) -> bool:
+        t = Trigger.get(self._db(), id=id)
+        if not t:
+            return False
+        t.update(when=when, cancel_when=cancel_when, on_response=on_response, say=say, ask=ask,
+                  rephrase=rephrase, room=room, cooldown=cooldown, delay=delay)
+        self._load()
+        if self._on_change:
+            self._on_change()
+        return True
+
+    def delete_trigger(self, id: str) -> bool:
+        t = Trigger.get(self._db(), id=id)
+        if not t:
+            return False
+        t.delete()
+        self._load()
+        return True
 
     @staticmethod
     def _collect_condition_state_ids(condition, ids: set[str]) -> None:

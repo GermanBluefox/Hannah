@@ -44,6 +44,7 @@ from hannah.llm import load as load_llm, prepare_prompt
 from hannah.tool_agent import ToolAgent
 from hannah.memory import LongTermMemory
 from hannah.room_manager import RoomManager
+from hannah.settings_manager import SettingsManager
 from hannah.webui import create_app as create_webui
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
@@ -102,6 +103,11 @@ def main():
     init_db()
     _user_manager = UserManager(get_db)
 
+    # Settings (ble.tags/cars/nlu.*/llm.system_prompt/iobroker.state_names — #27 Phase 5,
+    # aus config.yaml migriert via deploy/migrate_config_settings.py). Fällt auf cfg/
+    # Code-Defaults zurück, solange eine Kategorie noch nicht migriert ist.
+    settings_manager = SettingsManager(get_db)
+
     # Hannah selbst als Roomie verlinken (für Trust-Level/Announcements über die
     # residents-Bridge) — einmalig, danach bereits über linked_accounts auffindbar.
     # external_id ist typ-qualifiziert (siehe Roomie.id) — vermeidet Kollisionen mit
@@ -118,7 +124,11 @@ def main():
             )
 
     # ioBroker
-    iobroker = IoBrokerClient(cfg.get("iobroker", {}))
+    iobroker_cfg = {**cfg.get("iobroker", {})}
+    _state_names = settings_manager.get_settings_dict("iobroker").get("state_names")
+    if _state_names:
+        iobroker_cfg["state_names"] = _state_names
+    iobroker = IoBrokerClient(iobroker_cfg)
 
     if not iobroker.rooms:
         log.warning("Keine Räume aus ioBroker geladen — NLU arbeitet ohne Raum-Erkennung.")
@@ -129,11 +139,14 @@ def main():
     # STT + NLU + TTS
     stt = STT(cfg.get("stt", {}))
     _group_pseudo_rooms = {k: k.capitalize() for k in cfg.get("groups", {})}
-    nlu = NLU(cfg.get("nlu", {}), {**iobroker.rooms, **_group_pseudo_rooms}, iobroker.devices)
+    nlu_cfg = settings_manager.get_settings_dict("nlu") or cfg.get("nlu", {})
+    nlu = NLU(nlu_cfg, {**iobroker.rooms, **_group_pseudo_rooms}, iobroker.devices)
     tts = TTS(cfg.get("tts", {}))
 
     llm = load_llm(cfg.get("llm", {}))
-    llm_system_prompt: str = cfg.get("llm", {}).get("system_prompt", "")
+    llm_system_prompt: str = settings_manager.get_settings_dict("llm").get(
+        "system_prompt"
+    ) or cfg.get("llm", {}).get("system_prompt", "")
     tool_agent = ToolAgent(llm, iobroker)
 
     mem_cfg = cfg.get("memory", {})
@@ -176,7 +189,11 @@ def main():
     )
 
     # Auto-Tracker (cars: Liste; car: alter Einzeleintrag — Backward-Compat)
-    _car_cfgs = cfg.get("cars") or ([cfg["car"]] if cfg.get("car") else [{}])
+    _car_cfgs = (
+        list(settings_manager.get_settings_dict("cars").values())
+        or cfg.get("cars")
+        or ([cfg["car"]] if cfg.get("car") else [{}])
+    )
     car_manager = CarManager([CarTracker(c) for c in _car_cfgs])
 
     routine_manager = RoutineManager(get_db)
@@ -634,7 +651,10 @@ def main():
     mqtt_handler.set_dnd_handler(_on_dnd)
 
     # BLE-Lokalisierung
-    ble_cfg = cfg.get("ble", {})
+    ble_cfg = {**cfg.get("ble", {})}
+    _ble_tags_by_label = settings_manager.get_settings_dict("ble.tags")
+    if _ble_tags_by_label:
+        ble_cfg["tags"] = [{"label": label, **tag} for label, tag in _ble_tags_by_label.items()]
 
     def _get_satellite_room(device: str) -> Optional[str]:
         all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
@@ -776,6 +796,9 @@ def main():
         timer_store.remove(timer_id)
         grpc_servicer.timer_cancel(timer_id)
 
+    def _on_trigger_change() -> None:
+        grpc_servicer.agent_watch_more(list(trigger_engine.get_referenced_state_ids()))
+
     trigger_engine = TriggerEngine(
         db=get_db,
         announce_fn=process_announcement,
@@ -785,6 +808,7 @@ def main():
         set_state_fn=_trigger_set_state,
         schedule_timer_fn=_schedule_trigger_timer,
         cancel_timer_fn=_cancel_trigger_timer,
+        on_change=_on_trigger_change,
     )
 
     def _on_state_update(state_id: str, raw: str) -> None:
@@ -1155,9 +1179,30 @@ def main():
         on_agent_ask_resident=_on_agent_ask_resident,
         provision_satellite=room_manager.provision_satellite,
         pair_satellite=room_manager.pair_satellite,
-        resolve_satellite_name=room_manager.resolve_satellite_name,
         resolve_satellite_room=room_manager.get_satellite_room,
         upsert_satellite=room_manager.upsert_satellite,
+        get_rooms=room_manager.get_rooms,
+        get_groups=room_manager.get_groups,
+        create_group=room_manager.create_group,
+        update_group=room_manager.update_group,
+        delete_group=room_manager.delete_group,
+        set_group_rooms=room_manager.set_group_rooms,
+        get_db_satellites=room_manager.get_satellites,
+        set_satellite_room=room_manager.set_satellite_room,
+        set_satellite_display_name=room_manager.set_satellite_display_name,
+        get_routine_records=routine_manager.get_routine_records,
+        create_routine=routine_manager.create_routine,
+        update_routine=routine_manager.update_routine,
+        delete_routine=routine_manager.delete_routine,
+        get_trigger_records=trigger_engine.get_trigger_records,
+        create_trigger=trigger_engine.create_trigger,
+        update_trigger=trigger_engine.update_trigger,
+        delete_trigger=trigger_engine.delete_trigger,
+        get_categories=settings_manager.get_categories,
+        get_settings_records=settings_manager.get_settings,
+        create_setting=settings_manager.create_setting,
+        update_setting_value=settings_manager.update_setting_value,
+        delete_setting=settings_manager.delete_setting,
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)

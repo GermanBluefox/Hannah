@@ -5,6 +5,10 @@
 -->
 
 
+## 0.45.3
+### Hannah Core
+* Fixed: `UnlinkAccount` RPC reported `ok=True, message="entfernt"` without actually removing the link — the handler only checked whether the user exists but never called `user.unlink_account(request.service)` (`LinkAccount` correctly calls its counterpart when linking). Found while building the `/users` page in `webui/` (#27) (Refs #99)
+
 ## 0.45.2
 ### Hannah Core
 * Added: `CreateUser`/`UpdateUser`/`DeleteUser`/`GetResidents` RPCs on `HannahServicer` — Phase 6 of #27's WebUI gRPC surface, übersehen bei der ursprünglichen Phasenplanung (1–5, #88–#92). `User`-Message additiv um `email`/`type` erweitert. Passwort kommt im Klartext über gRPC an und wird serverseitig gehasht — gleicher bereits akzeptierter Constraint wie beim `Login`-RPC (#90). `trust_level`/`system_messages` bleiben bei den bestehenden `SetTrustLevel`/`SetSystemMessages`-RPCs, nicht dupliziert. `HannahServicer` bekommt neuen `get_residents`-Callback, in `main.py` per Lambda verdrahtet (Forward-Reference auf `residents`, das erst nach der `HannahServicer`-Instanziierung entsteht — gleiches Muster wie `get_satellites` mit `grpc_servicer` selbst) (Refs #98, #27)

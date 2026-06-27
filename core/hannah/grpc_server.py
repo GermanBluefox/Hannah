@@ -290,12 +290,12 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         lookup = request.WhichOneof("lookup")
         match lookup:
             case "user_name":
-                raw = self._user_manager.get_user_by_username(request.user_name)
+                raw: User = self._user_manager.get_user_by_username(request.user_name)
             case "id":
-                raw = self._user_manager.get_user_by_id(request.id)
+                raw: User = self._user_manager.get_user_by_id(request.id)
             case "linked_account":
                 la = request.linked_account
-                raw = self._user_manager.get_user_by_linked_account(la.provider, la.external_id)
+                raw: User = self._user_manager.get_user_by_linked_account(la.provider, la.external_id)
         if not raw:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("User nicht gefunden.")
@@ -304,7 +304,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         return pb.UserResponse(found=True, user=_user_to_pb(raw))
 
     def LinkAccount(self, request, context):
-        user = self._user_manager.get_user_by_id(request.user_id)
+        user: User = self._user_manager.get_user_by_id(request.user_id)
         if not user:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("User nicht gefunden.")
@@ -315,11 +315,13 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         return pb.StatusResponse(ok=(True if user else False), message=msg)
 
     def UnlinkAccount(self, request, context):
-        user = self._user_manager.get_user_by_id(request.user_id)
+        user: User = self._user_manager.get_user_by_id(request.user_id)
         if not user:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("User nicht gefunden.")
             return pb.StatusResponse(ok=False, message="User nicht gefunden.")
+        
+        user.unlink_account(request.service)
         
         msg = "entfernt" if user else "Fehler bei Aufhebung der Verknüpfung"
         return pb.StatusResponse(ok=(True if user else False), message=msg)
@@ -338,14 +340,14 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def SetSystemMessages(self, request, _context):
         # user_id ist immer eindeutig (PRIMARY KEY), wird immer vom User aufgerufen, daher keine Unterscheidung zwischen get und get_or_404 nötig
-        user = self._user_manager.get_user_by_id(request.user_id)
+        user: User = self._user_manager.get_user_by_id(request.user_id)
         user.system_messages = 1 if request.enabled else 0
         user.save()
         msg = "aktualisiert"
         return pb.StatusResponse(ok=True, message=msg)
 
     def Login(self, request, context):
-        user = self._user_manager.login_user(request.username, request.password)
+        user: User = self._user_manager.login_user(request.username, request.password)
         if not user:
             context.set_code(grpc.StatusCode.UNAUTHENTICATED)
             context.set_details("Ungültige Zugangsdaten.")
@@ -357,7 +359,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def CreateUser(self, request, _context):
         try:
-            user = self._user_manager.create_user(
+            user: User = self._user_manager.create_user(
                 request.username, generate_password_hash(request.password),
                 email=request.email, display_name=request.display_name or None,
                 type=request.type or "roomie",
@@ -369,7 +371,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         return pb.CreateUserResponse(ok=True, id=user.id, message="created")
 
     def UpdateUser(self, request, context):
-        user = self._user_manager.get_user_by_id(request.user_id)
+        user: User = self._user_manager.get_user_by_id(request.user_id)
         if not user:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("User nicht gefunden.")
@@ -397,7 +399,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         """Löst source_service + source_user_id via linked_accounts auf eine roomie_id auf."""
         if not source_service or not source_user_id:
             return ""
-        user = self._user_manager.get_user_by_linked_account(source_service, source_user_id)
+        user: User = self._user_manager.get_user_by_linked_account(source_service, source_user_id)
 
         if not user:
             return ""

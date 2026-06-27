@@ -5,6 +5,12 @@
 -->
 
 
+## 0.45.1
+### Hannah Core
+* Fixed: `hannah.service` failed to start with `RuntimeError: ... depends on grpcio>=1.81.1` — `grpc_tools.protoc` bakes the locally-installed grpcio-tools version into the generated `_grpc.py` as a minimum runtime requirement, but `requirements.txt`'s old `grpcio>=1.60.0` floor didn't force an upgrade of an already-installed older grpcio on deploy. Raised the floor to `>=1.81.1` to match, and added a warning comment in `gen_proto.sh` so future stub regenerations keep grpcio-tools in step with this pin (Refs #93)
+
+### Telegram
+* Fixed: same `grpcio`/`grpcio-tools` version floor raised to `>=1.81.1`, for the same reason as Hannah Core (Refs #93)
 
 ## 0.45.0
 ### Hannah Core

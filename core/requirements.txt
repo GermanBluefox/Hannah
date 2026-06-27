@@ -5,5 +5,5 @@ requests>=2.31.0
 numpy>=1.24.0
 piper-tts>=1.2.0    # TTS-Synthese (optional, deaktivierbar via config)
 miniaudio>=1.58     # Audio-Dekodierung (MP3, WAV, OGG, FLAC) für Bestätigungstöne
-grpcio>=1.60.0      # gRPC-Laufzeit (Server + Client)
+grpcio>=1.81.1      # gRPC-Laufzeit (Server + Client) — Untergrenze an die grpcio-tools-Version gekoppelt, die core/proto/gen_proto.sh zuletzt zur Stub-Generierung benutzt hat (siehe Kommentar dort)
 flask>=3.0.0        # Web UI (Raum- und Gruppen-Verwaltung)

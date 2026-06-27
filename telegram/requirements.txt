@@ -2,8 +2,14 @@
 python-telegram-bot>=20.0
 
 # gRPC
-grpcio>=1.60.0
-grpcio-tools>=1.60.0
+# grpcio-Untergrenze an die grpcio-tools-Version gekoppelt, mit der die proto/-Stubs
+# zuletzt generiert wurden — grpc_tools.protoc schreibt eine Mindest-grpcio-Laufzeitversion
+# in den generierten Code; wird hier lokal mit einer neueren grpcio-tools regeneriert, muss
+# diese Untergrenze entsprechend mit hochgezogen werden (sonst schlägt der Service beim
+# Deploy mit "RuntimeError: ... depends on grpcio>=X" fehl, weil pip ein bereits
+# installiertes, älteres grpcio sonst nicht automatisch hochzieht)
+grpcio>=1.81.1
+grpcio-tools>=1.81.1
 protobuf>=4.25.0
 
 # Config

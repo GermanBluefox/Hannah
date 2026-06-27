@@ -70,6 +70,32 @@ CREATE TABLE IF NOT EXISTS "satellites" (
 	PRIMARY KEY("device_id"),
 	FOREIGN KEY("room_id") REFERENCES "rooms"("room_id")
 );
+
+CREATE TABLE IF NOT EXISTS "triggers" (
+	"id"	TEXT NOT NULL,
+	"when"	TEXT NOT NULL,
+	"cancel_when"	TEXT,
+	"on_response"	TEXT,
+	"say"	TEXT,
+	"ask"	TEXT,
+	"rephrase"	INTEGER NOT NULL DEFAULT 0,
+	"room"	TEXT NOT NULL DEFAULT 'all',
+	"cooldown"	INTEGER NOT NULL DEFAULT 3600,
+	"delay"	TEXT,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("id")
+);
+
+CREATE TABLE IF NOT EXISTS "routines" (
+	"id"	INTEGER NOT NULL,
+	"name"	TEXT NOT NULL,
+	"triggers"	TEXT NOT NULL,
+	"actions"	TEXT NOT NULL,
+	"reply"	TEXT,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("name")
+);
 """
 
 

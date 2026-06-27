@@ -1,9 +1,8 @@
 import logging
-import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
-import yaml
+from hannah.models.routine import Routine as RoutineModel
 
 log = logging.getLogger(__name__)
 
@@ -30,14 +29,13 @@ class Routine:
 
 
 class RoutineManager:
-    def __init__(self, path: str):
-        self._path = path
+    def __init__(self, db: Callable):
+        self._db = db
         self._routines: list[Routine] = []
-        self._mtime: float = -1.0
         self._load()
 
     def match(self, text: str) -> Optional[Routine]:
-        """Prüft ob text einen Routine-Trigger enthält. Hot-reloads bei Dateiänderung."""
+        """Prüft ob text einen Routine-Trigger enthält. Lädt vorher aus der Datenbank neu."""
         self._load()
         norm = _normalize(text)
         for routine in self._routines:
@@ -48,38 +46,25 @@ class RoutineManager:
         return None
 
     def _load(self) -> None:
-        if not os.path.exists(self._path):
-            if self._mtime != -1.0:
-                log.warning(f"Routines: Datei nicht gefunden: {self._path}")
-                self._mtime = -1.0
-                self._routines = []
-            return
-
-        mtime = os.path.getmtime(self._path)
-        if mtime == self._mtime:
-            return
-
         try:
-            with open(self._path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+            rows = RoutineModel.select(self._db()).all()
 
             routines: list[Routine] = []
-            for r in data.get("routines", []):
+            for r in rows:
                 actions = []
-                for a in r.get("actions", []):
+                for a in r.actions:
                     if "say" in a:
                         actions.append(RoutineAction(say=a["say"], room=a.get("room", "all")))
                     else:
                         actions.append(RoutineAction(topic=a["topic"], value=str(a.get("value", "true"))))
                 routines.append(Routine(
-                    name=r["name"],
-                    triggers=[_normalize(t) for t in r.get("triggers", [])],
+                    name=r.name,
+                    triggers=[_normalize(t) for t in r.triggers],
                     actions=actions,
-                    reply=r.get("reply", ""),
+                    reply=r.reply or "",
                 ))
 
             self._routines = routines
-            self._mtime = mtime
-            log.info(f"Routines: {len(routines)} Routine(n) geladen aus '{self._path}'")
+            log.info(f"Routines: {len(routines)} Routine(n) aus der Datenbank geladen")
         except Exception as e:
-            log.error(f"Routines: Fehler beim Laden von '{self._path}': {e}")
+            log.error(f"Routines: Fehler beim Laden der Routinen aus der Datenbank: {e}")

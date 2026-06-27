@@ -179,7 +179,7 @@ def main():
     _car_cfgs = cfg.get("cars") or ([cfg["car"]] if cfg.get("car") else [{}])
     car_manager = CarManager([CarTracker(c) for c in _car_cfgs])
 
-    routine_manager = RoutineManager(cfg.get("routines_file", "routines.yaml"))
+    routine_manager = RoutineManager(get_db)
 
     audio_cfg = cfg.get("audio", {})
 
@@ -777,7 +777,7 @@ def main():
         grpc_servicer.timer_cancel(timer_id)
 
     trigger_engine = TriggerEngine(
-        path=cfg.get("triggers_file", "triggers.yaml"),
+        db=get_db,
         announce_fn=process_announcement,
         rephrase_fn=_rephrase_text,
         ask_fn=_ask_fn,

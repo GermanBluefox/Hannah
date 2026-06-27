@@ -1,6 +1,3 @@
-routines_file: "routines.yaml"  # Pfad zur Routinen-Datei (hot-reload bei Änderung)
-triggers_file: "triggers.yaml"  # Pfad zur Trigger-Datei (hot-reload bei Änderung)
-
 # Extra ioBroker State-Prefixes (zusätzlich zu den enum-basierten Geräten des Adapters)
 # extra_state_prefixes:
 #   - "0_userdata.0"

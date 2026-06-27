@@ -1,7 +1,12 @@
 """
 Trigger-Engine — proaktive Ansagen und Fragen aus ioBroker-States und Zeitplänen.
 
-Konfiguration in triggers.yaml:
+Trigger liegen in der "triggers"-Tabelle (hannah.db, Modell `Trigger`), nicht mehr
+in einer YAML-Datei. Spaltenform entspricht 1:1 der früheren YAML-Struktur (Beispiele
+unten) — `when`/`cancel_when`/`on_response` sind JSON-Spalten (siehe `Trigger.__json_fields__`),
+`delay` entspricht dem früheren `for`-Feld (Python-Keyword, daher umbenannt).
+
+Frühere triggers.yaml-Form, zur Illustration der when/cancel_when/on_response-Struktur:
 
     triggers:
       # Zeit-Trigger (einmal pro Tag):
@@ -63,10 +68,10 @@ Schlüsselfelder im Überblick:
   on_response               — Regeln nach ask; condition: llm_match("Kategorie")
   set_state                 — ioBroker-State in on_response setzen: {id, value}
 
-Hot-Reload: Dateiänderung wird beim nächsten Tick/State-Update erkannt.
+Reload: triggers-Tabelle wird einmal pro Minute (Tick-Loop) und beim Start neu abgefragt —
+SQL-Query ist immer aktuell, kein Hot-Reload-Mechanismus mehr nötig.
 """
 import logging
-import os
 import re
 import threading
 import time
@@ -74,7 +79,7 @@ import uuid as _uuid
 from datetime import date, datetime
 from typing import Any, Callable, Optional
 
-import yaml
+from hannah.models.trigger import Trigger
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +87,7 @@ log = logging.getLogger(__name__)
 class TriggerEngine:
     def __init__(
         self,
-        path: str,
+        db: Callable,
         announce_fn: Callable[[str, str], None],
         rephrase_fn: Callable[[str], str] | None = None,
         ask_fn: Callable[[str, str, Callable[[str], None]], None] | None = None,
@@ -92,7 +97,7 @@ class TriggerEngine:
         cancel_timer_fn: Callable[[str], None] | None = None,                    # (timer_id)
     ):
         """
-        path:          Pfad zur triggers.yaml
+        db:            Callable → sqlite3.Connection (siehe hannah.utils.db.get_db)
         announce_fn:   fn(room, text) — ruft process_announcement() auf
         rephrase_fn:   fn(text) → text — LLM-Umformulierung; None = Feature deaktiviert
         ask_fn:        fn(room, question, callback) — stellt eine Frage per TTS und ruft
@@ -100,7 +105,7 @@ class TriggerEngine:
         match_fn:      fn(text, category) → bool — LLM-Klassifikation für on_response
         set_state_fn:  fn(state_id, value) — setzt einen ioBroker-State; für set_state in on_response
         """
-        self._path = path
+        self._db = db
         self._announce = announce_fn
         self._rephrase_fn = rephrase_fn
         self._ask_fn = ask_fn
@@ -109,7 +114,6 @@ class TriggerEngine:
         self._schedule_timer_fn = schedule_timer_fn
         self._cancel_timer_fn = cancel_timer_fn
         self._triggers: list[dict] = []
-        self._mtime: float = -1.0
 
         # State-Cache: {state_id: parsed_value} — wird von on_state_update befüllt
         self._state_cache: dict[str, object] = {}
@@ -507,22 +511,24 @@ class TriggerEngine:
     # Laden
 
     def _load(self) -> None:
-        if not os.path.exists(self._path):
-            return
-        mtime = os.path.getmtime(self._path)
-        with self._lock:
-            if mtime == self._mtime:
-                return
         try:
-            with open(self._path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-            triggers = data.get("triggers", [])
+            rows = Trigger.select(self._db()).all()
+            triggers = []
+            for row in rows:
+                d = row.to_dict()
+                d["for"] = d.pop("delay", None)
+                # NULL-Spalten (say/ask/on_response) sollen wie fehlende YAML-Keys
+                # behandelt werden, nicht als None durchgereicht werden — sonst
+                # crasht z.B. ask.strip() oder on_response wird nicht-iterierbar.
+                d["say"] = d.get("say") or ""
+                d["ask"] = d.get("ask") or ""
+                d["on_response"] = d.get("on_response") or []
+                triggers.append(d)
             with self._lock:
                 self._triggers = triggers
-                self._mtime = mtime
-            log.info(f"TriggerEngine: {len(triggers)} Trigger geladen aus '{self._path}'")
+            log.info(f"TriggerEngine: {len(triggers)} Trigger aus der Datenbank geladen")
         except Exception as e:
-            log.error(f"TriggerEngine: Fehler beim Laden von '{self._path}': {e}")
+            log.error(f"TriggerEngine: Fehler beim Laden der Trigger aus der Datenbank: {e}")
 
     # ------------------------------------------------------------------
     # Helpers

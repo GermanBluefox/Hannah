@@ -5,6 +5,11 @@
 -->
 
 
+## 0.44.0
+### Hannah Core
+* Changed: `routines.yaml`/`triggers.yaml` replaced by SQLite (`routines`/`triggers` tables, `hannah.db`) — new `Routine`/`Trigger` models (`hannah.models.routine`/`hannah.models.trigger`), nested condition/action structures (`when`, `cancel_when`, `on_response`, `triggers`, `actions`) stored as JSON columns, same pattern as `LinkedAccount.provider_payload`. `RoutineManager`/`TriggerEngine` now take a `db` callable instead of a file path; eliminates the mtime-based hot-reload entirely (SQL query is always current). Part of #27's planned WebUI scope — Routinen/Trigger get full CRUD via the WebUI once it lands (Refs #27)
+* Added: `core/deploy/migrate_triggers_routines.py` — one-time, idempotent migration of existing `routines.yaml`/`triggers.yaml` content into `hannah.db`, analogous to `migrate_rooms_db.py` for #77 (Refs #27)
+
 ## 0.43.1
 ### Hannah Core
 * Fixed: the room fallback for voice commands without an explicit room (`main.py`) only checked `udp_server.get_registered_room()` — proxy-connected satellites are tracked separately (`grpc_servicer._proxy_satellites`) and were never consulted, even though RoomManager already had a room assigned for them at registration time. Now resolves directly via `room_manager.get_satellite_room()`, independent of the live connection type (Refs #87)

@@ -30,7 +30,7 @@ hannah/                          ← Mono-Repo
 │   │   ├── conversation.py      ← Konversations-Kontext (Multi-Turn)
 │   │   ├── memory.py            ← Langzeit-Erinnerungen (SQLite)
 │   │   ├── trigger_engine.py    ← Proaktive Trigger
-│   │   ├── routines.py          ← Geplante Routinen (routines.yaml)
+│   │   ├── routines.py          ← Geplante Routinen (SQLite, hannah.db)
 │   │   ├── room_manager.py      ← Räume/Gruppen/Satellit-Zuordnung (SQLite)
 │   │   ├── webui.py             ← Flask-WebUI (Räume/Gruppen-Verwaltung); soll laut #27 in eigene Komponente wandern
 │   │   ├── timers.py            ← Timer + Wecker (AlarmManager)
@@ -41,8 +41,8 @@ hannah/                          ← Mono-Repo
 │   │   └── proto/               ← Generierte gRPC-Stubs
 |   ├── main.py                  ← Einstiegspunkt, Orchestrierung
 │   ├── config.yaml
-│   ├── triggers.yaml            ← hot-reload
-│   └── routines.yaml            ← hot-reload
+│   ├── triggers.yaml            ← veraltet, nicht mehr geladen (siehe routines.py/trigger_engine.py)
+│   └── routines.yaml            ← veraltet, nicht mehr geladen (siehe routines.py/trigger_engine.py)
 │
 ├── proxy/                       ← Go gRPC-Proxy (UDP-Satelliten → gRPC → Core)
 │   └── proto/hannah.proto       ← Kopie des Protokolls (Source of Truth: core/proto/hannah.proto)
@@ -93,7 +93,7 @@ Satellit (Audio/PTT)
 - `nlu.py` — Drei-Ebenen-Matching: Raum + Gerätename + Aktion. Intents: TurnOn/TurnOff/SetLevel/SetColor, QuerySensor, CarQuery, WeatherQuery u.a.
 - `iobroker.py` — Lädt Gerätebaum via REST (`/v1/enum/rooms`, `/v1/state/`). States per `PATCH` setzen (ack=false).
 - `grpc_server.py` — Servicer für externe Services (Telegram, Proxy). Subscriber-Registry für Event-Streams.
-- `trigger_engine.py` — Abonniert ioBroker States per MQTT, prüft `triggers.yaml`, feuert Aktionen.
+- `trigger_engine.py` — Abonniert ioBroker States per MQTT, prüft die `triggers`-Tabelle (SQLite, hannah.db), feuert Aktionen.
 - `user_registry.py` — SQLite, synct Roomies aus Residents-Adapter, speichert Trust-Level und Linked Accounts.
 
 **STT/TTS:**

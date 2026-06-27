@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-export PATH="$PATH:/home/rene/go/bin"
+export PATH="$PATH:/home/leonie/go/bin"
 cd "$(dirname "$0")"
 protoc \
   -I ../core/proto \

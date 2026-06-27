@@ -31,6 +31,13 @@ service HannahService {
   rpc SetSystemMessages   (SetSystemMessagesRequest)   returns (StatusResponse);
   rpc Login               (LoginRequest)               returns (UserResponse);
 
+  // --- User-Verwaltung (Admin-UI, #27 Phase 6) ---
+  rpc CreateUser   (CreateUserRequest) returns (CreateUserResponse);
+  rpc UpdateUser   (UpdateUserRequest) returns (StatusResponse);
+  rpc DeleteUser   (DeleteUserRequest) returns (StatusResponse);
+  // Residents (Roomies/Guests/Pets) aus dem ioBroker-Adapter-Cache — fürs "Resident verknüpfen"-Dropdown.
+  rpc GetResidents (Empty)            returns (GetResidentsResponse);
+
   // --- Device Control Menu ---
   // Returns all rooms and devices with current state — for building control menus.
   rpc GetDevices    (Empty)                returns (GetDevicesResponse);
@@ -166,6 +173,8 @@ message User {
   // linked_accounts: service → account_id  (e.g. "telegram" → "123456789")
   map<string, string> linked_accounts = 6;
   bool   system_messages = 7;  // receives ioBroker/system notifications via Telegram
+  string email           = 8;  // #27 Phase 6
+  string type            = 9;  // "roomie" | "guest" | "pet", #27 Phase 6
 }
 
 message GetUsersRequest {
@@ -229,6 +238,47 @@ message SetSystemMessagesRequest {
   // and unambiguous, unlike roomie_id which can collide across resident types.
   int32  user_id  = 1;
   bool   enabled  = 2;
+}
+
+// --- User-Verwaltung (Admin-UI, #27 Phase 6) ---
+
+message CreateUserRequest {
+  string username     = 1;
+  string password     = 2;  // Klartext, wird serverseitig gehasht — gleicher akzeptierter Constraint wie LoginRequest
+  string email        = 3;
+  string display_name = 4;
+  string type         = 5;  // "roomie" | "guest" | "pet"
+}
+
+message CreateUserResponse {
+  bool   ok      = 1;
+  int32  id      = 2;  // server-assigned, only valid when ok == true
+  string message = 3;
+}
+
+message UpdateUserRequest {
+  int32  user_id      = 1;
+  string display_name = 2;
+  string email        = 3;
+  string type         = 4;
+  bool   is_active    = 5;
+  string password     = 6;  // Klartext, "" = unverändert
+}
+
+message DeleteUserRequest {
+  int32 user_id = 1;
+}
+
+message Resident {
+  string id           = 1;  // z.B. "leonie_roomie" — roomie_id + "_" + type
+  string roomie_id    = 2;
+  string display_name = 3;
+  string type         = 4;  // "roomie" | "guest" | "pet"
+  bool   home         = 5;
+}
+
+message GetResidentsResponse {
+  repeated Resident residents = 1;
 }
 
 // ============================================================

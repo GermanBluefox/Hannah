@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 from unittest.mock import MagicMock
 
 from werkzeug.security import generate_password_hash
@@ -7,10 +8,11 @@ from werkzeug.security import generate_password_hash
 from hannah.grpc_server import HannahServicer, _user_to_pb
 from hannah.user_manager import UserManager
 from hannah.models.user import User
+from hannah.residents.Roomie import Roomie
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
 
-def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None):
+def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None,get_residents=None):
     return HannahServicer(
         user_manager=user_manager or MagicMock(),
         handle_text=handle_text or MagicMock(),
@@ -47,6 +49,7 @@ def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satell
         create_setting=create_setting,
         update_setting_value=update_setting_value,
         delete_setting=delete_setting,
+        get_residents=get_residents,
     )
 
 def test_device_snapshot_dispatched():
@@ -312,7 +315,8 @@ class TestLoginRpc:
 
     def test_login_ok(self):
         user = User(row={"id": 1, "username": "leonie", "display_name": "Leonie", "trust_level": 8,
-                          "is_active": True, "system_messages": True}, db=None)
+                          "is_active": True, "system_messages": True, "email": "leonie@example.com",
+                          "type": "roomie"}, db=None)
         user_manager = MagicMock(login_user=MagicMock(return_value=user))
         servicer = _make_server(user_manager=user_manager)
 
@@ -331,6 +335,104 @@ class TestLoginRpc:
 
         assert response.found is False
         context.set_code.assert_called_once()
+
+class TestUserManagementRpcs:
+    """#27 Phase 6 — CreateUser/DeleteUser sind reine Verdrahtung auf UserManager;
+    UpdateUser mutiert das User-Objekt direkt + save(), analog zu SetTrustLevel/
+    SetSystemMessages (keine eigene UserManager-Methode dafür)."""
+
+    def test_create_user_ok(self):
+        created = MagicMock(id=5)
+        user_manager = MagicMock(create_user=MagicMock(return_value=created))
+        servicer = _make_server(user_manager=user_manager)
+
+        response = servicer.CreateUser(CreateUserRequest(
+            username="rene", password="geheim", email="rene@example.com",
+            display_name="René", type="roomie",
+        ), MagicMock())
+
+        assert response.ok is True
+        assert response.id == 5
+        args, kwargs = user_manager.create_user.call_args
+        assert args[0] == "rene"
+        assert args[1] != "geheim"  # Passwort muss gehasht sein, nicht im Klartext ankommen
+        assert kwargs["email"] == "rene@example.com"
+        assert kwargs["display_name"] == "René"
+        assert kwargs["type"] == "roomie"
+
+    def test_create_user_duplicate(self):
+        user_manager = MagicMock(create_user=MagicMock(side_effect=sqlite3.IntegrityError))
+        servicer = _make_server(user_manager=user_manager)
+
+        response = servicer.CreateUser(CreateUserRequest(username="rene", password="x", email="r@x.de"), MagicMock())
+
+        assert response.ok is False
+
+    def test_create_user_invalid_email(self):
+        user_manager = MagicMock(create_user=MagicMock(side_effect=ValueError("Ungültige E-Mail-Adresse")))
+        servicer = _make_server(user_manager=user_manager)
+
+        response = servicer.CreateUser(CreateUserRequest(username="rene", password="x", email="x"), MagicMock())
+
+        assert response.ok is False
+
+    def test_update_user_ok(self):
+        user = MagicMock()
+        user_manager = MagicMock(get_user_by_id=MagicMock(return_value=user))
+        servicer = _make_server(user_manager=user_manager)
+
+        response = servicer.UpdateUser(UpdateUserRequest(
+            user_id=1, display_name="Leonie neu", email="leonie@neu.de", type="roomie",
+            is_active=True, password="neugeheim",
+        ), MagicMock())
+
+        assert response.ok is True
+        assert user.display_name == "Leonie neu"
+        assert user.email == "leonie@neu.de"
+        assert user.is_active == 1
+        user.save.assert_called_once()
+
+    def test_update_user_not_found(self):
+        user_manager = MagicMock(get_user_by_id=MagicMock(return_value=None))
+        servicer = _make_server(user_manager=user_manager)
+        context = MagicMock()
+
+        response = servicer.UpdateUser(UpdateUserRequest(user_id=999), context)
+
+        assert response.ok is False
+        context.set_code.assert_called_once()
+
+    def test_update_user_password_unchanged_when_blank(self):
+        user = MagicMock(password_hash="old-hash")
+        user_manager = MagicMock(get_user_by_id=MagicMock(return_value=user))
+        servicer = _make_server(user_manager=user_manager)
+
+        servicer.UpdateUser(UpdateUserRequest(user_id=1, display_name="x", password=""), MagicMock())
+
+        assert user.password_hash == "old-hash"
+
+    def test_delete_user_ok(self):
+        delete = MagicMock(return_value=True)
+        servicer = _make_server(user_manager=MagicMock(delete_user=delete))
+
+        response = servicer.DeleteUser(DeleteUserRequest(user_id=1), None)
+
+        delete.assert_called_once_with(1)
+        assert response.ok is True
+
+    def test_get_residents(self):
+        resident = Roomie("leonie", "Leonie", presence_state=1)
+        servicer = _make_server(get_residents=lambda: [resident])
+
+        response = servicer.GetResidents(None, None)
+
+        assert len(response.residents) == 1
+        r = response.residents[0]
+        assert r.id == "leonie_roomie"
+        assert r.roomie_id == "leonie"
+        assert r.display_name == "Leonie"
+        assert r.type == "roomie"
+        assert r.home is True
 
 class TestRoutineRpcs:
     """#27 Phase 4 — Verdrahtung auf RoutineManager.get_routine_records/create_routine/

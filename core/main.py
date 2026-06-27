@@ -1203,6 +1203,9 @@ def main():
         create_setting=settings_manager.create_setting,
         update_setting_value=settings_manager.update_setting_value,
         delete_setting=settings_manager.delete_setting,
+        # `residents` ist erst weiter unten definiert (ResidentsClient) — Lambda löst das
+        # Forward-Reference-Problem (gleiches Muster wie get_satellites oben mit grpc_servicer).
+        get_residents=lambda: residents.all_residents(),
     )
 
     iobroker.set_setter(grpc_servicer.agent_set_state)

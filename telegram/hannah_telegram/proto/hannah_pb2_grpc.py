@@ -82,6 +82,26 @@ class HannahServiceStub:
                 request_serializer=hannah__pb2.LoginRequest.SerializeToString,
                 response_deserializer=hannah__pb2.UserResponse.FromString,
                 _registered_method=True)
+        self.CreateUser = channel.unary_unary(
+                '/hannah.HannahService/CreateUser',
+                request_serializer=hannah__pb2.CreateUserRequest.SerializeToString,
+                response_deserializer=hannah__pb2.CreateUserResponse.FromString,
+                _registered_method=True)
+        self.UpdateUser = channel.unary_unary(
+                '/hannah.HannahService/UpdateUser',
+                request_serializer=hannah__pb2.UpdateUserRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteUser = channel.unary_unary(
+                '/hannah.HannahService/DeleteUser',
+                request_serializer=hannah__pb2.DeleteUserRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetResidents = channel.unary_unary(
+                '/hannah.HannahService/GetResidents',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetResidentsResponse.FromString,
+                _registered_method=True)
         self.GetDevices = channel.unary_unary(
                 '/hannah.HannahService/GetDevices',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
@@ -354,6 +374,32 @@ class HannahServiceServicer:
 
     def Login(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateUser(self, request, context):
+        """--- User-Verwaltung (Admin-UI, #27 Phase 6) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateUser(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteUser(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetResidents(self, request, context):
+        """Residents (Roomies/Guests/Pets) aus dem ioBroker-Adapter-Cache — fürs "Resident verknüpfen"-Dropdown.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -705,6 +751,26 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     servicer.Login,
                     request_deserializer=hannah__pb2.LoginRequest.FromString,
                     response_serializer=hannah__pb2.UserResponse.SerializeToString,
+            ),
+            'CreateUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateUser,
+                    request_deserializer=hannah__pb2.CreateUserRequest.FromString,
+                    response_serializer=hannah__pb2.CreateUserResponse.SerializeToString,
+            ),
+            'UpdateUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateUser,
+                    request_deserializer=hannah__pb2.UpdateUserRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteUser': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteUser,
+                    request_deserializer=hannah__pb2.DeleteUserRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetResidents': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetResidents,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetResidentsResponse.SerializeToString,
             ),
             'GetDevices': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDevices,
@@ -1124,6 +1190,114 @@ class HannahService:
             '/hannah.HannahService/Login',
             hannah__pb2.LoginRequest.SerializeToString,
             hannah__pb2.UserResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateUser',
+            hannah__pb2.CreateUserRequest.SerializeToString,
+            hannah__pb2.CreateUserResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateUser',
+            hannah__pb2.UpdateUserRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteUser(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteUser',
+            hannah__pb2.DeleteUserRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetResidents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetResidents',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetResidentsResponse.FromString,
             options,
             channel_credentials,
             insecure,

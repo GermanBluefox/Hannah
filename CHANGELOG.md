@@ -5,6 +5,16 @@
 -->
 
 
+## 0.45.2
+### Hannah Core
+* Added: `CreateUser`/`UpdateUser`/`DeleteUser`/`GetResidents` RPCs on `HannahServicer` — Phase 6 of #27's WebUI gRPC surface, übersehen bei der ursprünglichen Phasenplanung (1–5, #88–#92). `User`-Message additiv um `email`/`type` erweitert. Passwort kommt im Klartext über gRPC an und wird serverseitig gehasht — gleicher bereits akzeptierter Constraint wie beim `Login`-RPC (#90). `trust_level`/`system_messages` bleiben bei den bestehenden `SetTrustLevel`/`SetSystemMessages`-RPCs, nicht dupliziert. `HannahServicer` bekommt neuen `get_residents`-Callback, in `main.py` per Lambda verdrahtet (Forward-Reference auf `residents`, das erst nach der `HannahServicer`-Instanziierung entsteht — gleiches Muster wie `get_satellites` mit `grpc_servicer` selbst) (Refs #98, #27)
+
+### Hannah Proxy
+* Changed: Proto-Dateien aktualisiert für Phase 6 (User-CRUD, Residents) (Refs #98, #27)
+
+### Telegram
+* Changed: Proto-Dateien aktualisiert für Phase 6 (User-CRUD, Residents) (Refs #98, #27)
+
 ## 0.45.1
 ### Hannah Core
 * Fixed: `hannah.service` failed to start with `RuntimeError: ... depends on grpcio>=1.81.1` — `grpc_tools.protoc` bakes the locally-installed grpcio-tools version into the generated `_grpc.py` as a minimum runtime requirement, but `requirements.txt`'s old `grpcio>=1.60.0` floor didn't force an upgrade of an already-installed older grpcio on deploy. Raised the floor to `>=1.81.1` to match, and added a warning comment in `gen_proto.sh` so future stub regenerations keep grpcio-tools in step with this pin (Refs #93)

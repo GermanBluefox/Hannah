@@ -7,12 +7,14 @@ Runs in its own thread pool alongside the main event loop.
 import json
 import logging
 import queue
+import sqlite3
 import threading
 from concurrent import futures
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Optional
 
 import grpc
+from werkzeug.security import generate_password_hash
 
 from hannah.user_manager import UserManager
 from hannah.proto import hannah_pb2 as pb
@@ -116,6 +118,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         create_setting: Optional[Callable[[int, str, object], Optional[dict]]] = None,  # (category_id, name, value) → dict | None
         update_setting_value: Optional[Callable[[int, object], bool]] = None,    # (setting_id, value) → bool
         delete_setting: Optional[Callable[[int], bool]] = None,                  # (setting_id) → bool
+        get_residents: Optional[Callable[[], list]] = None,                      # () → [Resident]
     ):
         self._user_manager          = user_manager
         self._handle_text           = handle_text
@@ -175,6 +178,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._create_setting            = create_setting or (lambda *_: None)
         self._update_setting_value      = update_setting_value or (lambda *_: False)
         self._delete_setting            = delete_setting or (lambda *_: False)
+        self._get_residents             = get_residents or (lambda: [])
 
         self._subscribers: list[_Subscriber] = []
         self._subs_lock = threading.Lock()
@@ -347,6 +351,44 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             context.set_details("Ungültige Zugangsdaten.")
             return pb.UserResponse(found=False)
         return pb.UserResponse(found=True, user=_user_to_pb(user))
+
+    # ------------------------------------------------------------------
+    # User-Verwaltung (Admin-UI, #27 Phase 6)
+
+    def CreateUser(self, request, _context):
+        try:
+            user = self._user_manager.create_user(
+                request.username, generate_password_hash(request.password),
+                email=request.email, display_name=request.display_name or None,
+                type=request.type or "roomie",
+            )
+        except ValueError as e:
+            return pb.CreateUserResponse(ok=False, message=str(e))
+        except sqlite3.IntegrityError:
+            return pb.CreateUserResponse(ok=False, message="username oder email existiert bereits")
+        return pb.CreateUserResponse(ok=True, id=user.id, message="created")
+
+    def UpdateUser(self, request, context):
+        user = self._user_manager.get_user_by_id(request.user_id)
+        if not user:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details("User nicht gefunden.")
+            return pb.StatusResponse(ok=False, message="User nicht gefunden.")
+        user.display_name = request.display_name.strip() or user.username
+        user.email = request.email.strip() or user.email
+        user.type = request.type or user.type
+        user.is_active = 1 if request.is_active else 0
+        if request.password:
+            user.password_hash = generate_password_hash(request.password)
+        user.save()
+        return pb.StatusResponse(ok=True, message="updated")
+
+    def DeleteUser(self, request, _context):
+        ok = self._user_manager.delete_user(request.user_id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
+
+    def GetResidents(self, _request, _context):
+        return pb.GetResidentsResponse(residents=[_resident_to_pb(r) for r in self._get_residents()])
 
     # ------------------------------------------------------------------
     # Control
@@ -1341,7 +1383,19 @@ def _user_to_pb(u: User) -> pb.User:
         trust_level=int(u.trust_level or 5),
         active=bool(u.is_active),
         system_messages=bool(u.system_messages),
-        linked_accounts={acc.provider: acc.external_id for acc in u.linked_accounts}
+        linked_accounts={acc.provider: acc.external_id for acc in u.linked_accounts},
+        email=u.email or "",
+        type=u.type or "",
+    )
+
+
+def _resident_to_pb(r) -> pb.Resident:
+    return pb.Resident(
+        id=r.id,
+        roomie_id=r.roomie_id,
+        display_name=r.display_name or "",
+        type=type(r).__name__.lower(),
+        home=r.is_home(),
     )
 
 

@@ -19,4 +19,4 @@ cfg = load_config(os.environ.get("HANNAH_WEBUI_CONFIG", "config.yaml"))
 hannah = HannahClient(cfg.grpc.host, cfg.grpc.port)
 hannah.connect()
 
-app = create_app(hannah)
+app = create_app(hannah, cfg.secret_key)

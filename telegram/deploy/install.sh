@@ -22,7 +22,7 @@ INSTALL_DIR="/opt/hannah-telegram"
 CONFIG_DIR="/etc/hannah-telegram"
 SERVICE_NAME="hannah-telegram"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-SERVICE_USER="hannah-telegram"
+SERVICE_USER="hannah"
 # ──────────────────────────────────────────────────────────────────────────────
 
 info()  { echo "[INFO]  $*"; }

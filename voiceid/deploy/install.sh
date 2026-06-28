@@ -24,7 +24,7 @@ RAM_DISK="/mnt/hannah_mem"
 RAM_DISK_SIZE="128M"
 SERVICE_NAME="hannah-voiceid"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-SERVICE_USER="hannah-voiceid"
+SERVICE_USER="hannah"
 # ──────────────────────────────────────────────────────────────────────────────
 
 info()  { echo "[INFO]  $*"; }

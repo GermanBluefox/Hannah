@@ -5,6 +5,7 @@ Flask app, talks to Hannah Core exclusively via gRPC (no direct DB/file access â
 Core stays the sole owner of all data, see #27).
 """
 import json
+import logging
 import os
 import re
 from functools import wraps
@@ -12,6 +13,8 @@ from functools import wraps
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 
 from hannah_webui.grpc_client import HannahClient
+
+log = logging.getLogger(__name__)
 
 _TEMPLATES = os.path.join(os.path.dirname(__file__), "templates")
 
@@ -233,9 +236,15 @@ def _parse_trigger_action_rows(form) -> list[dict]:
     return actions
 
 
-def create_app(hannah: HannahClient) -> Flask:
+def create_app(hannah: HannahClient, secret_key: str = "") -> Flask:
     app = Flask(__name__, template_folder=_TEMPLATES)
-    app.secret_key = os.urandom(24)
+    if not secret_key:
+        log.warning(
+            "No secret_key configured â€” falling back to a random one. Sessions won't "
+            "survive a restart or work across multiple gunicorn workers."
+        )
+        secret_key = os.urandom(24)
+    app.secret_key = secret_key
 
     def login_required(view):
         @wraps(view)

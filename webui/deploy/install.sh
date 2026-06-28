@@ -25,7 +25,7 @@ INSTALL_DIR="/opt/hannah/webui"
 CONFIG_DIR="/etc/hannah-webui"
 SERVICE_NAME="hannah-webui"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-SERVICE_USER="hannah-webui"
+SERVICE_USER="hannah"
 # ──────────────────────────────────────────────────────────────────────────────
 
 info()  { echo "[INFO]  $*"; }

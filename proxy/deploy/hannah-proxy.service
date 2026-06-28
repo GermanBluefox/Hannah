@@ -10,9 +10,9 @@ ExecStart=/usr/local/bin/hannah-proxy --config /etc/hannah-proxy/config.yaml
 Restart=on-failure
 RestartSec=5s
 
-# Run as dedicated user if it exists, otherwise fall back to nobody.
-# Create with: useradd -r -s /sbin/nologin hannah-proxy
-User=hannah-proxy
+# Runs as the shared "hannah" service user (same as all other Hannah services
+# except autodeploy, which needs root to manage other systemd units).
+User=hannah
 
 # Harden the service — the proxy only needs network + its config file.
 NoNewPrivileges=true

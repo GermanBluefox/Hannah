@@ -5,6 +5,22 @@
 -->
 
 
+## 0.46.1
+### WebUI
+* Fixed: random logout on almost every click — `create_app()` set `app.secret_key = os.urandom(24)`, generating a new key on every call. Gunicorn runs without `--preload`, so each of its 2 worker processes imports `wsgi.py` and calls `create_app()` independently, ending up with a different secret key per worker; whichever worker didn't sign a given session cookie rejects it, dropping the user back to `/login`. `secret_key` is now read from `config.yaml` (or `HANNAH_WEBUI_SECRET_KEY`), stable across workers and restarts; falls back to a random key with a warning log if unset (Refs #104)
+* Added: `hannah_webui/config.py`'s `load()` now falls back to environment variables (`HANNAH_WEBUI_HOST`/`PORT`/`SECRET_KEY`/`GRPC_HOST`/`GRPC_PORT`) when no `config.yaml` file is present, in preparation for a future containerized deployment (Refs #104)
+* Changed: `deploy/hannah-webui.service`'s gunicorn now binds `0.0.0.0:5000` instead of `127.0.0.1:5000` — the previous bind made the service unreachable from outside its own host (Refs #104)
+* Changed: deploy now runs as the shared `hannah` user instead of the dedicated `hannah-webui` user, matching how it's actually run in production (`core` already used `hannah`). Also adds `Environment=HOME=/opt/hannah/webui` (same pattern already used by `voiceid`) since `ProtectHome=true` makes the shared user's real `/home/hannah` invisible to the service, which made `grpc`'s C-core fail with `Permission denied` during gunicorn's worker fork handling (Refs #104)
+
+### Telegram
+* Changed: deploy now runs as the shared `hannah` user instead of the dedicated `hannah-telegram` user, matching how it's actually run in production (Refs #104)
+
+### Hannah Proxy
+* Changed: deploy now runs as the shared `hannah` user instead of the dedicated `hannah-proxy` user, matching how it's actually run in production (Refs #104)
+
+### VoiceID
+* Changed: deploy now runs as the shared `hannah` user instead of the dedicated `hannah-voiceid` user, matching how it's actually run in production (Refs #104)
+
 ## 0.46.0
 ### Hannah Core
 * Removed: old in-process WebUI (`hannah/webui.py`, `hannah/webui_templates/`) — fully superseded by the standalone `webui/` service (#27). `main.py` no longer spawns the Flask dev-server thread, `config.yaml`'s `web_ui` section is gone. `flask` dropped from `requirements.txt`; `werkzeug` (used directly for password hashing in `db.py`/`user_manager.py`/`grpc_server.py`, previously only pulled in transitively via `flask`) is now an explicit dependency (Refs #27)

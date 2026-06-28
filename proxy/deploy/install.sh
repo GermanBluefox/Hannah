@@ -24,7 +24,7 @@ INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/hannah-proxy"
 SERVICE_NAME="hannah-proxy"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-SERVICE_USER="hannah-proxy"
+SERVICE_USER="hannah"
 # ──────────────────────────────────────────────────────────────────────────────
 
 info()  { echo "[INFO]  $*"; }

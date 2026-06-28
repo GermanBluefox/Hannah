@@ -6,7 +6,7 @@ After=network.target local-fs.target
 
 [Service]
 Type=simple
-User=hannah-voiceid
+User=hannah
 WorkingDirectory=/opt/hannah/voiceid
 Environment=HOME=/opt/hannah/voiceid
 

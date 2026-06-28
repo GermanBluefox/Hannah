@@ -30,7 +30,7 @@ def main(config_path: str) -> None:
     hannah = HannahClient(cfg.grpc.host, cfg.grpc.port)
     hannah.connect()
 
-    app = create_app(hannah)
+    app = create_app(hannah, cfg.secret_key)
 
     log.info("hannah-webui starting on %s:%d (gRPC=%s:%d)", cfg.host, cfg.port, cfg.grpc.host, cfg.grpc.port)
     try:

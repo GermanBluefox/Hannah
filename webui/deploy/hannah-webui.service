@@ -6,13 +6,17 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=hannah-webui
+User=hannah
 WorkingDirectory=/opt/hannah/webui
 Environment=HANNAH_WEBUI_CONFIG=/etc/hannah-webui/config.yaml
+# HOME zeigt sonst auf /home/hannah, das ProtectHome=true unsichtbar macht — grpc's
+# C-Core scheitert beim Fork-Handling der gunicorn-Worker daran mit "Permission
+# denied" (#104). Gleiches Muster wie bei voiceid (siehe dessen .service).
+Environment=HOME=/opt/hannah/webui
 # Bind-Adresse ist hier festgelegt, nicht in config.yaml — gunicorn bindet den
 # Socket selbst, bevor die WSGI-App (wsgi.py) überhaupt geladen wird. config.yaml's
 # host/port gelten nur für main.py's Flask-Dev-Server (lokale Entwicklung).
-ExecStart=/opt/hannah/webui/venv/bin/gunicorn --workers 2 --bind 127.0.0.1:5000 wsgi:app
+ExecStart=/opt/hannah/webui/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 wsgi:app
 Restart=on-failure
 RestartSec=5s
 

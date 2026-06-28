@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Routinen{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h4 mb-0">Routinen</h2>
+  <a href="{{ url_for('new_routine') }}" class="btn btn-sm btn-primary">Neue Routine</a>
+</div>
+
+{% if not routines %}
+<div class="card">
+  <div class="p-4 text-muted text-center">Noch keine Routinen angelegt.</div>
+</div>
+{% endif %}
+
+{% for item in routines %}
+{% set routine = item.routine %}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <h5 class="card-title mb-1">{{ routine.name }}</h5>
+        <div class="mb-2">
+          {% for t in routine.triggers %}
+          <span class="badge badge-room me-1">{{ t }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="d-flex gap-1">
+        <a href="{{ url_for('edit_routine', routine_id=routine.id) }}"
+           class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
+        <form method="post" action="{{ url_for('delete_routine', routine_id=routine.id) }}"
+              onsubmit="return confirm('Routine {{ routine.name }} löschen?')">
+          <button class="btn btn-sm btn-outline-danger">Löschen</button>
+        </form>
+      </div>
+    </div>
+    {% if routine.reply %}
+    <div class="text-muted small mb-2">Antwort: „{{ routine.reply }}“</div>
+    {% endif %}
+    <ul class="small mb-0 ps-3">
+      {% for a in item.actions %}
+      <li>
+        {% if a.get('say') %}Sage „{{ a.get('say') }}“ in {{ a.get('room') or 'all' }}
+        {% else %}Setze <code>{{ a.get('topic', '') }}</code> = <code>{{ a.get('value', '') }}</code>{% endif %}
+      </li>
+      {% else %}
+      <li class="text-muted">Keine Aktionen.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

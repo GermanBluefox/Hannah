@@ -1,0 +1,26 @@
+[Unit]
+Description=Hannah WebUI
+Documentation=https://dev.kernstock.net/gessinger/voice/hannah
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hannah-webui
+WorkingDirectory=/opt/hannah/webui
+Environment=HANNAH_WEBUI_CONFIG=/etc/hannah-webui/config.yaml
+# Bind-Adresse ist hier festgelegt, nicht in config.yaml — gunicorn bindet den
+# Socket selbst, bevor die WSGI-App (wsgi.py) überhaupt geladen wird. config.yaml's
+# host/port gelten nur für main.py's Flask-Dev-Server (lokale Entwicklung).
+ExecStart=/opt/hannah/webui/venv/bin/gunicorn --workers 2 --bind 127.0.0.1:5000 wsgi:app
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/hannah-webui
+ReadWritePaths=/opt/hannah/webui
+
+[Install]
+WantedBy=multi-user.target

@@ -27,11 +27,11 @@
         {% for row in users %}
         <tr>
           <td class="ps-4 align-middle">{{ row.user.display_name }}</td>
-          <td class="align-middle font-monospace small">{{ row.user.username }}</td>
+          <td class="align-middle font-monospace small">{{ row.user.user_name }}</td>
           <td class="align-middle">{{ row.user.trust_level }}</td>
           <td class="align-middle">
-            {% if row.resident_link %}
-              <span class="badge badge-room">{{ row.resident_link.roomie_id }} ({{ row.resident_link.resident_type }})</span>
+            {% if row.resident %}
+              <span class="badge badge-room">{{ row.resident.display_name }} ({{ row.resident.type }})</span>
             {% else %}
               <form method="post"
                     action="{{ url_for('link_resident', user_id=row.user.id) }}"
@@ -39,7 +39,7 @@
                 <select name="resident_id" class="form-select form-select-sm" style="max-width:200px" required>
                   <option value="">– Resident wählen –</option>
                   {% for resident in residents %}
-                  <option value="{{ resident.id }}">{{ resident.display_name }} ({{ resident.__class__.__name__ }})</option>
+                  <option value="{{ resident.id }}">{{ resident.display_name }} ({{ resident.type }})</option>
                   {% endfor %}
                 </select>
                 <button class="btn btn-sm btn-outline-primary">Verknüpfen</button>
@@ -47,7 +47,7 @@
             {% endif %}
           </td>
           <td class="align-middle">
-            {% if row.resident_link %}
+            {% if row.resident %}
             <form method="post"
                   action="{{ url_for('unlink_resident', user_id=row.user.id) }}"
                   onsubmit="return confirm('Verknüpfung für {{ row.user.display_name }} lösen?')">
@@ -59,7 +59,7 @@
             <a href="{{ url_for('edit_user', user_id=row.user.id) }}" class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
             <form method="post"
                   action="{{ url_for('delete_user', user_id=row.user.id) }}"
-                  onsubmit="return confirm('User {{ row.user.display_name }} ({{ row.user.username }}) wirklich löschen?')">
+                  onsubmit="return confirm('User {{ row.user.display_name }} ({{ row.user.user_name }}) wirklich löschen?')">
               <button class="btn btn-sm btn-outline-danger">Löschen</button>
             </form>
           </td>

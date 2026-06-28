@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h4 mb-0">Settings</h2>
+  <small class="text-muted">Werte als JSON — entsprechen 1:1 dem, was früher in config.yaml stand.</small>
+</div>
+
+{% if not categories %}
+<div class="card">
+  <div class="p-4 text-muted text-center">Keine Settings-Kategorien vorhanden.</div>
+</div>
+{% endif %}
+
+{% for category in categories %}
+<div class="card mb-3">
+  <div class="card-header font-monospace">{{ category.name }}</div>
+  <div class="card-body">
+    {% for item in settings_by_cat.get(category.id, []) %}
+    {% set setting = item.setting %}
+    <form method="post" action="{{ url_for('update_setting', setting_id=setting.id) }}" class="mb-3">
+      <label class="form-label small fw-medium">{{ setting.name }}</label>
+      <div class="d-flex gap-2 align-items-start">
+        <textarea name="value" class="form-control font-monospace small" rows="3"
+                  style="max-width:560px">{{ item.pretty_value }}</textarea>
+        <div class="d-flex flex-column gap-1">
+          <button class="btn btn-sm btn-outline-primary">Speichern</button>
+          <button class="btn btn-sm btn-outline-danger" type="submit"
+                  formaction="{{ url_for('delete_setting', setting_id=setting.id) }}"
+                  onclick="return confirm('Setting {{ setting.name }} löschen?')">Löschen</button>
+        </div>
+      </div>
+    </form>
+    {% else %}
+    <div class="text-muted small mb-3">Noch keine Settings in dieser Kategorie.</div>
+    {% endfor %}
+
+    <hr>
+    <form method="post" action="{{ url_for('create_setting', category_id=category.id) }}" class="row g-2 align-items-start">
+      <div class="col-sm-3">
+        <label class="form-label small">Name</label>
+        <input type="text" name="name" class="form-control form-control-sm" required>
+      </div>
+      <div class="col-sm-6">
+        <label class="form-label small">Wert (JSON)</label>
+        <textarea name="value" class="form-control form-control-sm font-monospace" rows="2" required></textarea>
+      </div>
+      <div class="col-sm-3 d-flex align-items-end h-100">
+        <button class="btn btn-sm btn-primary">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

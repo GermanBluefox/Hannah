@@ -1,0 +1,5 @@
+grpcio>=1.81.1      # gRPC-Laufzeit (Client) — Untergrenze an die grpcio-tools-Version gekoppelt, die gen_proto.sh zuletzt zur Stub-Generierung benutzt hat (siehe Kommentar dort)
+protobuf>=4.25.0    # von den generierten *_pb2.py-Stubs benötigt, kein transitives grpcio-Dependency
+flask>=3.0.0        # WebUI
+PyYAML>=6.0         # Config-Loading
+gunicorn>=21.2.0    # Produktions-WSGI-Server (siehe deploy/hannah-webui.service); Flask-Dev-Server (main.py) bleibt nur für lokale Entwicklung

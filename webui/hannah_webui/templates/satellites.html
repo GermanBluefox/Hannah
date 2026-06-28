@@ -17,11 +17,11 @@
           <th>Anzeigename</th>
           <th>Zugewiesener Raum</th>
           <th>Zuletzt gesehen</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
-        {% for sat in satellites %}
+        {% for v in satellites %}
+        {% set sat = v.sat %}
         <tr>
           <td class="ps-4 align-middle">
             <span title="{{ 'Verbunden' if sat.connected else 'Nicht verbunden' }}">
@@ -62,25 +62,15 @@
               </select>
               <button class="btn btn-sm btn-outline-primary">Setzen</button>
             </form>
-            {% if sat.connected and sat.connected_room and sat.room_mismatch %}
+            {% if sat.connected and sat.room_mismatch %}
             <small class="text-muted d-block mt-1">
-              Meldet sich als: <em>{{ sat.connected_room }}</em>
+              Meldet sich als: <em>{{ v.live_room_display }}</em>
             </small>
             {% endif %}
           </td>
 
           <td class="align-middle text-muted small">
             {{ sat.last_seen or '–' }}
-          </td>
-
-          <td class="align-middle">
-            {% if not sat.connected %}
-            <form method="post"
-                  action="{{ url_for('delete_satellite', device_id=sat.device_id) }}"
-                  onsubmit="return confirm('Satellit {{ sat.display_name or sat.device_id }} löschen?')">
-              <button class="btn btn-sm btn-outline-danger">Löschen</button>
-            </form>
-            {% endif %}
           </td>
         </tr>
         {% endfor %}

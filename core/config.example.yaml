@@ -70,11 +70,6 @@ room_manager:
   db_path: "rooms.db"          # SQLite-Datei für Räume, Gruppen und Satellit-Zuweisung
   seed_ttl_days: 7              # Provisionierte, aber nie gepairte Satelliten-Seeds nach X Tagen löschen
 
-web_ui:
-  enabled: true
-  host: "0.0.0.0"
-  port: 8080
-
 residents:
   topic_prefix_read:  "residents/0/roomie"          # ioBroker → Hannah (subscribe)
   state_key: "presence/state"   # Datenpunkt-Suffix unterhalb von /{name}/

@@ -1,0 +1,8 @@
+# Wo der WebUI-Flask-Server selbst lauscht
+host: "127.0.0.1"
+port: 5000
+
+# Hannah Core, per gRPC
+grpc:
+  host: "127.0.0.1"
+  port: 50051

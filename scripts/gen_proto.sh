@@ -12,6 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROTO_CORE="$REPO_ROOT/core/proto"      # kanonische Quelle für Core + Adapter
 PROTO_TELEGRAM="$REPO_ROOT/telegram/proto"  # Telegram-Subset
+PROTO_WEBUI="$REPO_ROOT/webui/proto"        # WebUI-Subset
 
 # Python mit grpcio-tools finden
 PYTHON=""
@@ -53,11 +54,20 @@ echo "→ telegram/hannah_telegram/proto/"
     --grpc_python_out="$REPO_ROOT/telegram/hannah_telegram/proto" \
     "$PROTO_TELEGRAM/hannah.proto"
 
+# WebUI-Stubs generieren (WebUI-Subset)
+echo "→ webui/hannah_webui/proto/"
+"$PYTHON" -m grpc_tools.protoc \
+    -I "$PROTO_WEBUI" \
+    --python_out="$REPO_ROOT/webui/hannah_webui/proto" \
+    --grpc_python_out="$REPO_ROOT/webui/hannah_webui/proto" \
+    "$PROTO_WEBUI/hannah.proto"
+
 # protoc erzeugt absolute Imports in *_grpc.py — innerhalb eines Python-Packages
 # müssen diese relativ sein, sonst gibt es ModuleNotFoundError beim Import.
 echo "→ Absolute Imports in *_grpc.py auf relativ patchen"
 sed -i 's/^import hannah_pb2 as hannah__pb2$/from . import hannah_pb2 as hannah__pb2/' \
     "$REPO_ROOT/core/hannah/proto/hannah_pb2_grpc.py" \
-    "$REPO_ROOT/telegram/hannah_telegram/proto/hannah_pb2_grpc.py"
+    "$REPO_ROOT/telegram/hannah_telegram/proto/hannah_pb2_grpc.py" \
+    "$REPO_ROOT/webui/hannah_webui/proto/hannah_pb2_grpc.py"
 
 echo "Fertig."

@@ -82,3 +82,5 @@ hardware/Phase2/*.step
 /hardware/.history
 /hardware/Phase2/.history
 /core/config.yaml
+/webui/config.yaml
+/webui/venv/

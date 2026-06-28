@@ -7,10 +7,6 @@
 
 <h2 class="h4 mb-4">User anlegen</h2>
 
-{% if error %}
-<div class="alert alert-danger">{{ error }}</div>
-{% endif %}
-
 <div class="card">
   <div class="card-body">
     <form method="post" action="{{ url_for('create_user') }}">

@@ -13,7 +13,7 @@
       <div class="row g-3">
         <div class="col-sm-6">
           <label class="form-label">Username</label>
-          <input type="text" class="form-control" value="{{ user.username }}" disabled>
+          <input type="text" class="form-control" value="{{ user.user_name }}" disabled>
           <div class="form-text text-muted">Username kann nicht geändert werden.</div>
         </div>
         <div class="col-sm-6">
@@ -42,7 +42,7 @@
         </div>
         <div class="col-sm-6">
           <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if user.is_active %}checked{% endif %}>
+            <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if user.active %}checked{% endif %}>
             <label class="form-check-label" for="is_active">Aktiv</label>
           </div>
           <div class="form-check">

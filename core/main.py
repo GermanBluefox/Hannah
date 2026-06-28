@@ -45,7 +45,6 @@ from hannah.tool_agent import ToolAgent
 from hannah.memory import LongTermMemory
 from hannah.room_manager import RoomManager
 from hannah.settings_manager import SettingsManager
-from hannah.webui import create_app as create_webui
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
 from hannah.ble_location import BleLocationEngine, BleTag
@@ -1464,31 +1463,6 @@ def main():
 
     residents.announce_online()
     log.info(f"Residents: Hannah online ({residents.hannah_name})")
-
-    # ------------------------------------------------------------------
-    # Web UI starten (Raum- und Gruppen-Verwaltung)
-
-    web_cfg = cfg.get("web_ui", {})
-    if web_cfg.get("enabled", True):
-        webui_app = create_webui(
-            room_manager=room_manager,
-            get_connected_satellites=lambda: {
-                **udp_server.registered_devices(),
-                **grpc_servicer.proxy_satellites(),
-            },
-            notify_satellite_deleted=grpc_servicer.agent_satellite_deleted,
-            user_manager=_user_manager,
-            get_residents=residents.all_residents,
-        )
-        web_host = web_cfg.get("host", "0.0.0.0")
-        web_port = int(web_cfg.get("port", 8080))
-        web_thread = threading.Thread(
-            target=lambda: webui_app.run(host=web_host, port=web_port, use_reloader=False),
-            daemon=True,
-            name="webui",
-        )
-        web_thread.start()
-        log.info(f"Web UI: http://{web_host}:{web_port}")
 
     # ------------------------------------------------------------------
     # gRPC-Server starten

@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS "triggers" (
 	"when"	TEXT NOT NULL,
 	"cancel_when"	TEXT,
 	"on_response"	TEXT,
+	"actions"	TEXT,
 	"say"	TEXT,
 	"ask"	TEXT,
 	"rephrase"	INTEGER NOT NULL DEFAULT 0,
@@ -139,6 +140,13 @@ def _col_names(db, table):
 def init_db():
     db = get_db()
     db.executescript(SCHEMA)
+
+    # Additive column migrations for tables that already existed before a column was
+    # introduced — executescript()'s CREATE TABLE IF NOT EXISTS is a no-op on a table
+    # that's already there, so new columns need an explicit ALTER TABLE here.
+    if "actions" not in _col_names(db, "triggers"):
+        db.execute('ALTER TABLE "triggers" ADD COLUMN "actions" TEXT')
+        db.commit()
 
     # --- First-run: create admin account if no users exist ---
     if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:

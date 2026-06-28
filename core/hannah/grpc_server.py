@@ -565,31 +565,32 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         return pb.GetTriggersResponse(triggers=[_trigger_to_pb(t) for t in self._get_trigger_records()])
 
     def _parse_trigger_json(self, request):
-        """Gibt (when, cancel_when, on_response) zurück; wirft json.JSONDecodeError bei kaputtem Input."""
+        """Gibt (when, cancel_when, on_response, actions) zurück; wirft json.JSONDecodeError bei kaputtem Input."""
         when = json.loads(request.when_json) if request.when_json else {}
         cancel_when = json.loads(request.cancel_when_json) if request.cancel_when_json else None
         on_response = json.loads(request.on_response_json) if request.on_response_json else []
-        return when, cancel_when, on_response
+        actions = json.loads(request.actions_json) if request.actions_json else []
+        return when, cancel_when, on_response, actions
 
     def CreateTrigger(self, request, _context):
         try:
-            when, cancel_when, on_response = self._parse_trigger_json(request)
+            when, cancel_when, on_response, actions = self._parse_trigger_json(request)
         except json.JSONDecodeError as e:
             return pb.StatusResponse(ok=False, message=f"invalid JSON: {e}")
         room = request.room or "all"
         cooldown = request.cooldown if request.cooldown > 0 else 3600
-        ok = self._create_trigger(request.id, when, cancel_when, on_response, request.say, request.ask,
+        ok = self._create_trigger(request.id, when, cancel_when, on_response, actions, request.say, request.ask,
                                    request.rephrase, room, cooldown, request.delay)
         return pb.StatusResponse(ok=ok, message="created" if ok else "id existiert bereits")
 
     def UpdateTrigger(self, request, _context):
         try:
-            when, cancel_when, on_response = self._parse_trigger_json(request)
+            when, cancel_when, on_response, actions = self._parse_trigger_json(request)
         except json.JSONDecodeError as e:
             return pb.StatusResponse(ok=False, message=f"invalid JSON: {e}")
         room = request.room or "all"
         cooldown = request.cooldown if request.cooldown > 0 else 3600
-        ok = self._update_trigger(request.id, when, cancel_when, on_response, request.say, request.ask,
+        ok = self._update_trigger(request.id, when, cancel_when, on_response, actions, request.say, request.ask,
                                    request.rephrase, room, cooldown, request.delay)
         return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
 
@@ -1417,6 +1418,7 @@ def _trigger_to_pb(t: dict) -> pb.Trigger:
         when_json=json.dumps(t.get("when") or {}),
         cancel_when_json=json.dumps(t["cancel_when"]) if t.get("cancel_when") else "",
         on_response_json=json.dumps(t.get("on_response") or []),
+        actions_json=json.dumps(t.get("actions") or []),
         say=t.get("say") or "",
         ask=t.get("ask") or "",
         rephrase=bool(t.get("rephrase")),

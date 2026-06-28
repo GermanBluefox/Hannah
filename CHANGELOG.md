@@ -5,6 +5,17 @@
 -->
 
 
+## 0.45.4
+### Hannah Core
+* Added: `trigger_engine.py`'s `when` akzeptiert jetzt ein Dict (Alt-Format, unverändert) oder eine Liste solcher Dicts (neu: ODER-verknüpft); `also` ("und") akzeptiert zusätzlich `{"op": "and"|"or", "conditions": [...]}` für explizite ODER-Verknüpfung (eine Plain-Liste bleibt wie bisher UND); neue `actions`-Liste (`say`/`set_state`, analog zu `Routine.actions`) ersetzt das bisherige Einzel-`say`, wenn gesetzt. Alt-Trigger ohne Migration weiter lauffähig. Backend-Teil von #101s No-Code-Editor für die WebUI (Teil 1 von 2 — WebUI-Seite folgt nach diesem Release) (Refs #101)
+* Fixed: `BaseModel.create()`/`update()` quoteten Spaltennamen nicht — brach bei reservierten SQL-Wörtern wie der `triggers`-Tabellenspalte `"when"` (`sqlite3.OperationalError: near "when": syntax error`). Nie aufgefallen, weil `CreateTrigger`/`UpdateTrigger` bisher ausschließlich mit gemocktem `TriggerEngine` getestet wurden — aufgefallen beim Schreiben echter Engine-Tests für #101 (Refs #102)
+
+### Hannah Proxy
+* Changed: Proto-Datei für #101s neues `actions_json`-Feld auf `Trigger`/`CreateTriggerRequest`/`UpdateTriggerRequest` aktualisiert (Refs #101)
+
+### Telegram
+* Changed: Proto-Datei für #101s neues `actions_json`-Feld auf `Trigger`/`CreateTriggerRequest`/`UpdateTriggerRequest` aktualisiert (Refs #101)
+
 ## 0.45.3
 ### Hannah Core
 * Fixed: `UnlinkAccount` RPC reported `ok=True, message="entfernt"` without actually removing the link — the handler only checked whether the user exists but never called `user.unlink_account(request.service)` (`LinkAccount` correctly calls its counterpart when linking). Found while building the `/users` page in `webui/` (#27) (Refs #99)

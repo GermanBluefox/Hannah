@@ -54,17 +54,23 @@ Frühere triggers.yaml-Form, zur Illustration der when/cancel_when/on_response-S
           - say: "Ich habe dich leider nicht verstanden."   # Fallback (keine condition)
 
 Schlüsselfelder im Überblick:
+  when                      — Dict (eine Bedingung) ODER Liste von Dicts (OR-verknüpft —
+                              irgendeine reicht). Jedes Dict wie gewohnt: state/value,
+                              above/below, time/days, plus optional also/unless.
   when.state / when.value   — State-Übergang auf exakten Wert
   when.above / when.below   — numerischer Schwellwert
-  when.also                 — zusätzliche Bedingung (State oder Liste davon)
-  when.unless               — Sperrbedingung (State oder Liste davon)
+  when.also                 — Dict (eine Bedingung) ODER Liste (UND, Alt-Verhalten) ODER
+                              {"op": "and"|"or", "conditions": [...]} (neu, explizit wählbar)
+  when.unless               — Sperrbedingung (State oder UND-Liste davon) — bleibt AND-only
   when.time / when.days     — Uhrzeit-Trigger (HH:MM, Wochentage: mon–sun)
   for                       — Wartezeit vor Ausführung (Timer Service, SQLite-persistent)
   cancel_when               — bricht den Delay-Timer ab wenn Bedingung eintritt
   cooldown                  — Mindestabstand zwischen zwei Auslösungen (Standard: 3600s)
-  say                       — TTS-Ansage
+  say                       — TTS-Ansage (Legacy; ignoriert wenn actions gesetzt ist)
+  actions                   — Liste von Aktionen, ersetzt say wenn nicht-leer:
+                              [{"say": "...", "room": "..."} | {"set_state": {"id", "value"}}]
   ask                       — Frage per TTS; Antwort wird per on_response ausgewertet
-  rephrase                  — LLM formuliert say/ask vor der Ausgabe um
+  rephrase                  — LLM formuliert say/ask/actions[].say vor der Ausgabe um
   on_response               — Regeln nach ask; condition: llm_match("Kategorie")
   set_state                 — ioBroker-State in on_response setzen: {id, value}
 
@@ -188,10 +194,10 @@ class TriggerEngine:
                         log.error(f"Reconcile: cancel_timer_fn fehlgeschlagen: {e}")
                 continue
 
-            when = trigger.get("when", {})
-            state_id = when.get("state")
-            if state_id and state_id in state_cache:
-                condition_met = self._state_condition_matches(when, state_cache[state_id])
+            state_conds = [c for c in self._as_or_list(trigger.get("when", {}))
+                           if c.get("state") and c["state"] in state_cache]
+            if state_conds:
+                condition_met = any(self._state_condition_matches(c, state_cache[c["state"]]) for c in state_conds)
             else:
                 condition_met = True  # State unbekannt → konservativ behalten
 
@@ -213,11 +219,11 @@ class TriggerEngine:
         ids: set[str] = set()
         with self._lock:
             for t in self._triggers:
-                when = t.get("when", {})
-                if "state" in when:
-                    ids.add(when["state"])
-                self._collect_condition_state_ids(when.get("unless"), ids)
-                self._collect_condition_state_ids(when.get("also"), ids)
+                for cond in self._as_or_list(t.get("when", {})):
+                    if "state" in cond:
+                        ids.add(cond["state"])
+                    self._collect_condition_state_ids(cond.get("unless"), ids)
+                    self._collect_condition_state_ids(cond.get("also"), ids)
                 cancel_when = t.get("cancel_when")
                 if isinstance(cancel_when, dict) and "state" in cancel_when:
                     ids.add(cancel_when["state"])
@@ -228,12 +234,13 @@ class TriggerEngine:
         rephrase, room, cooldown, delay) — fürs Admin-UI."""
         return [t.to_dict() for t in Trigger.select(self._db()).all()]
 
-    def create_trigger(self, id: str, when: dict, cancel_when: Optional[dict], on_response: list,
+    def create_trigger(self, id: str, when: dict, cancel_when: Optional[dict], on_response: list, actions: list,
                         say: str, ask: str, rephrase: bool, room: str, cooldown: int, delay: str) -> bool:
         """Legt einen neuen Trigger an. Gibt False zurück wenn die ID bereits existiert."""
         try:
             Trigger.create(self._db(), id=id, when=when, cancel_when=cancel_when, on_response=on_response,
-                            say=say, ask=ask, rephrase=rephrase, room=room, cooldown=cooldown, delay=delay)
+                            actions=actions, say=say, ask=ask, rephrase=rephrase, room=room, cooldown=cooldown,
+                            delay=delay)
         except sqlite3.IntegrityError:
             return False
         self._load()
@@ -241,12 +248,12 @@ class TriggerEngine:
             self._on_change()
         return True
 
-    def update_trigger(self, id: str, when: dict, cancel_when: Optional[dict], on_response: list,
+    def update_trigger(self, id: str, when: dict, cancel_when: Optional[dict], on_response: list, actions: list,
                         say: str, ask: str, rephrase: bool, room: str, cooldown: int, delay: str) -> bool:
         t = Trigger.get(self._db(), id=id)
         if not t:
             return False
-        t.update(when=when, cancel_when=cancel_when, on_response=on_response, say=say, ask=ask,
+        t.update(when=when, cancel_when=cancel_when, on_response=on_response, actions=actions, say=say, ask=ask,
                   rephrase=rephrase, room=room, cooldown=cooldown, delay=delay)
         self._load()
         if self._on_change:
@@ -268,8 +275,19 @@ class TriggerEngine:
         if isinstance(condition, list):
             for c in condition:
                 TriggerEngine._collect_condition_state_ids(c, ids)
-        elif isinstance(condition, dict) and "state" in condition:
-            ids.add(condition["state"])
+        elif isinstance(condition, dict):
+            if "conditions" in condition:
+                TriggerEngine._collect_condition_state_ids(condition["conditions"], ids)
+            elif "state" in condition:
+                ids.add(condition["state"])
+
+    @staticmethod
+    def _as_or_list(when: dict | list) -> list[dict]:
+        """Normalisiert 'when' auf eine Liste von Bedingungs-Dicts (OR-verknüpft).
+        Alt-Format (einzelnes Dict) wird zur Einer-Liste — Verhalten bleibt identisch."""
+        if isinstance(when, list):
+            return when
+        return [when] if when else []
 
     def on_state_update(self, state_id: str, raw: str) -> None:
         """Vom mqtt_handler aufgerufen wenn sich ein ioBroker-State ändert."""
@@ -290,18 +308,17 @@ class TriggerEngine:
                 if self._state_condition_matches(cancel_when, value):
                     self._cancel_delay(tid)
 
-            when = trigger.get("when", {})
-            if "state" not in when:
-                continue
-            if when["state"] != state_id:
-                continue
-            if not self._state_condition_matches(when, value):
-                continue
-            if not self._also_condition_matches(when.get("also")):
-                continue
-            if not self._unless_condition_matches(when.get("unless")):
-                continue
-            self._fire(trigger)
+            for cond in self._as_or_list(trigger.get("when", {})):
+                if cond.get("state") != state_id:
+                    continue
+                if not self._state_condition_matches(cond, value):
+                    continue
+                if not self._also_condition_matches(cond.get("also")):
+                    continue
+                if not self._unless_condition_matches(cond.get("unless")):
+                    continue
+                self._fire(trigger)
+                break
 
     # ------------------------------------------------------------------
     # Tick-Loop für Zeit-Trigger
@@ -325,15 +342,20 @@ class TriggerEngine:
             triggers = list(self._triggers)
 
         for trigger in triggers:
-            when = trigger.get("when", {})
-            if when.get("time") != now_str:
-                continue
-            allowed_days = when.get("days")
-            if allowed_days is not None:
-                allowed_wds = [self._DAYS_MAP.get(str(d).lower(), -1) for d in allowed_days]
-                if today_wd not in allowed_wds:
+            matched = False
+            for cond in self._as_or_list(trigger.get("when", {})):
+                if cond.get("time") != now_str:
                     continue
-            if not self._unless_condition_matches(when.get("unless")):
+                allowed_days = cond.get("days")
+                if allowed_days is not None:
+                    allowed_wds = [self._DAYS_MAP.get(str(d).lower(), -1) for d in allowed_days]
+                    if today_wd not in allowed_wds:
+                        continue
+                if not self._unless_condition_matches(cond.get("unless")):
+                    continue
+                matched = True
+                break
+            if not matched:
                 continue
             tid = trigger.get("id", "")
             with self._lock:
@@ -364,7 +386,7 @@ class TriggerEngine:
             self._execute_trigger_action(trigger, room)
 
     def _execute_trigger_action(self, trigger: dict, room: str) -> None:
-        """Führt die ask/say-Aktion eines Triggers aus (ohne Cooldown-Prüfung)."""
+        """Führt die ask/actions/say-Aktion eines Triggers aus (ohne Cooldown-Prüfung)."""
         tid = trigger.get("id", "?")
         ask = trigger.get("ask", "").strip()
         say = trigger.get("say", "").strip()
@@ -390,8 +412,15 @@ class TriggerEngine:
                 log.error(f"Trigger '{tid}': ask_fn fehlgeschlagen: {e}")
             return
 
+        actions = trigger.get("actions") or []
+        if actions:
+            rephrase = bool(trigger.get("rephrase"))
+            for action in actions:
+                self._execute_trigger_action_entry(action, tid, room, rephrase)
+            return
+
         if not say:
-            log.warning(f"Trigger '{tid}': weder 'say' noch 'ask' definiert.")
+            log.warning(f"Trigger '{tid}': weder 'say'/'actions' noch 'ask' definiert.")
             return
 
         text = say
@@ -406,6 +435,37 @@ class TriggerEngine:
             self._announce(room, text)
         except Exception as e:
             log.error(f"Trigger '{tid}': Announcement fehlgeschlagen: {e}")
+
+    def _execute_trigger_action_entry(self, action: dict, tid: str, room: str, rephrase: bool) -> None:
+        """Führt einen einzelnen Eintrag aus trigger['actions'] aus (say und/oder set_state)."""
+        say = (action.get("say") or "").strip()
+        if say:
+            action_room = action.get("room") or room
+            text = say
+            if rephrase and self._rephrase_fn:
+                try:
+                    text = self._rephrase_fn(say) or say
+                except Exception as e:
+                    log.warning(f"Trigger '{tid}': LLM-Rephrase fehlgeschlagen, nutze Original: {e}")
+            log.info(f"Trigger '{tid}' Aktion → [{action_room}] \"{text}\"")
+            try:
+                self._announce(action_room, text)
+            except Exception as e:
+                log.error(f"Trigger '{tid}': Announcement fehlgeschlagen: {e}")
+
+        set_state = action.get("set_state")
+        if set_state:
+            if not self._set_state_fn:
+                log.warning(f"Trigger '{tid}': set_state definiert aber set_state_fn fehlt — übersprungen.")
+            elif isinstance(set_state, dict):
+                state_id = (set_state.get("id") or "").strip()
+                value = set_state.get("value")
+                if state_id:
+                    log.info(f"Trigger '{tid}' set_state → {state_id} = {value!r}")
+                    try:
+                        self._set_state_fn(state_id, value)
+                    except Exception as e:
+                        log.error(f"Trigger '{tid}': set_state fehlgeschlagen: {e}")
 
     def _schedule_delay(self, trigger: dict, room: str) -> None:
         """Registriert einen Delay-Timer beim Timer Service statt sofortiger Ausführung."""
@@ -528,6 +588,10 @@ class TriggerEngine:
             return True
         if isinstance(also, list):
             return all(self._also_condition_matches(a) for a in also)
+        if "conditions" in also:
+            conditions = also.get("conditions") or []
+            combine = any if also.get("op") == "or" else all
+            return combine(self._also_condition_matches(c) for c in conditions)
         state_id = also.get("state")
         if not state_id:
             return True
@@ -568,6 +632,7 @@ class TriggerEngine:
                 d["say"] = d.get("say") or ""
                 d["ask"] = d.get("ask") or ""
                 d["on_response"] = d.get("on_response") or []
+                d["actions"] = d.get("actions") or []
                 triggers.append(d)
             with self._lock:
                 self._triggers = triggers

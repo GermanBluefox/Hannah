@@ -2565,15 +2565,16 @@ func (x *DeleteRoutineRequest) GetId() int32 {
 type Trigger struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                                 // client-assigned slug, e.g. "aussentuer_abend"
-	WhenJson       string                 `protobuf:"bytes,2,opt,name=when_json,json=whenJson,proto3" json:"when_json,omitempty"`                     // JSON condition object
+	WhenJson       string                 `protobuf:"bytes,2,opt,name=when_json,json=whenJson,proto3" json:"when_json,omitempty"`                     // JSON condition object or list (OR'd), see trigger_engine.py
 	CancelWhenJson string                 `protobuf:"bytes,3,opt,name=cancel_when_json,json=cancelWhenJson,proto3" json:"cancel_when_json,omitempty"` // JSON condition object, "" = none
 	OnResponseJson string                 `protobuf:"bytes,4,opt,name=on_response_json,json=onResponseJson,proto3" json:"on_response_json,omitempty"` // JSON list of response rules, "" = none
-	Say            string                 `protobuf:"bytes,5,opt,name=say,proto3" json:"say,omitempty"`
+	Say            string                 `protobuf:"bytes,5,opt,name=say,proto3" json:"say,omitempty"`                                               // legacy single announcement, "" once actions_json is used
 	Ask            string                 `protobuf:"bytes,6,opt,name=ask,proto3" json:"ask,omitempty"`
 	Rephrase       bool                   `protobuf:"varint,7,opt,name=rephrase,proto3" json:"rephrase,omitempty"`
 	Room           string                 `protobuf:"bytes,8,opt,name=room,proto3" json:"room,omitempty"`
 	Cooldown       int32                  `protobuf:"varint,9,opt,name=cooldown,proto3" json:"cooldown,omitempty"`
-	Delay          string                 `protobuf:"bytes,10,opt,name=delay,proto3" json:"delay,omitempty"` // duration string e.g. "5h"/"30m"/"90s", "" = none
+	Delay          string                 `protobuf:"bytes,10,opt,name=delay,proto3" json:"delay,omitempty"`                                // duration string e.g. "5h"/"30m"/"90s", "" = none
+	ActionsJson    string                 `protobuf:"bytes,11,opt,name=actions_json,json=actionsJson,proto3" json:"actions_json,omitempty"` // JSON list[{say,room} | {set_state:{id,value}}], "" = none (falls back to say)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2678,6 +2679,13 @@ func (x *Trigger) GetDelay() string {
 	return ""
 }
 
+func (x *Trigger) GetActionsJson() string {
+	if x != nil {
+		return x.ActionsJson
+	}
+	return ""
+}
+
 type GetTriggersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Triggers      []*Trigger             `protobuf:"bytes,1,rep,name=triggers,proto3" json:"triggers,omitempty"`
@@ -2734,6 +2742,7 @@ type CreateTriggerRequest struct {
 	Room           string                 `protobuf:"bytes,8,opt,name=room,proto3" json:"room,omitempty"`
 	Cooldown       int32                  `protobuf:"varint,9,opt,name=cooldown,proto3" json:"cooldown,omitempty"`
 	Delay          string                 `protobuf:"bytes,10,opt,name=delay,proto3" json:"delay,omitempty"`
+	ActionsJson    string                 `protobuf:"bytes,11,opt,name=actions_json,json=actionsJson,proto3" json:"actions_json,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2838,6 +2847,13 @@ func (x *CreateTriggerRequest) GetDelay() string {
 	return ""
 }
 
+func (x *CreateTriggerRequest) GetActionsJson() string {
+	if x != nil {
+		return x.ActionsJson
+	}
+	return ""
+}
+
 type UpdateTriggerRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -2850,6 +2866,7 @@ type UpdateTriggerRequest struct {
 	Room           string                 `protobuf:"bytes,8,opt,name=room,proto3" json:"room,omitempty"`
 	Cooldown       int32                  `protobuf:"varint,9,opt,name=cooldown,proto3" json:"cooldown,omitempty"`
 	Delay          string                 `protobuf:"bytes,10,opt,name=delay,proto3" json:"delay,omitempty"`
+	ActionsJson    string                 `protobuf:"bytes,11,opt,name=actions_json,json=actionsJson,proto3" json:"actions_json,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2950,6 +2967,13 @@ func (x *UpdateTriggerRequest) GetCooldown() int32 {
 func (x *UpdateTriggerRequest) GetDelay() string {
 	if x != nil {
 		return x.Delay
+	}
+	return ""
+}
+
+func (x *UpdateTriggerRequest) GetActionsJson() string {
+	if x != nil {
+		return x.ActionsJson
 	}
 	return ""
 }
@@ -7998,7 +8022,7 @@ const file_hannah_proto_rawDesc = "" +
 	"\factions_json\x18\x04 \x01(\tR\vactionsJson\x12\x14\n" +
 	"\x05reply\x18\x05 \x01(\tR\x05reply\"&\n" +
 	"\x14DeleteRoutineRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x05R\x02id\"\x90\x02\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\"\xb3\x02\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\twhen_json\x18\x02 \x01(\tR\bwhenJson\x12(\n" +
@@ -8010,9 +8034,10 @@ const file_hannah_proto_rawDesc = "" +
 	"\x04room\x18\b \x01(\tR\x04room\x12\x1a\n" +
 	"\bcooldown\x18\t \x01(\x05R\bcooldown\x12\x14\n" +
 	"\x05delay\x18\n" +
-	" \x01(\tR\x05delay\"B\n" +
+	" \x01(\tR\x05delay\x12!\n" +
+	"\factions_json\x18\v \x01(\tR\vactionsJson\"B\n" +
 	"\x13GetTriggersResponse\x12+\n" +
-	"\btriggers\x18\x01 \x03(\v2\x0f.hannah.TriggerR\btriggers\"\x9d\x02\n" +
+	"\btriggers\x18\x01 \x03(\v2\x0f.hannah.TriggerR\btriggers\"\xc0\x02\n" +
 	"\x14CreateTriggerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\twhen_json\x18\x02 \x01(\tR\bwhenJson\x12(\n" +
@@ -8024,7 +8049,8 @@ const file_hannah_proto_rawDesc = "" +
 	"\x04room\x18\b \x01(\tR\x04room\x12\x1a\n" +
 	"\bcooldown\x18\t \x01(\x05R\bcooldown\x12\x14\n" +
 	"\x05delay\x18\n" +
-	" \x01(\tR\x05delay\"\x9d\x02\n" +
+	" \x01(\tR\x05delay\x12!\n" +
+	"\factions_json\x18\v \x01(\tR\vactionsJson\"\xc0\x02\n" +
 	"\x14UpdateTriggerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\twhen_json\x18\x02 \x01(\tR\bwhenJson\x12(\n" +
@@ -8036,7 +8062,8 @@ const file_hannah_proto_rawDesc = "" +
 	"\x04room\x18\b \x01(\tR\x04room\x12\x1a\n" +
 	"\bcooldown\x18\t \x01(\x05R\bcooldown\x12\x14\n" +
 	"\x05delay\x18\n" +
-	" \x01(\tR\x05delay\"&\n" +
+	" \x01(\tR\x05delay\x12!\n" +
+	"\factions_json\x18\v \x01(\tR\vactionsJson\"&\n" +
 	"\x14DeleteTriggerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"K\n" +
 	"\bCategory\x12\x0e\n" +

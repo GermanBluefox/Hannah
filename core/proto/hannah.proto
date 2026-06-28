@@ -432,15 +432,16 @@ message DeleteRoutineRequest {
 
 message Trigger {
   string id               = 1;  // client-assigned slug, e.g. "aussentuer_abend"
-  string when_json        = 2;  // JSON condition object
+  string when_json        = 2;  // JSON condition object or list (OR'd), see trigger_engine.py
   string cancel_when_json = 3;  // JSON condition object, "" = none
   string on_response_json = 4;  // JSON list of response rules, "" = none
-  string say              = 5;
+  string say              = 5;  // legacy single announcement, "" once actions_json is used
   string ask              = 6;
   bool   rephrase         = 7;
   string room             = 8;
   int32  cooldown         = 9;
   string delay            = 10; // duration string e.g. "5h"/"30m"/"90s", "" = none
+  string actions_json     = 11; // JSON list[{say,room} | {set_state:{id,value}}], "" = none (falls back to say)
 }
 
 message GetTriggersResponse {
@@ -458,6 +459,7 @@ message CreateTriggerRequest {
   string room             = 8;
   int32  cooldown         = 9;
   string delay            = 10;
+  string actions_json     = 11;
 }
 
 message UpdateTriggerRequest {
@@ -471,6 +473,7 @@ message UpdateTriggerRequest {
   string room             = 8;
   int32  cooldown         = 9;
   string delay            = 10;
+  string actions_json     = 11;
 }
 
 message DeleteTriggerRequest {

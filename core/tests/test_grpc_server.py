@@ -503,6 +503,7 @@ class TestTriggerRpcs:
     def test_get_triggers(self):
         get_trigger_records = MagicMock(return_value=[{
             "id": "aussentuer_abend", "when": {"time": "23:00"}, "cancel_when": None, "on_response": [],
+            "actions": [{"say": "Denk an die Außentüren."}],
             "say": "Denk an die Außentüren.", "ask": "", "rephrase": 1, "room": "all", "cooldown": 3600, "delay": "",
         }])
         servicer = _make_server(get_trigger_records=get_trigger_records)
@@ -515,6 +516,7 @@ class TestTriggerRpcs:
         assert json.loads(t.when_json) == {"time": "23:00"}
         assert t.cancel_when_json == ""
         assert t.rephrase is True
+        assert json.loads(t.actions_json) == [{"say": "Denk an die Außentüren."}]
 
     def test_create_trigger_ok(self):
         create_trigger = MagicMock(return_value=True)
@@ -524,8 +526,37 @@ class TestTriggerRpcs:
             id="fenster_kalt", when_json=json.dumps({"state": "x", "value": True}), say="Fenster offen.",
         ), None)
 
-        create_trigger.assert_called_once_with("fenster_kalt", {"state": "x", "value": True}, None, [],
+        create_trigger.assert_called_once_with("fenster_kalt", {"state": "x", "value": True}, None, [], [],
                                                 "Fenster offen.", "", False, "all", 3600, "")
+        assert response.ok is True
+
+    def test_create_trigger_actions_round_trip(self):
+        create_trigger = MagicMock(return_value=True)
+        servicer = _make_server(create_trigger=create_trigger)
+        actions = [{"say": "Licht im Flur ist an.", "room": "all"},
+                   {"set_state": {"id": "javascript.0.virtualDevice.Licht.EG.Flur.on", "value": False}}]
+
+        response = servicer.CreateTrigger(CreateTriggerRequest(
+            id="flur_licht", when_json=json.dumps([{"state": "x", "value": True}, {"state": "y", "value": True}]),
+            actions_json=json.dumps(actions),
+        ), None)
+
+        create_trigger.assert_called_once_with(
+            "flur_licht", [{"state": "x", "value": True}, {"state": "y", "value": True}], None, [], actions,
+            "", "", False, "all", 3600, "")
+        assert response.ok is True
+
+    def test_update_trigger_actions_round_trip(self):
+        update_trigger = MagicMock(return_value=True)
+        servicer = _make_server(update_trigger=update_trigger)
+        actions = [{"say": "Aktualisiert."}]
+
+        response = servicer.UpdateTrigger(UpdateTriggerRequest(
+            id="flur_licht", when_json="{}", actions_json=json.dumps(actions),
+        ), None)
+
+        update_trigger.assert_called_once_with("flur_licht", {}, None, [], actions,
+                                                "", "", False, "all", 3600, "")
         assert response.ok is True
 
     def test_create_trigger_duplicate_id(self):

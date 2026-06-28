@@ -107,7 +107,7 @@ class BaseModel:
         if not columns:
             raise ValueError(f"Keine gültigen Felder für {cls.__name__} angegeben.")
 
-        column_names = ", ".join(columns)
+        column_names = ", ".join(f'"{c}"' for c in columns)
         placeholders = ", ".join(["?"] * len(columns))
         sql = f"INSERT INTO {cls.__table__} ({column_names}) VALUES ({placeholders})"
         import logging
@@ -145,7 +145,7 @@ class BaseModel:
 
         for key, value in kwargs.items():
             if key in self.__slots__ and key not in pk_cols and not key.startswith('_'):
-                updates.append(f"{key} = ?")
+                updates.append(f'"{key}" = ?')
                 params.append(json.dumps(value) if isinstance(value, (list, dict)) else value)
                 setattr(self, key, value)
 

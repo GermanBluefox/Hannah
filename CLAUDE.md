@@ -32,7 +32,6 @@ hannah/                          ← Mono-Repo
 │   │   ├── trigger_engine.py    ← Proaktive Trigger
 │   │   ├── routines.py          ← Geplante Routinen (SQLite, hannah.db)
 │   │   ├── room_manager.py      ← Räume/Gruppen/Satellit-Zuordnung (SQLite)
-│   │   ├── webui.py             ← Flask-WebUI (Räume/Gruppen-Verwaltung); soll laut #27 in eigene Komponente wandern
 │   │   ├── timers.py            ← Timer + Wecker (AlarmManager)
 │   │   ├── ble_location.py      ← BLE-Indoor-Lokalisierung
 │   │   ├── tool_agent.py        ← LLM-Tool-Calling-Agent (ioBroker-Aktionen)
@@ -56,11 +55,11 @@ hannah/                          ← Mono-Repo
 │   │   ├── hannah_sensors/      ← BME680 + BSEC2 (IAQ, CO₂eq, VOCeq), I2C
 │   │   ├── hannah_wakeword/     ← microWakeWord (TFLite Micro)
 │   │   └── microfrontend/       ← Audio-Frontend (Spektrogramm für WW)
-│   └── hardware/
-│       ├── Phase2/              ← KiCad PCB Rev. 4 (aktuell verbaut)
-│       └── Enclosure/           ← FreeCAD Gehäuse
-│           ├── Enclosure.FCStd
-│           └── Enclosure-Deckel.step
+│── hardware/
+│   ├── Phase2/              ← KiCad PCB Rev. 4 (aktuell verbaut)
+│   └── Enclosure/           ← FreeCAD Gehäuse
+│       ├── Enclosure.FCStd
+│       └── Enclosure-Deckel.step
 │
 ├── satellite-pi/                ← Raspberry Pi Satellit (Python, Legacy)
 ├── telegram/                    ← Telegram-Bot Microservice (Python)

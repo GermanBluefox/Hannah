@@ -14,7 +14,8 @@ import (
 
 // PlayAudioFunc is called when Hannah pushes a PlayAudioCommand via the proxy stream.
 // isLast is true on the final chunk of a TTS response — the proxy should send tts_end after it.
-// Calls are serialised (no concurrent invocations for the same stream), so chunks arrive in order.
+// Calls for the same device are serialised and arrive in order; calls for different
+// devices may run concurrently (see playAudioDispatcher).
 type PlayAudioFunc func(deviceID string, pcm []byte, sampleRate int32, isLast bool)
 
 // Client is a gRPC client to Hannah Core.
@@ -119,6 +120,11 @@ func (c *Client) runProxyOnce(ctx context.Context, proxyID, udpHost string, udpP
 	}
 	slog.Info("RegisterProxy stream opened", "proxy_id", proxyID, "udp_host", udpHost, "udp_port", udpPort)
 
+	// Dispatches PlayAudioCommand chunks to one worker goroutine per device,
+	// so a slow/playing satellite never delays chunks for other satellites.
+	dispatcher := newPlayAudioDispatcher(onPlayAudio)
+	defer dispatcher.stop()
+
 	// Receive loop
 	recvErr := make(chan error, 1)
 	go func() {
@@ -143,8 +149,7 @@ func (c *Client) runProxyOnce(ctx context.Context, proxyID, udpHost string, udpP
 					"sample_rate", v.PlayAudio.SampleRate,
 					"is_last", v.PlayAudio.IsLast)
 				if onPlayAudio != nil {
-					// Synchronous — preserves chunk order within the stream.
-					onPlayAudio(v.PlayAudio.DeviceId, v.PlayAudio.AudioPcm, v.PlayAudio.SampleRate, v.PlayAudio.IsLast)
+					dispatcher.dispatch(v.PlayAudio.DeviceId, v.PlayAudio.AudioPcm, v.PlayAudio.SampleRate, v.PlayAudio.IsLast)
 				}
 			}
 		}

@@ -5,6 +5,13 @@
 -->
 
 
+## 0.47.0
+### WebUI
+* Removed: `webui/` extracted into its own repository (`gessinger/voice/hannah-webui`) — no longer part of this monorepo. `test:webui`, `upload:webui` and the container-build jobs added in #105 (`build-container:webui:*`, `merge-manifests:webui`) are gone from this pipeline; equivalents now live in the new repo's own `.gitlab-ci.yml`. Fresh start there, no history carried over — see that repo's `CHANGELOG.md` for everything from here on (Refs #106)
+
+### Hannah Proxy
+* Fixed: Announcements an mehrere Satelliten liefen über denselben Proxy nacheinander statt gleichzeitig ab — `runProxyOnce`s einzige Receive-Goroutine rief `onPlayAudio` synchron auf, das wiederum `udp.Server.SendTTSChunk`s `time.Sleep`-Pacing blockierte, solange die Announcement des vorherigen Satelliten noch lief; `stream.Recv()` für andere Satelliten lief währenddessen nicht weiter. Neuer `playAudioDispatcher` (`internal/hannah/dispatcher.go`) verteilt `PlayAudioCommand`-Chunks pro `device_id` auf je eine eigene gepufferte Queue + Worker-Goroutine — Reihenfolge bleibt pro Gerät strikt FIFO, verschiedene Geräte spielen jetzt parallel (Refs #49)
+
 ## 0.46.1
 ### WebUI
 * Fixed: random logout on almost every click — `create_app()` set `app.secret_key = os.urandom(24)`, generating a new key on every call. Gunicorn runs without `--preload`, so each of its 2 worker processes imports `wsgi.py` and calls `create_app()` independently, ending up with a different secret key per worker; whichever worker didn't sign a given session cookie rejects it, dropping the user back to `/login`. `secret_key` is now read from `config.yaml` (or `HANNAH_WEBUI_SECRET_KEY`), stable across workers and restarts; falls back to a random key with a warning log if unset (Refs #104)

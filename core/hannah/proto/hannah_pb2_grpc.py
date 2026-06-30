@@ -147,6 +147,11 @@ class HannahServiceStub:
                 request_serializer=hannah__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.SetSatelliteOwner = channel.unary_unary(
+                '/hannah.HannahService/SetSatelliteOwner',
+                request_serializer=hannah__pb2.SetSatelliteOwnerRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.GetRooms = channel.unary_unary(
                 '/hannah.HannahService/GetRooms',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
@@ -465,6 +470,13 @@ class HannahServiceServicer:
 
     def SetSatelliteDisplayName(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetSatelliteOwner(self, request, context):
+        """Assign a satellite to a Person (User), independent of its room. #31
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -815,6 +827,11 @@ def add_HannahServiceServicer_to_server(servicer, server):
             'SetSatelliteDisplayName': grpc.unary_unary_rpc_method_handler(
                     servicer.SetSatelliteDisplayName,
                     request_deserializer=hannah__pb2.SetSatelliteDisplayNameRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'SetSatelliteOwner': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSatelliteOwner,
+                    request_deserializer=hannah__pb2.SetSatelliteOwnerRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
             'GetRooms': grpc.unary_unary_rpc_method_handler(
@@ -1540,6 +1557,33 @@ class HannahService:
             target,
             '/hannah.HannahService/SetSatelliteDisplayName',
             hannah__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetSatelliteOwner(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/SetSatelliteOwner',
+            hannah__pb2.SetSatelliteOwnerRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
             options,
             channel_credentials,

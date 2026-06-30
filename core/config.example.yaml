@@ -66,8 +66,7 @@ user_registry:
   db_path: "hannah_users.db"   # SQLite-Datei (relativ zum Arbeitsverzeichnis)
   sync_interval: 60            # Sekunden zwischen ioBroker-Abfragen
 
-room_manager:
-  db_path: "rooms.db"          # SQLite-Datei für Räume, Gruppen und Satellit-Zuweisung
+satellite_manager:
   seed_ttl_days: 7              # Provisionierte, aber nie gepairte Satelliten-Seeds nach X Tagen löschen
 
 residents:

@@ -44,6 +44,7 @@ from hannah.llm import load as load_llm, prepare_prompt
 from hannah.tool_agent import ToolAgent
 from hannah.memory import LongTermMemory
 from hannah.room_manager import RoomManager
+from hannah.satellite_manager import SatelliteManager
 from hannah.settings_manager import SettingsManager
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
@@ -132,8 +133,10 @@ def main():
     if not iobroker.rooms:
         log.warning("Keine Räume aus ioBroker geladen — NLU arbeitet ohne Raum-Erkennung.")
 
-    # Room Manager (Räume, Gruppen, Satellit-Zuweisung) — teilt sich hannah.db mit der User-Registry
-    room_manager = RoomManager(get_db, cfg.get("room_manager", {}))
+    # Room Manager (Räume, Gruppen) + Satellite Manager (Provisioning, Raum-/Owner-Zuweisung) —
+    # teilen sich hannah.db mit der User-Registry
+    room_manager = RoomManager(get_db)
+    satellite_manager = SatelliteManager(get_db, cfg.get("satellite_manager", {}))
 
     # STT + NLU + TTS
     stt = STT(cfg.get("stt", {}))
@@ -253,11 +256,11 @@ def main():
         conv_ctx.fill_intent(device, intent)
         conv_ctx.inherit_action(device, intent)
 
-        # Raum-Fallback: zugewiesener Raum aus RoomManager → nichts
+        # Raum-Fallback: zugewiesener Raum aus SatelliteManager → nichts
         # Bei Query-Intents nur anwenden wenn der Raum explizit im Text genannt wurde —
         # ohne Raum soll die globale Abfrage greifen.
         if intent.room is None and intent.name not in ("Query", "CarQuery"):
-            room = room_manager.get_satellite_room(device)
+            room = satellite_manager.get_satellite_room(device)
             if room:
                 intent.room    = room
                 intent.room_id = room.lower()
@@ -529,9 +532,28 @@ def main():
             udp_server.send_tts(target, pcm, sample_rate=rate)
             log.info(f"{label}Announcement → {target} (via UDP)")
 
-    def _resolve_targets(device: str, label: str = "") -> list[str]:
-        """Löst device/room/group/'all' auf eine Liste von Ziel-Geräten auf."""
+    def _resolve_targets(device: str = "", label: str = "", *, room_id: str = "", user_id: int = 0) -> list[str]:
+        """Löst device/room/group/'all' auf eine Liste von Ziel-Geräten auf.
+
+        room_id/user_id (#31) sind der neue, eindeutige Pfad über die DB-Zuweisung
+        (Raum und/oder Person, AND-Verknüpfung wenn beide gesetzt) — wenn gesetzt,
+        hat das Vorrang vor der alten device-String-Auflösung (Device-ID/Raumname/
+        Gruppenname/"all").
+        """
         all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
+
+        if room_id or user_id:
+            if user_id:
+                candidates = {s["device_id"] for s in satellite_manager.get_user_satellites(user_id)}
+                if room_id:
+                    candidates &= set(satellite_manager.get_room_satellite_ids(room_id))
+            else:
+                candidates = set(satellite_manager.get_room_satellite_ids(room_id))
+            targets = [d for d in candidates if d in all_devices]
+            if not targets:
+                log.warning(f"{label}kein verbundener Satellit für room_id={room_id!r} user_id={user_id} — ignoriert.")
+            return targets
+
         if device == "all":
             return list(all_devices.keys())
         if device in all_devices:
@@ -539,7 +561,7 @@ def main():
         room_lower = device.lower()
 
         # DB-Raum-Overrides laden (eine Query für alle Satelliten)
-        db_room_map = room_manager.get_satellite_room_map()
+        db_room_map = satellite_manager.get_satellite_room_map()
 
         def _satellite_room(d: str, self_reported: str) -> str:
             return db_room_map.get(d, self_reported).lower()
@@ -619,8 +641,8 @@ def main():
 
     # ── Announcements ─────────────────────────────────────────────────────────
 
-    def process_announcement(device: str, text: str, *, ssml: bool = False):
-        """Synthetisiert Text/SSML per TTS und sendet ihn an einen oder alle Satelliten."""
+    def process_announcement(device: str, text: str, *, ssml: bool = False, room_id: str = "", user_id: int = 0):
+        """Synthetisiert Text/SSML per TTS und sendet ihn an Raum/Person/Gerät/alle Satelliten."""
         if not tts.enabled:
             log.warning("Announcement ignoriert — TTS ist nicht konfiguriert.")
             return
@@ -628,7 +650,7 @@ def main():
         if not result:
             return
         pcm, rate = _resample_to_16k(*result)
-        targets = _resolve_targets(device)
+        targets = _resolve_targets(device, room_id=room_id, user_id=user_id)
         for target in targets:
             if _device_dnd.get(target):
                 log.info(f"Announcement → {target} unterdrückt (DND aktiv).")
@@ -710,7 +732,7 @@ def main():
         current = set(satellite_map.keys())
         ble_macs = ble_engine.get_all_macs()
         for device_id in current - _known_satellites:
-            display_name = room_manager.resolve_satellite_name(device_id) or ""
+            display_name = satellite_manager.resolve_satellite_name(device_id) or ""
             grpc_servicer.agent_satellite_update(device_id, satellite_map[device_id], "", True, display_name=display_name)
             if not grpc_servicer.is_captured(device_id):
                 # Stelle sicher, dass kein retained Capture-Modus aus einer
@@ -1176,19 +1198,20 @@ def main():
         on_set_capture=_on_set_capture,
         on_trigger_plink=_on_trigger_plink,
         on_agent_ask_resident=_on_agent_ask_resident,
-        provision_satellite=room_manager.provision_satellite,
-        pair_satellite=room_manager.pair_satellite,
-        resolve_satellite_room=room_manager.get_satellite_room,
-        upsert_satellite=room_manager.upsert_satellite,
+        provision_satellite=satellite_manager.provision_satellite,
+        pair_satellite=satellite_manager.pair_satellite,
+        resolve_satellite_room=satellite_manager.get_satellite_room,
+        upsert_satellite=satellite_manager.upsert_satellite,
         get_rooms=room_manager.get_rooms,
         get_groups=room_manager.get_groups,
         create_group=room_manager.create_group,
         update_group=room_manager.update_group,
         delete_group=room_manager.delete_group,
         set_group_rooms=room_manager.set_group_rooms,
-        get_db_satellites=room_manager.get_satellites,
-        set_satellite_room=room_manager.set_satellite_room,
-        set_satellite_display_name=room_manager.set_satellite_display_name,
+        get_db_satellites=satellite_manager.get_satellites,
+        set_satellite_room=satellite_manager.set_satellite_room,
+        set_satellite_display_name=satellite_manager.set_satellite_display_name,
+        set_satellite_owner=satellite_manager.set_satellite_owner,
         get_routine_records=routine_manager.get_routine_records,
         create_routine=routine_manager.create_routine,
         update_routine=routine_manager.update_routine,
@@ -1447,8 +1470,8 @@ def main():
         cfg.get("udp", {}),
         process_audio_udp,
         on_satellite_change=_on_satellite_change,
-        resolve_satellite_room=room_manager.get_satellite_room,
-        upsert_satellite=room_manager.upsert_satellite,
+        resolve_satellite_room=satellite_manager.get_satellite_room,
+        upsert_satellite=satellite_manager.upsert_satellite,
     )
     udp_server.start()
 

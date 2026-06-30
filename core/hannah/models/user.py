@@ -79,3 +79,11 @@ class User(BaseModel, EventEmitterMixin):
         if la:
             la.delete()
             self.clear_linked_accounts_cache()
+
+    @property
+    def satellites(self):
+        """Gibt alle Satelliten zurück, die diesem User als Owner zugeordnet sind."""
+        from hannah.models.satellite import Satellite
+        if not self._db or not self.id:
+            return []
+        return Satellite.select(self._db).where(owner_user_id=self.id).all()

@@ -5,6 +5,12 @@
 -->
 
 
+## 0.48.0
+### Hannah Core
+* Changed: `RoomManager` split into `RoomManager` (rooms/groups only) and new `SatelliteManager` (provisioning, pairing, room/owner assignment, seed cleanup) — satellites no longer share a manager class with rooms/groups. `config.yaml`'s `room_manager.seed_ttl_days` moved to `satellite_manager.seed_ttl_days` (Refs #108)
+* Added: satellites can now be assigned to a `User` ("Person") in addition to a room — new `satellites.owner_user_id` column, `Satellite.owner`/`Satellite.set_owner()` and `User.satellites` model properties. Groundwork for personalized announce routing — no gRPC/UI exposure yet (Refs #31)
+* Added: `Announce` RPC accepts `room_id`/`user_id` in addition to the legacy `device` field — targets all satellites in a room, all satellites owned by a Person, or (if both set) only the satellite that's both, via new `SatelliteManager.get_room_satellite_ids()`/`get_user_satellites()`. New `SetSatelliteOwner` RPC and `Satellite.owner_user_id`/`owner_display_name` fields expose the #31 data model over gRPC — no WebUI exposure yet (WebUI is now a separate repository) (Refs #31)
+
 ## 0.47.0
 ### WebUI
 * Removed: `webui/` extracted into its own repository (`gessinger/voice/hannah-webui`) — no longer part of this monorepo. `test:webui`, `upload:webui` and the container-build jobs added in #105 (`build-container:webui:*`, `merge-manifests:webui`) are gone from this pipeline; equivalents now live in the new repo's own `.gitlab-ci.yml`. Fresh start there, no history carried over — see that repo's `CHANGELOG.md` for everything from here on (Refs #106)

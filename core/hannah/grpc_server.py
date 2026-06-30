@@ -63,7 +63,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         user_manager: UserManager,
         handle_text: Callable[[str], tuple[str, str]],
         handle_voice: Callable[[bytes], tuple[str, str, str, bytes]],
-        announce: Callable[[str, str], None],
+        announce: Callable[..., None],  # (device, text, *, room_id="", user_id=0) — siehe AnnounceRequest #31
         notificate: Callable[[str, str], None],
         get_satellites: Callable[[], dict],
         get_car_state: Callable[[], Optional[object]],      # → CarState | None (erster Tracker)
@@ -105,6 +105,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         get_db_satellites: Optional[Callable[[], list]] = None,                  # () → [{device_id, display_name, room_id, last_seen, room_display_name}]
         set_satellite_room: Optional[Callable[[str, Optional[str]], bool]] = None,         # (device_id, room_id) → bool
         set_satellite_display_name: Optional[Callable[[str, str], bool]] = None,          # (device_id, display_name) → bool
+        set_satellite_owner: Optional[Callable[[str, Optional[int]], bool]] = None,        # (device_id, user_id) → bool, #31
         get_routine_records: Optional[Callable[[], list]] = None,                # () → [{id, name, triggers, actions, reply}]
         create_routine: Optional[Callable[..., Optional[dict]]] = None,          # (name, triggers, actions, reply) → dict | None
         update_routine: Optional[Callable[..., bool]] = None,                    # (id, name, triggers, actions, reply) → bool
@@ -165,6 +166,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._get_db_satellites        = get_db_satellites or (lambda: [])
         self._set_satellite_room       = set_satellite_room or (lambda *_: False)
         self._set_satellite_display_name = set_satellite_display_name or (lambda *_: False)
+        self._set_satellite_owner      = set_satellite_owner or (lambda *_: False)
         self._get_routine_records       = get_routine_records or (lambda: [])
         self._create_routine            = create_routine or (lambda *_: None)
         self._update_routine            = update_routine or (lambda *_: False)
@@ -431,7 +433,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def Announce(self, request, _context):
         try:
-            self._announce(request.device, request.text)
+            self._announce(request.device, request.text, room_id=request.room_id, user_id=request.user_id)
             return pb.StatusResponse(ok=True, message="gesendet")
         except Exception as e:
             log.error(f"[grpc] Announce fehlgeschlagen: {e}")
@@ -473,6 +475,8 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 last_seen=sat.get("last_seen") or "",
                 connected=info is not None,
                 room_mismatch=info is not None and info.get("room") != room_id,
+                owner_user_id=sat.get("owner_user_id") or 0,
+                owner_display_name=sat.get("owner_display_name") or "",
             ))
         for device_id, info in connected.items():
             if device_id not in seen:
@@ -495,6 +499,11 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             return pb.StatusResponse(ok=False, message="display_name required")
         self._upsert_satellite(request.device_id)
         ok = self._set_satellite_display_name(request.device_id, request.display_name)
+        return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
+
+    def SetSatelliteOwner(self, request, _context):
+        self._upsert_satellite(request.device_id)
+        ok = self._set_satellite_owner(request.device_id, request.user_id or None)
         return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
 
     # ------------------------------------------------------------------

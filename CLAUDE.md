@@ -348,10 +348,13 @@ Gilt für das Hannah-Mono-Repo **und** das `iobroker.hannah`-Submodule (eigener 
 4. **Commits nur auf explizite Anfrage**, nie unaufgefordert.
 5. **Pushen, wenn:** die Arbeit abgeschlossen ist, ODER eine Pause eingelegt wird, ODER Arbeit dezentral gesichert werden soll (auch zwischendurch, auf Zuruf) — Standard-Erwartung, kein Einzelfall.
 6. **Landung auf master ausschließlich über Merge Request (Hannah-Repo) bzw. Pull Request (`iobroker.hannah`-Submodule).** Nie direkt mergen.
-7. **Für jede funktionale Änderung muss ein Work Item (GitLab Issue, project 319) existieren.** Anlegen ist Aufgabe von Claude, proaktiv, bevor mit der Umsetzung begonnen wird — nicht erst hinterher.
-8. **Commit Messages bei funktionalen Änderungen referenzieren das Work Item** mit `Refs #ID`.
-9. **MR-Beschreibungen schließen das Work Item** mit `Closes #ID`.
-10. **Submodule-Pointer im Hannah-Repo (`iobroker.hannah`, `audiolib`) zeigen immer auf einen Release-Tag**, nie auf einen Branch-/Feature-Commit. Ablauf: PR im Submodule mergen → Release schneiden (Tag entsteht) → erst dann den Pointer im Hannah-Repo auf diesen Tag bumpen (eigener, fokussierter Commit, getrennt von der eigentlichen Feature-Arbeit). **Dabei immer auch das jeweilige `branch`-Feld in `.gitmodules` auf denselben Tag aktualisieren** — sonst hält Renovate den Pointer für veraltet (vergleicht gegen `.gitmodules`) und versucht ihn auf den alten Tag zurückzudrehen.
+7. **Für jede funktionale Änderung muss ein Work Item existieren.** Anlegen ist Aufgabe von Claude, proaktiv, bevor mit der Umsetzung begonnen wird — nicht erst hinterher. Tracker richtet sich danach, was geändert wird:
+   - Änderungen am Mono-Repo (Core, Proto, Firmware, ...) — auch wenn sie nebenbei den Adapter mit anfassen: **GitLab Issue, project 319.**
+   - Reine `iobroker.hannah`-Adapter-Änderungen (nichts im Mono-Repo angefasst): **GitHub Issue im Adapter-Repo** (`NurPech/ioBroker.hannah`), nicht GitLab — sonst im Adapter-Repo nicht nachvollziehbar.
+8. **Commit Messages bei funktionalen Änderungen referenzieren das Work Item** mit `Refs #ID` (im jeweils zuständigen Tracker aus Punkt 7).
+9. **MR/PR-Beschreibungen schließen das Work Item** mit `Closes #ID`.
+10. **Adapter-Changelog (`README.md` in `iobroker.hannah`) enthält keine Issue-/Ticket-Referenzen**, egal welcher Tracker — das sind öffentliche, nutzerseitige Release Notes (npm/ioBroker-Nutzer ohne Zugriff auf interne Tracker), keine internen Entwickler-Notizen.
+11. **Submodule-Pointer im Hannah-Repo (`iobroker.hannah`, `audiolib`) zeigen immer auf einen Release-Tag**, nie auf einen Branch-/Feature-Commit. Ablauf: PR im Submodule mergen → Release schneiden (Tag entsteht) → erst dann den Pointer im Hannah-Repo auf diesen Tag bumpen (eigener, fokussierter Commit, getrennt von der eigentlichen Feature-Arbeit). **Dabei immer auch das jeweilige `branch`-Feld in `.gitmodules` auf denselben Tag aktualisieren** — sonst hält Renovate den Pointer für veraltet (vergleicht gegen `.gitmodules`) und versucht ihn auf den alten Tag zurückzudrehen.
 
 Punkte 7–9 gelten für funktionale Änderungen (Features, Bugfixes) — nicht für reine Doku-/Chore-Änderungen wie diesen Abschnitt selbst.
 

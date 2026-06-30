@@ -64,11 +64,13 @@ CREATE TABLE IF NOT EXISTS "satellites" (
 	"seed"	TEXT,
 	"display_name"	TEXT,
 	"room_id"	TEXT,
+    "owner_user_id"	INTEGER,
 	"last_seen"	TEXT,
 	"paired_at"	TEXT,
 	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
 	PRIMARY KEY("device_id"),
-	FOREIGN KEY("room_id") REFERENCES "rooms"("room_id")
+	FOREIGN KEY("room_id") REFERENCES "rooms"("room_id") ON DELETE SET NULL,
+    FOREIGN KEY("owner_user_id") REFERENCES "users"("id") ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS "triggers" (
@@ -146,6 +148,10 @@ def init_db():
     # that's already there, so new columns need an explicit ALTER TABLE here.
     if "actions" not in _col_names(db, "triggers"):
         db.execute('ALTER TABLE "triggers" ADD COLUMN "actions" TEXT')
+        db.commit()
+
+    if "owner_user_id" not in _col_names(db, "satellites"):
+        db.execute('ALTER TABLE "satellites" ADD COLUMN "owner_user_id" INTEGER REFERENCES "users"("id")')
         db.commit()
 
     # --- First-run: create admin account if no users exist ---

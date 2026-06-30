@@ -10,9 +10,9 @@ from hannah.user_manager import UserManager
 from hannah.models.user import User
 from hannah.residents.Roomie import Roomie
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, SetSatelliteOwnerRequest, AnnounceRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
 
-def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None,get_residents=None):
+def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,set_satellite_owner=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None,get_residents=None):
     return HannahServicer(
         user_manager=user_manager or MagicMock(),
         handle_text=handle_text or MagicMock(),
@@ -36,6 +36,7 @@ def _make_server(user_manager=None,handle_text=None,handle_voice=None,get_satell
         get_db_satellites=get_db_satellites,
         set_satellite_room=set_satellite_room,
         set_satellite_display_name=set_satellite_display_name,
+        set_satellite_owner=set_satellite_owner,
         get_routine_records=get_routine_records,
         create_routine=create_routine,
         update_routine=update_routine,
@@ -205,7 +206,7 @@ class TestSatelliteRpcs:
     def test_get_satellites_connected_no_mismatch(self):
         servicer = _make_server(
             get_satellites=lambda: {"wz-sat": {"room": "wohnzimmer", "addr": "10.0.0.5:7775"}},
-            get_db_satellites=lambda: [{"device_id": "wz-sat", "display_name": "Wohnzimmer-Sat", "room_id": "wohnzimmer", "room_display_name": "Wohnzimmer", "last_seen": "2026-06-27 10:00:00"}],
+            get_db_satellites=lambda: [{"device_id": "wz-sat", "display_name": "Wohnzimmer-Sat", "room_id": "wohnzimmer", "room_display_name": "Wohnzimmer", "last_seen": "2026-06-27 10:00:00", "owner_user_id": 3, "owner_display_name": "Leonie"}],
         )
 
         response = servicer.GetSatellites(None, None)
@@ -221,6 +222,20 @@ class TestSatelliteRpcs:
         assert sat.room_display_name == "Wohnzimmer"
         assert sat.last_seen == "2026-06-27 10:00:00"
         assert sat.room_mismatch is False
+        assert sat.owner_user_id == 3
+        assert sat.owner_display_name == "Leonie"
+
+    def test_get_satellites_no_owner_defaults(self):
+        servicer = _make_server(
+            get_satellites=lambda: {},
+            get_db_satellites=lambda: [{"device_id": "wz-sat", "display_name": "", "room_id": "", "room_display_name": "", "last_seen": "", "owner_user_id": None, "owner_display_name": None}],
+        )
+
+        response = servicer.GetSatellites(None, None)
+
+        sat = response.satellites[0]
+        assert sat.owner_user_id == 0
+        assert sat.owner_display_name == ""
 
     def test_get_satellites_connected_with_mismatch(self):
         servicer = _make_server(
@@ -307,6 +322,59 @@ class TestSatelliteRpcs:
         response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name=""), None)
 
         set_satellite_display_name.assert_not_called()
+
+    def test_set_satellite_owner_ok(self):
+        set_satellite_owner = MagicMock(return_value=True)
+        upsert = MagicMock()
+        servicer = _make_server(set_satellite_owner=set_satellite_owner, upsert_satellite=upsert)
+
+        response = servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="wz-sat", user_id=3), None)
+
+        upsert.assert_called_once_with("wz-sat")
+        set_satellite_owner.assert_called_once_with("wz-sat", 3)
+        assert response.ok is True
+
+    def test_set_satellite_owner_unassign(self):
+        set_satellite_owner = MagicMock(return_value=True)
+        servicer = _make_server(set_satellite_owner=set_satellite_owner)
+
+        servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="wz-sat", user_id=0), None)
+
+        set_satellite_owner.assert_called_once_with("wz-sat", None)
+
+    def test_set_satellite_owner_not_found(self):
+        servicer = _make_server(set_satellite_owner=MagicMock(return_value=False))
+
+        response = servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="unknown", user_id=3), None)
+
+        assert response.ok is False
+
+
+class TestAnnounceRpc:
+    def test_announce_forwards_device_and_text(self):
+        announce = MagicMock()
+        servicer = _make_server(announce=announce)
+
+        response = servicer.Announce(AnnounceRequest(device="wz-sat", text="Hallo"), None)
+
+        announce.assert_called_once_with("wz-sat", "Hallo", room_id="", user_id=0)
+        assert response.ok is True
+
+    def test_announce_forwards_room_id_and_user_id(self):
+        announce = MagicMock()
+        servicer = _make_server(announce=announce)
+
+        servicer.Announce(AnnounceRequest(text="Hallo", room_id="wohnzimmer", user_id=3), None)
+
+        announce.assert_called_once_with("", "Hallo", room_id="wohnzimmer", user_id=3)
+
+    def test_announce_failure_returns_not_ok(self):
+        announce = MagicMock(side_effect=RuntimeError("boom"))
+        servicer = _make_server(announce=announce)
+
+        response = servicer.Announce(AnnounceRequest(device="wz-sat", text="Hallo"), None)
+
+        assert response.ok is False
         assert response.ok is False
 
 class TestLoginRpc:

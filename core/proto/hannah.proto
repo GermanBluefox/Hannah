@@ -60,6 +60,8 @@ service HannahService {
   // --- Satellites (Admin-UI, #27 Phase 2) ---
   rpc SetSatelliteRoom        (SetSatelliteRoomRequest)        returns (StatusResponse);
   rpc SetSatelliteDisplayName (SetSatelliteDisplayNameRequest) returns (StatusResponse);
+  // Assign a satellite to a Person (User), independent of its room. #31
+  rpc SetSatelliteOwner       (SetSatelliteOwnerRequest)       returns (StatusResponse);
 
   // --- Rooms/Groups (Admin-UI, #27 Phase 1) ---
   rpc GetRooms      (Empty)                returns (GetRoomsResponse);
@@ -312,8 +314,12 @@ message SubmitVoiceResponse {
 }
 
 message AnnounceRequest {
-  string text   = 1;
-  string device = 2;  // satellite device name, or "all" for broadcast
+  string text     = 1;
+  string device   = 2;  // satellite device name, or "all" for broadcast — legacy path, ignored if room_id or user_id is set
+  // #31: target by room and/or Person (User) instead of a specific device. Both set = AND
+  // (only the satellite that is both in that room AND owned by that Person), not OR.
+  string room_id  = 3;  // "" = not set
+  int32  user_id  = 4;  // 0 = not set
 }
 
 message Satellite {
@@ -328,6 +334,8 @@ message Satellite {
   string last_seen           = 8;  // UTC "YYYY-MM-DD HH:MM:SS" from Core DB, "" = never seen
   bool   connected            = 9;  // true if currently live (UDP or proxy)
   bool   room_mismatch        = 10; // true if connected and live room differs from room_id
+  int32  owner_user_id        = 11; // Person (User) assigned as owner in Core DB, 0 = unassigned. #31
+  string owner_display_name   = 12; // display name of owner_user_id, "" if unassigned
 }
 
 message GetSatellitesResponse {
@@ -342,6 +350,11 @@ message SetSatelliteRoomRequest {
 message SetSatelliteDisplayNameRequest {
   string device_id    = 1;
   string display_name = 2;
+}
+
+message SetSatelliteOwnerRequest {
+  string device_id = 1;
+  int32  user_id    = 2;  // 0 = unassign
 }
 
 // --- Rooms/Groups (Admin-UI, #27 Phase 1) ---

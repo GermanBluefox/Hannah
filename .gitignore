@@ -25,6 +25,9 @@ iobroker/
 memory.db
 memory.db-shm
 memory.db-wal
+hannah.db
+hannah.db-shm
+hannah.db-wal
 .tts_cache/
 
 # For PCBs designed using KiCad: https://www.kicad.org/

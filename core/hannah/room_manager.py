@@ -4,13 +4,14 @@ Hannah Room Manager
 Verwaltet, über hannah.models, Persistenz für:
   - Räume (sync aus ioBroker)
   - Gruppen von Räumen (n:n über group_rooms — kein eigenes Model, per Join-Query)
-  - Satelliten und ihre Raum-Zuweisung
+
+Satelliten-Verwaltung liegt in satellite_manager.py (SatelliteManager) — sync_rooms()
+greift hier weiterhin direkt auf das Satellite-Model zu, um beim Löschen eines Raums
+verwaiste Satelliten auf room_id=NULL zu setzen (Querschnitts-Stelle, siehe #108).
 """
-import datetime
 import logging
 import sqlite3
 import threading
-import time
 from typing import Callable, Optional
 
 from hannah.models.room import Room
@@ -20,21 +21,10 @@ from hannah.models.satellite import Satellite
 log = logging.getLogger(__name__)
 
 
-def _now_sql() -> str:
-    """UTC-Zeitstempel im selben Format wie SQLite's datetime('now')."""
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-
-
 class RoomManager:
-    _CLEANUP_INTERVAL_S = 3600  # Prüfintervall für veraltete unpaired Seeds
-
-    def __init__(self, db: Callable, cfg: dict):
+    def __init__(self, db: Callable):
         self._db = db
-        self._seed_ttl_days = int(cfg.get("seed_ttl_days", 7))
         self._lock = threading.Lock()
-        threading.Thread(
-            target=self._cleanup_loop, daemon=True, name="hannah-roommanager-cleanup"
-        ).start()
 
     # ------------------------------------------------------------------
     # Räume
@@ -161,154 +151,3 @@ class RoomManager:
         for group_id, room_id in rows:
             result.setdefault(group_id, []).append(room_id)
         return result
-
-    # ------------------------------------------------------------------
-    # Satelliten
-
-    def provision_satellite(self, seed: str, display_name: str, room_id: Optional[str]) -> bool:
-        """Pre-registers a satellite before flash. seed is a one-time pairing token,
-        used as the device_id placeholder until pair_satellite() renames it."""
-        try:
-            db = self._db()
-            existing = Satellite.get(db, device_id=seed)
-            if existing:
-                existing.update(seed=seed, display_name=display_name, room_id=room_id)
-            else:
-                Satellite.create(db, device_id=seed, seed=seed, display_name=display_name, room_id=room_id)
-            log.info("RoomManager: provisioned satellite seed=%s name=%s", seed[:8], display_name)
-            return True
-        except Exception as e:
-            log.error("RoomManager: provision_satellite failed: %s", e)
-            return False
-
-    def pair_satellite(self, device_id: str, seed: str) -> bool:
-        """Links a device_id (eFuse MAC) to a pre-provisioned seed entry.
-
-        Looks up the seed, renames the record's device_id to the hardware device_id,
-        and clears the seed. Returns True if pairing succeeded, False if seed not found.
-
-        device_id is the PRIMARY KEY here, which BaseModel.update() never touches
-        (it always WHEREs on the current PK value) — the rename has to go through
-        raw SQL rather than the model layer.
-        """
-        db = self._db()
-        with self._lock:
-            row = db.execute(
-                "SELECT device_id FROM satellites WHERE seed = ?", (seed,)
-            ).fetchone()
-            if row is None:
-                return False
-            old_device_id = row[0]
-            now = _now_sql()
-            if old_device_id != device_id:
-                try:
-                    db.execute(
-                        "UPDATE satellites SET device_id=?, seed=NULL, paired_at=? WHERE seed=?",
-                        (device_id, now, seed),
-                    )
-                except sqlite3.IntegrityError:
-                    db.execute("DELETE FROM satellites WHERE seed = ?", (seed,))
-                    db.execute(
-                        "UPDATE satellites SET seed=NULL, paired_at=? WHERE device_id=?",
-                        (now, device_id),
-                    )
-            else:
-                db.execute(
-                    "UPDATE satellites SET seed=NULL, paired_at=? WHERE seed=?",
-                    (now, seed),
-                )
-            db.commit()
-        log.info("RoomManager: paired device_id=%s", device_id)
-        return True
-
-    def resolve_satellite_name(self, device_id: str) -> Optional[str]:
-        """Return the provisioned display_name for a satellite, or None if not set."""
-        sat = Satellite.get(self._db(), device_id=device_id)
-        return sat.display_name if sat and sat.display_name else None
-
-    def upsert_satellite(self, device_id: str) -> None:
-        db = self._db()
-        now = _now_sql()
-        with self._lock:
-            sat = Satellite.get(db, device_id=device_id)
-            if sat:
-                sat.update(last_seen=now)
-            else:
-                Satellite.create(db, device_id=device_id, last_seen=now)
-
-    def set_satellite_room(self, device_id: str, room_id: Optional[str]) -> bool:
-        sat = Satellite.get(self._db(), device_id=device_id)
-        if not sat:
-            return False
-        sat.update(room_id=room_id)
-        return True
-
-    def set_satellite_display_name(self, device_id: str, display_name: str) -> bool:
-        sat = Satellite.get(self._db(), device_id=device_id)
-        if not sat:
-            return False
-        sat.update(display_name=display_name)
-        return True
-
-    def get_satellite_room_map(self) -> dict[str, str]:
-        """Gibt {device_id: room_id} für alle Satelliten mit DB-Raum-Zuweisung zurück."""
-        rows = Satellite.select(self._db()).where("room_id IS NOT NULL").all()
-        return {s.device_id: s.room_id for s in rows}
-
-    def get_satellite_room(self, device_id: str) -> Optional[str]:
-        """Gibt die zugewiesene room_id zurück oder None."""
-        sat = Satellite.get(self._db(), device_id=device_id)
-        return sat.room_id if sat else None
-
-    def get_satellites(self) -> list[dict]:
-        db = self._db()
-        sats = Satellite.select(db).order_by("device_id").all()
-        room_names = {r.room_id: r.display_name for r in Room.select(db).all()}
-        return [
-            {
-                "device_id": s.device_id,
-                "display_name": s.display_name,
-                "room_id": s.room_id,
-                "last_seen": s.last_seen,
-                "room_display_name": room_names.get(s.room_id),
-            }
-            for s in sats
-        ]
-
-    def get_satellite(self, device_id: str) -> Optional[dict]:
-        sat = Satellite.get(self._db(), device_id=device_id)
-        if not sat:
-            return None
-        return {"device_id": sat.device_id, "display_name": sat.display_name, "room_id": sat.room_id}
-
-    def delete_satellite(self, device_id: str) -> bool:
-        sat = Satellite.get(self._db(), device_id=device_id)
-        if not sat:
-            return False
-        sat.delete()
-        log.info(f"RoomManager: Satellit '{device_id}' gelöscht")
-        return True
-
-    def cleanup_stale_seeds(self) -> int:
-        """Löscht provisionierte, aber nie gepairte Satelliten (seed gesetzt) älter als seed_ttl_days."""
-        stale = Satellite.select(self._db()).where(
-            "seed IS NOT NULL AND created_at < datetime('now', ?)",
-            f"-{self._seed_ttl_days} days",
-        ).all()
-        with self._lock:
-            for s in stale:
-                s.delete()
-        if stale:
-            log.info(
-                "RoomManager: %d veraltete unpaired Seed(s) gelöscht (>%dd)",
-                len(stale), self._seed_ttl_days,
-            )
-        return len(stale)
-
-    def _cleanup_loop(self) -> None:
-        while True:
-            time.sleep(self._CLEANUP_INTERVAL_S)
-            try:
-                self.cleanup_stale_seeds()
-            except Exception as e:
-                log.error("RoomManager: cleanup_stale_seeds fehlgeschlagen: %s", e)

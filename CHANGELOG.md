@@ -4,6 +4,9 @@
     ## **WORK IN PROGRESS**
 -->
 
+## 0.48.1
+### Hannah Core
+* Added: `DeleteSatellite` gRPC RPC — removes a satellite from the database via `SatelliteManager.delete_satellite()`; pushes a `satellite_deleted` event to the adapter so stale ioBroker object trees are cleaned up immediately
 
 ## 0.48.0
 ### Hannah Core

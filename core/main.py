@@ -1165,6 +1165,7 @@ def main():
     # zum Zeitpunkt des Aufrufs bereits gesetzt.
     grpc_servicer = HannahServicer(
         user_manager=_user_manager,
+        satellite_manager=satellite_manager,
         handle_text=_handle_text,
         handle_voice=_handle_voice,
         announce=process_announcement,

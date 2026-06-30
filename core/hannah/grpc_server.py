@@ -16,6 +16,8 @@ from typing import Callable, Iterable, Optional
 import grpc
 from werkzeug.security import generate_password_hash
 
+from hannah.models.satellite import Satellite
+from hannah.satellite_manager import SatelliteManager
 from hannah.user_manager import UserManager
 from hannah.proto import hannah_pb2 as pb
 from hannah.proto import hannah_pb2_grpc as pb_grpc
@@ -61,6 +63,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
     def __init__(
         self,
         user_manager: UserManager,
+        satellite_manager: SatelliteManager,
         handle_text: Callable[[str], tuple[str, str]],
         handle_voice: Callable[[bytes], tuple[str, str, str, bytes]],
         announce: Callable[..., None],  # (device, text, *, room_id="", user_id=0) — siehe AnnounceRequest #31
@@ -122,6 +125,7 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         get_residents: Optional[Callable[[], list]] = None,                      # () → [Resident]
     ):
         self._user_manager          = user_manager
+        self._satellite_manager     = satellite_manager
         self._handle_text           = handle_text
         self._handle_voice          = handle_voice
         self._announce              = announce
@@ -505,6 +509,12 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._upsert_satellite(request.device_id)
         ok = self._set_satellite_owner(request.device_id, request.user_id or None)
         return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
+    
+    def DeleteSatellite(self, request, _context):
+        sat: Satellite = self._satellite_manager.get_satellite(device_id=request.device_id)
+        ok = self._satellite_manager.delete_satellite(device_id=request.device_id) if sat else False
+        self.agent_satellite_deleted(device_id=sat.device_id, room=sat.room_id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
 
     # ------------------------------------------------------------------
     # Rooms/Groups (Admin-UI, #27 Phase 1)

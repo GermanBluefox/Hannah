@@ -170,7 +170,7 @@ class SatelliteManager:
         ]
 
     def get_satellite(self, device_id: str) -> Optional[dict]:
-        sat = Satellite.get(self._db(), device_id=device_id)
+        sat: Satellite = Satellite.get(self._db(), device_id=device_id)
         if not sat:
             return None
         return {
@@ -181,7 +181,7 @@ class SatelliteManager:
         }
 
     def delete_satellite(self, device_id: str) -> bool:
-        sat = Satellite.get(self._db(), device_id=device_id)
+        sat: Satellite = Satellite.get(self._db(), device_id=device_id)
         if not sat:
             return False
         sat.delete()

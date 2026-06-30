@@ -62,6 +62,8 @@ service HannahService {
   rpc SetSatelliteDisplayName (SetSatelliteDisplayNameRequest) returns (StatusResponse);
   // Assign a satellite to a Person (User), independent of its room. #31
   rpc SetSatelliteOwner       (SetSatelliteOwnerRequest)       returns (StatusResponse);
+  // Delete existing satellite
+  rpc DeleteSatellite (DeleteSatelliteRequest) returns (StatusResponse);
 
   // --- Rooms/Groups (Admin-UI, #27 Phase 1) ---
   rpc GetRooms      (Empty)                returns (GetRoomsResponse);
@@ -355,6 +357,10 @@ message SetSatelliteDisplayNameRequest {
 message SetSatelliteOwnerRequest {
   string device_id = 1;
   int32  user_id    = 2;  // 0 = unassign
+}
+
+message DeleteSatelliteRequest {
+  string device_id = 1;
 }
 
 // --- Rooms/Groups (Admin-UI, #27 Phase 1) ---

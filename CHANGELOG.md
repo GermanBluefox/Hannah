@@ -4,6 +4,14 @@
     ## **WORK IN PROGRESS**
 -->
 
+
+## 0.48.2
+### Hannah Core
+* Added: `SetSatelliteRoom`/`SetSatelliteDisplayName`/`SetSatelliteOwner`/`DeleteSatellite` now enforce trust-level/ownership checks in `SatelliteManager` via a new `requestor_id` field on each request (proto, additive, no consumer in this repo yet — WebUI needs to start sending it). `DeleteSatellite`/`SetSatelliteOwner` require trust level 10; `SetSatelliteRoom`/`SetSatelliteDisplayName` require trust level 5 and ownership of the satellite (trust level 10 is unrestricted). `requestor_id` omitted (`None`) bypasses the check entirely, for internal/system callers. New `SatellitePermissionError`, raised by `SatelliteManager` and translated to `ok=False, message="forbidden"` in the gRPC layer. `SatelliteManager.get_satellite()` now returns the real `Satellite` model instead of a hand-built dict — fixes a latent bug in `DeleteSatellite` that treated the previous dict as an object (`sat.device_id`/`sat.room_id`, `AttributeError` on the actual dict, untested until now) (Refs #111)
+
+### Firmware (satellite-esp)
+* Added: `hannah_ble` (BLE scanner) can now be enabled/disabled per build via new Kconfig setting `HANNAH_BLE_ENABLED` (default `y`) — NimBLE includes and the full implementation in `hannah_ble.c` sit behind the guard, with no-op stubs for `hannah_ble_init()`/`hannah_ble_set_watchlist_json()` when disabled (same pattern as `hannah_sd`). Groundwork for Satellite-Light variants with tight internal RAM (Refs #67)
+
 ## 0.48.1
 ### Hannah Core
 * Added: `DeleteSatellite` gRPC RPC — removes a satellite from the database via `SatelliteManager.delete_satellite()`; pushes a `satellite_deleted` event to the adapter so stale ioBroker object trees are cleaned up immediately

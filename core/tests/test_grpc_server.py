@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from werkzeug.security import generate_password_hash
@@ -10,7 +11,8 @@ from hannah.user_manager import UserManager
 from hannah.models.user import User
 from hannah.residents.Roomie import Roomie
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, SetSatelliteOwnerRequest, AnnounceRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, SetSatelliteOwnerRequest, DeleteSatelliteRequest, AnnounceRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
+from hannah.satellite_manager import SatellitePermissionError
 
 def _make_server(user_manager=None,satellite_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,set_satellite_owner=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None,get_residents=None):
     return HannahServicer(
@@ -286,69 +288,132 @@ class TestSatelliteRpcs:
         upsert = MagicMock()
         servicer = _make_server(set_satellite_room=set_satellite_room, upsert_satellite=upsert)
 
-        response = servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="wz-sat", room_id="wohnzimmer"), None)
+        response = servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="wz-sat", room_id="wohnzimmer", requestor_id=1), None)
 
         upsert.assert_called_once_with("wz-sat")
-        set_satellite_room.assert_called_once_with("wz-sat", "wohnzimmer")
+        set_satellite_room.assert_called_once_with("wz-sat", "wohnzimmer", requestor_id=1)
         assert response.ok is True
 
     def test_set_satellite_room_unassign(self):
         set_satellite_room = MagicMock(return_value=True)
         servicer = _make_server(set_satellite_room=set_satellite_room)
 
-        servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="wz-sat", room_id=""), None)
+        servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="wz-sat", room_id="", requestor_id=1), None)
 
-        set_satellite_room.assert_called_once_with("wz-sat", None)
+        set_satellite_room.assert_called_once_with("wz-sat", None, requestor_id=1)
 
     def test_set_satellite_room_not_found(self):
         servicer = _make_server(set_satellite_room=MagicMock(return_value=False))
 
-        response = servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="unknown", room_id="bad"), None)
+        response = servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="unknown", room_id="bad", requestor_id=1), None)
 
         assert response.ok is False
+
+    def test_set_satellite_room_forbidden(self):
+        """Permission-Logik selbst lebt in SatelliteManager (siehe test_satellite_manager.py)
+        — hier wird nur geprüft, dass die RPC eine SatellitePermissionError sauber in
+        ok=False/"forbidden" übersetzt."""
+        set_satellite_room = MagicMock(side_effect=SatellitePermissionError("nope"))
+        servicer = _make_server(set_satellite_room=set_satellite_room)
+
+        response = servicer.SetSatelliteRoom(SetSatelliteRoomRequest(device_id="wz-sat", room_id="wohnzimmer", requestor_id=1), None)
+
+        assert response.ok is False
+        assert response.message == "forbidden"
 
     def test_set_satellite_display_name_ok(self):
         set_satellite_display_name = MagicMock(return_value=True)
         servicer = _make_server(set_satellite_display_name=set_satellite_display_name)
 
-        response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name="Wohnzimmer-Sat"), None)
+        response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name="Wohnzimmer-Sat", requestor_id=1), None)
 
-        set_satellite_display_name.assert_called_once_with("wz-sat", "Wohnzimmer-Sat")
+        set_satellite_display_name.assert_called_once_with("wz-sat", "Wohnzimmer-Sat", requestor_id=1)
         assert response.ok is True
 
     def test_set_satellite_display_name_rejects_empty(self):
         set_satellite_display_name = MagicMock()
         servicer = _make_server(set_satellite_display_name=set_satellite_display_name)
 
-        response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name=""), None)
+        response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name="", requestor_id=1), None)
 
         set_satellite_display_name.assert_not_called()
+
+    def test_set_satellite_display_name_forbidden(self):
+        set_satellite_display_name = MagicMock(side_effect=SatellitePermissionError("nope"))
+        servicer = _make_server(set_satellite_display_name=set_satellite_display_name)
+
+        response = servicer.SetSatelliteDisplayName(SetSatelliteDisplayNameRequest(device_id="wz-sat", display_name="Neu", requestor_id=1), None)
+
+        assert response.ok is False
+        assert response.message == "forbidden"
 
     def test_set_satellite_owner_ok(self):
         set_satellite_owner = MagicMock(return_value=True)
         upsert = MagicMock()
         servicer = _make_server(set_satellite_owner=set_satellite_owner, upsert_satellite=upsert)
 
-        response = servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="wz-sat", user_id=3), None)
+        response = servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="wz-sat", user_id=3, requestor_id=1), None)
 
         upsert.assert_called_once_with("wz-sat")
-        set_satellite_owner.assert_called_once_with("wz-sat", 3)
+        set_satellite_owner.assert_called_once_with("wz-sat", 3, requestor_id=1)
         assert response.ok is True
 
     def test_set_satellite_owner_unassign(self):
         set_satellite_owner = MagicMock(return_value=True)
         servicer = _make_server(set_satellite_owner=set_satellite_owner)
 
-        servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="wz-sat", user_id=0), None)
+        servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="wz-sat", user_id=0, requestor_id=1), None)
 
-        set_satellite_owner.assert_called_once_with("wz-sat", None)
+        set_satellite_owner.assert_called_once_with("wz-sat", None, requestor_id=1)
 
     def test_set_satellite_owner_not_found(self):
         servicer = _make_server(set_satellite_owner=MagicMock(return_value=False))
 
-        response = servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="unknown", user_id=3), None)
+        response = servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="unknown", user_id=3, requestor_id=1), None)
 
         assert response.ok is False
+
+    def test_set_satellite_owner_forbidden(self):
+        set_satellite_owner = MagicMock(side_effect=SatellitePermissionError("nope"))
+        servicer = _make_server(set_satellite_owner=set_satellite_owner)
+
+        response = servicer.SetSatelliteOwner(SetSatelliteOwnerRequest(device_id="wz-sat", user_id=3, requestor_id=1), None)
+
+        assert response.ok is False
+        assert response.message == "forbidden"
+
+    def test_delete_satellite_ok(self):
+        satellite_manager = MagicMock(
+            get_satellite=MagicMock(return_value=SimpleNamespace(device_id="wz-sat", room_id="wohnzimmer")),
+            delete_satellite=MagicMock(return_value=True),
+        )
+        servicer = _make_server(satellite_manager=satellite_manager)
+
+        response = servicer.DeleteSatellite(DeleteSatelliteRequest(device_id="wz-sat", requestor_id=1), None)
+
+        satellite_manager.delete_satellite.assert_called_once_with("wz-sat", requestor_id=1)
+        assert response.ok is True
+
+    def test_delete_satellite_not_found(self):
+        satellite_manager = MagicMock(get_satellite=MagicMock(return_value=None))
+        servicer = _make_server(satellite_manager=satellite_manager)
+
+        response = servicer.DeleteSatellite(DeleteSatelliteRequest(device_id="unknown", requestor_id=1), None)
+
+        satellite_manager.delete_satellite.assert_not_called()
+        assert response.ok is False
+
+    def test_delete_satellite_forbidden(self):
+        satellite_manager = MagicMock(
+            get_satellite=MagicMock(return_value=SimpleNamespace(device_id="wz-sat", room_id="wohnzimmer")),
+            delete_satellite=MagicMock(side_effect=SatellitePermissionError("nope")),
+        )
+        servicer = _make_server(satellite_manager=satellite_manager)
+
+        response = servicer.DeleteSatellite(DeleteSatelliteRequest(device_id="wz-sat", requestor_id=1), None)
+
+        assert response.ok is False
+        assert response.message == "forbidden"
 
 
 class TestAnnounceRpc:

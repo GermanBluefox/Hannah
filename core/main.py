@@ -136,7 +136,7 @@ def main():
     # Room Manager (Räume, Gruppen) + Satellite Manager (Provisioning, Raum-/Owner-Zuweisung) —
     # teilen sich hannah.db mit der User-Registry
     room_manager = RoomManager(get_db)
-    satellite_manager = SatelliteManager(get_db, cfg.get("satellite_manager", {}))
+    satellite_manager = SatelliteManager(get_db, cfg.get("satellite_manager", {}), user_manager=_user_manager)
 
     # STT + NLU + TTS
     stt = STT(cfg.get("stt", {}))

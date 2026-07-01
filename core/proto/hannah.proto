@@ -347,20 +347,24 @@ message GetSatellitesResponse {
 message SetSatelliteRoomRequest {
   string device_id = 1;
   string room_id    = 2;  // "" = unassign
+  int32 requestor_id     = 3; //requestor
 }
 
 message SetSatelliteDisplayNameRequest {
   string device_id    = 1;
   string display_name = 2;
+  int32 requestor_id       = 3; //requestor
 }
 
 message SetSatelliteOwnerRequest {
   string device_id = 1;
   int32  user_id    = 2;  // 0 = unassign
+  int32 requestor_id     = 3; //requestor
 }
 
 message DeleteSatelliteRequest {
   string device_id = 1;
+  int32 requestor_id    = 2; //requestor
 }
 
 // --- Rooms/Groups (Admin-UI, #27 Phase 1) ---

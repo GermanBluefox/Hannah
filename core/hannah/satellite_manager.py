@@ -18,6 +18,10 @@ from hannah.models.satellite import Satellite
 log = logging.getLogger(__name__)
 
 
+class SatellitePermissionError(Exception):
+    """Requestor fehlt die nötige Trust-Level-/Eigentümer-Berechtigung für diese Satelliten-Aktion."""
+
+
 def _now_sql() -> str:
     """UTC-Zeitstempel im selben Format wie SQLite's datetime('now')."""
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -26,13 +30,40 @@ def _now_sql() -> str:
 class SatelliteManager:
     _CLEANUP_INTERVAL_S = 3600  # Prüfintervall für veraltete unpaired Seeds
 
-    def __init__(self, db: Callable, cfg: dict):
+    def __init__(self, db: Callable, cfg: dict, user_manager=None):
         self._db = db
+        self._user_manager = user_manager
         self._seed_ttl_days = int(cfg.get("seed_ttl_days", 7))
         self._lock = threading.Lock()
         threading.Thread(
             target=self._cleanup_loop, daemon=True, name="hannah-satellitemanager-cleanup"
         ).start()
+
+    def _requestor_trust_level(self, requestor_id: int) -> int:
+        user = self._user_manager.get_user_by_id(requestor_id) if self._user_manager else None
+        return user.trust_level if user else 0
+
+    def _check_admin(self, requestor_id: Optional[int]) -> None:
+        """requestor_id=None: interner/systemseitiger Aufruf, keine Prüfung."""
+        if requestor_id is None:
+            return
+        if self._requestor_trust_level(requestor_id) < 10:
+            raise SatellitePermissionError(f"requestor {requestor_id} lacks trust level 10")
+
+    def _check_own_or_admin(self, requestor_id: Optional[int], device_id: str) -> None:
+        """Trustlevel 10 darf jeden Satelliten anfassen, ab 5 nur den eigenen (owner_user_id).
+        Unzugewiesene Satelliten (owner_user_id NULL) bleiben Trustlevel 10 vorbehalten.
+        requestor_id=None: interner/systemseitiger Aufruf, keine Prüfung."""
+        if requestor_id is None:
+            return
+        trust = self._requestor_trust_level(requestor_id)
+        if trust >= 10:
+            return
+        if trust < 5:
+            raise SatellitePermissionError(f"requestor {requestor_id} lacks trust level 5")
+        sat = self.get_satellite(device_id)
+        if not sat or sat.owner_user_id != requestor_id:
+            raise SatellitePermissionError(f"requestor {requestor_id} does not own satellite '{device_id}'")
 
     def provision_satellite(self, seed: str, display_name: str, room_id: Optional[str]) -> bool:
         """Pre-registers a satellite before flash. seed is a one-time pairing token,
@@ -105,21 +136,24 @@ class SatelliteManager:
             else:
                 Satellite.create(db, device_id=device_id, last_seen=now)
 
-    def set_satellite_room(self, device_id: str, room_id: Optional[str]) -> bool:
+    def set_satellite_room(self, device_id: str, room_id: Optional[str], requestor_id: Optional[int] = None) -> bool:
+        self._check_own_or_admin(requestor_id, device_id)
         sat = Satellite.get(self._db(), device_id=device_id)
         if not sat:
             return False
         sat.update(room_id=room_id)
         return True
 
-    def set_satellite_display_name(self, device_id: str, display_name: str) -> bool:
+    def set_satellite_display_name(self, device_id: str, display_name: str, requestor_id: Optional[int] = None) -> bool:
+        self._check_own_or_admin(requestor_id, device_id)
         sat = Satellite.get(self._db(), device_id=device_id)
         if not sat:
             return False
         sat.update(display_name=display_name)
         return True
 
-    def set_satellite_owner(self, device_id: str, user_id: Optional[int]) -> bool:
+    def set_satellite_owner(self, device_id: str, user_id: Optional[int], requestor_id: Optional[int] = None) -> bool:
+        self._check_admin(requestor_id)
         sat = Satellite.get(self._db(), device_id=device_id)
         if not sat:
             return False
@@ -169,18 +203,11 @@ class SatelliteManager:
             for s in sats
         ]
 
-    def get_satellite(self, device_id: str) -> Optional[dict]:
-        sat: Satellite = Satellite.get(self._db(), device_id=device_id)
-        if not sat:
-            return None
-        return {
-            "device_id": sat.device_id,
-            "display_name": sat.display_name,
-            "room_id": sat.room_id,
-            "owner_user_id": sat.owner_user_id,
-        }
+    def get_satellite(self, device_id: str) -> Optional[Satellite]:
+        return Satellite.get(self._db(), device_id=device_id)
 
-    def delete_satellite(self, device_id: str) -> bool:
+    def delete_satellite(self, device_id: str, requestor_id: Optional[int] = None) -> bool:
+        self._check_admin(requestor_id)
         sat: Satellite = Satellite.get(self._db(), device_id=device_id)
         if not sat:
             return False

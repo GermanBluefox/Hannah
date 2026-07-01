@@ -1,4 +1,10 @@
 menu "Hannah BLE-Scanner"
+    config HANNAH_BLE_ENABLED
+        bool "BLE-Scanner aktivieren"
+        default y
+        help
+            Passiver BLE-Scanner für Indoor-Lokalisierung. Scannt BLE-Advertisements
+            von konfigurierten MAC-Adressen (Watchlist) und meldet RSSI per MQTT: hannah/satellite/{device}/ble/report
 
     config HANNAH_BLE_REPORT_INTERVAL_MS
         int "Minimales Intervall zwischen RSSI-Reports pro MAC (ms)"

@@ -16,12 +16,12 @@ from typing import Callable, Iterable, Optional
 import grpc
 from werkzeug.security import generate_password_hash
 
-from hannah.models.satellite import Satellite
-from hannah.satellite_manager import SatelliteManager
+from hannah.satellite_manager import SatelliteManager, SatellitePermissionError
 from hannah.user_manager import UserManager
 from hannah.proto import hannah_pb2 as pb
 from hannah.proto import hannah_pb2_grpc as pb_grpc
 from hannah.models.user import User
+from hannah.models.satellite import Satellite
 
 log = logging.getLogger(__name__)
 
@@ -495,25 +495,38 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def SetSatelliteRoom(self, request, _context):
         self._upsert_satellite(request.device_id)
-        ok = self._set_satellite_room(request.device_id, request.room_id or None)
+        try:
+            ok = self._set_satellite_room(request.device_id, request.room_id or None, requestor_id=request.requestor_id)
+        except SatellitePermissionError:
+            return pb.StatusResponse(ok=False, message="forbidden")
         return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
 
     def SetSatelliteDisplayName(self, request, _context):
         if not request.display_name:
             return pb.StatusResponse(ok=False, message="display_name required")
         self._upsert_satellite(request.device_id)
-        ok = self._set_satellite_display_name(request.device_id, request.display_name)
+        try:
+            ok = self._set_satellite_display_name(request.device_id, request.display_name, requestor_id=request.requestor_id)
+        except SatellitePermissionError:
+            return pb.StatusResponse(ok=False, message="forbidden")
         return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
 
     def SetSatelliteOwner(self, request, _context):
         self._upsert_satellite(request.device_id)
-        ok = self._set_satellite_owner(request.device_id, request.user_id or None)
+        try:
+            ok = self._set_satellite_owner(request.device_id, request.user_id or None, requestor_id=request.requestor_id)
+        except SatellitePermissionError:
+            return pb.StatusResponse(ok=False, message="forbidden")
         return pb.StatusResponse(ok=ok, message="set" if ok else "not found")
-    
+
     def DeleteSatellite(self, request, _context):
-        sat: Satellite = self._satellite_manager.get_satellite(device_id=request.device_id)
-        ok = self._satellite_manager.delete_satellite(device_id=request.device_id) if sat else False
-        self.agent_satellite_deleted(device_id=sat.device_id, room=sat.room_id)
+        sat: Optional[Satellite] = self._satellite_manager.get_satellite(device_id=request.device_id)
+        try:
+            ok = self._satellite_manager.delete_satellite(request.device_id, requestor_id=request.requestor_id) if sat else False
+        except SatellitePermissionError:
+            return pb.StatusResponse(ok=False, message="forbidden")
+        if ok:
+            self.agent_satellite_deleted(device_id=sat.device_id, room=sat.room_id or "")
         return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
 
     # ------------------------------------------------------------------

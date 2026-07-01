@@ -5,6 +5,9 @@
 -->
 
 
+## 0.49.1
+### Hannah Core
+* Fixed: `BaseModel.create()`/`update()` only re-encoded `__json_fields__` columns as JSON when the value was a `list`/`dict` (`isinstance` check), not based on `__json_fields__` itself — a scalar value (e.g. `llm.system_prompt`, a plain string) written through `UpdateConfig`/`CreateSetting` landed in the DB unencoded and crashed the next `GetSettings`/`UpdateConfig` call with `JSONDecodeError`, taking down the WebUI's Settings page entirely. Both methods now check `key in __json_fields__` instead (Refs #113)
 
 ## 0.49.0
 ### Hannah Core

@@ -98,9 +98,8 @@ class BaseModel:
             if key in cls.__slots__ and not key.startswith('_'):
                 columns.append(key)
                 
-                # NEU: Überprüfung auf Liste oder Dictionary
-                if isinstance(value, (list, dict)):
-                    values.append(json.dumps(value)) # In JSON-String umwandeln
+                if key in cls.__json_fields__:
+                    values.append(json.dumps(value))
                 else:
                     values.append(value)
 
@@ -146,7 +145,7 @@ class BaseModel:
         for key, value in kwargs.items():
             if key in self.__slots__ and key not in pk_cols and not key.startswith('_'):
                 updates.append(f'"{key}" = ?')
-                params.append(json.dumps(value) if isinstance(value, (list, dict)) else value)
+                params.append(json.dumps(value) if key in self.__json_fields__ else value)
                 setattr(self, key, value)
 
         if not updates:

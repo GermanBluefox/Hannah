@@ -12,9 +12,8 @@ full CarState via GetCarState and builds the rich Telegram message/caption.
 
 Commands
 ────────
-/start                      – welcome + linking instructions
-/verknuepfen <username>     – link this Telegram account to a Hannah user
-/auto                       – query current car status on demand
+/start  – welcome + link to WebUI for account linking
+/auto   – query current car status on demand
 """
 from __future__ import annotations
 
@@ -73,8 +72,7 @@ def _cb_ctrl(room_idx: int, dev_idx: int, state: str, value: str) -> str:
 
 
 _COMMANDS_DEFAULT = [
-    telegram.BotCommand("start",       "Willkommensnachricht"),
-    telegram.BotCommand("verknuepfen", "Konto mit Hannah verknüpfen"),
+    telegram.BotCommand("start", "Willkommensnachricht"),
 ]
 _COMMANDS_USER = [
     telegram.BotCommand("start",          "Willkommensnachricht"),
@@ -114,17 +112,15 @@ _CATEGORY_ICONS = {
     "Helligkeit":   "☀️",
 }
 
-_WELCOME = (
+_WELCOME_TEMPLATE = (
     "Hallo! Ich bin Hannah, dein persönlicher Sprachassistent.\n\n"
     "Damit du mit mir chatten kannst, musst du dein Telegram-Konto "
-    "einmal mit deinem Hannah-Profil verknüpfen:\n\n"
-    "  /verknuepfen <username>\n\n"
-    "Deinen username findest du in der Hannah-Konfiguration."
+    "einmal mit deinem Hannah-Profil verknüpfen.\n\n"
+    "Das geht über die Hannah-WebUI:\n{webui_url}"
 )
 
-_UNKNOWN_USER = (
-    "Ich kenne dich noch nicht. Bitte verknüpfe dein Konto zuerst:\n"
-    "  /verknuepfen <username>"
+_UNKNOWN_USER_TEMPLATE = (
+    "Ich kenne dich noch nicht. Verknüpfe dein Konto über die Hannah-WebUI:\n{webui_url}"
 )
 
 # Die {0} und {1} sind Platzhalter für Latitude und Longitude
@@ -136,10 +132,13 @@ class HannahBot:
         self,
         token: str,
         hannah: "HannahClient",
+        webui_url: str = "",
     ) -> None:
         self._token = token
         self._hannah = hannah
         self._app: Application | None = None
+        self._welcome = _WELCOME_TEMPLATE.format(webui_url=webui_url or "(WebUI-URL nicht konfiguriert)")
+        self._unknown_user = _UNKNOWN_USER_TEMPLATE.format(webui_url=webui_url or "(WebUI-URL nicht konfiguriert)")
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -152,7 +151,6 @@ class HannahBot:
         )
         app = self._app
         app.add_handler(CommandHandler("start",          self._cmd_start))
-        app.add_handler(CommandHandler("verknuepfen",    self._cmd_link))
         app.add_handler(CommandHandler("auto",           self._cmd_auto))
         app.add_handler(CommandHandler("haus",           self._cmd_haus))
         app.add_handler(CommandHandler("trustlevel",     self._cmd_trustlevel))
@@ -171,7 +169,7 @@ class HannahBot:
         """
         if self._app is None:
             return
-        # Default für alle: nur start + verknuepfen
+        # Default für alle: nur start
         await self._app.bot.set_my_commands(
             _COMMANDS_DEFAULT,
             scope=telegram.BotCommandScopeDefault(),
@@ -303,44 +301,12 @@ class HannahBot:
         if await self._is_known_user(chat_id):
             await update.message.reply_text("Hallo! Ich bin Hannah. Was kann ich für dich tun?")
         else:
-            await update.message.reply_text(_WELCOME)
-
-    async def _cmd_link(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-        chat_id = str(update.effective_chat.id)
-        if not self._is_private_chat(chat_id):
-            await update.message.reply_text(
-                "Verknüpfungen bitte im privaten Chat mit mir vornehmen, nicht in Gruppen."
-            )
-            return
-        args = ctx.args or []
-        if not args:
-            await update.message.reply_text(
-                "Bitte gib deinen Benutzernamen an:\n  /verknuepfen <username>"
-            )
-            return
-
-        username = args[0].strip()
-        found, user, error = await self._hannah.get_user_by_username(user_name=username)
-        if not found:
-            if error:
-                await update.message.reply_text(f"{error}\nBeispiel: /verknuepfen {username}")
-            else:
-                await update.message.reply_text(f"User '{username}' nicht gefunden.")
-            return
-
-        ok, msg = await self._hannah.link_account(user.id, chat_id)
-        if ok:
-            name = user.display_name if user else username
-            await update.message.reply_text(f"Verknüpfung erfolgreich! Hallo, {name}.")
-            # Commands für diesen Chat anpassen (verknuepfen ausblenden)
-            await self._set_commands_for_chat(chat_id, user.trust_level if user else 5)
-        else:
-            await update.message.reply_text(f"Verknüpfung fehlgeschlagen: {msg}")
+            await update.message.reply_text(self._welcome)
 
     async def _cmd_auto(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = str(update.effective_chat.id)
         if not await self._is_known_user(chat_id):
-            await update.message.reply_text(_UNKNOWN_USER)
+            await update.message.reply_text(self._unknown_user)
             return
 
         debug = bool(ctx.args and ctx.args[0].lower() == "debug")
@@ -387,7 +353,7 @@ class HannahBot:
         ok, user = await self._has_trust(chat_id, 10)
         if not ok:
             if user is None:
-                await update.message.reply_text(_UNKNOWN_USER)
+                await update.message.reply_text(self._unknown_user)
             else:
                 await update.message.reply_text("Nur Admins (Trust-Level 10) können Trust-Level setzen.")
             return
@@ -434,7 +400,7 @@ class HannahBot:
         ok, user = await self._has_trust(chat_id, _MENU_TRUST_MIN)
         if not ok:
             if user is None:
-                await update.message.reply_text(_UNKNOWN_USER)
+                await update.message.reply_text(self._unknown_user)
             else:
                 await update.message.reply_text("System-Benachrichtigungen erfordern mindestens Trust-Level 7.")
             return
@@ -462,7 +428,7 @@ class HannahBot:
         ok, user = await self._has_trust(chat_id, _MENU_TRUST_MIN)
         if not ok:
             if user is None:
-                await update.message.reply_text(_UNKNOWN_USER)
+                await update.message.reply_text(self._unknown_user)
             else:
                 await update.message.reply_text(
                     f"Du benötigst Trust-Level {_MENU_TRUST_MIN} für die Haussteuerung."
@@ -595,7 +561,7 @@ class HannahBot:
     async def _on_text(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = str(update.effective_chat.id)
         if not await self._is_known_user(chat_id):
-            await update.message.reply_text(_UNKNOWN_USER)
+            await update.message.reply_text(self._unknown_user)
             return
 
         text = update.message.text.strip()
@@ -629,7 +595,7 @@ class HannahBot:
     async def _on_voice(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = str(update.effective_chat.id)
         if not await self._is_known_user(chat_id):
-            await update.message.reply_text(_UNKNOWN_USER)
+            await update.message.reply_text(self._unknown_user)
             return
 
         await update.message.chat.send_action(ChatAction.RECORD_VOICE)

@@ -47,6 +47,7 @@ async def main(config_path: str) -> None:
     bot = HannahBot(
         token=cfg.telegram_token,
         hannah=hannah,
+        webui_url=cfg.webui_url,
     )
     app = bot.build_app()
 

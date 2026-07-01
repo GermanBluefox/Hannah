@@ -4,8 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from hannah_telegram.bot import (
     HannahBot,
-    _UNKNOWN_USER,
-    _WELCOME,
     _car_proto_to_message,
     _cb_device,
     _cb_room,
@@ -168,7 +166,7 @@ class TestOnText:
         bot = _make_bot(_make_hannah(known=False))
         update, ctx = _make_update()
         await bot._on_text(update, ctx)
-        update.message.reply_text.assert_called_once_with(_UNKNOWN_USER)
+        update.message.reply_text.assert_called_once_with(bot._unknown_user)
 
     @pytest.mark.asyncio
     async def test_known_user_calls_submit_text(self):
@@ -193,7 +191,15 @@ class TestCmdStart:
         bot = _make_bot(_make_hannah(known=False))
         update, ctx = _make_update()
         await bot._cmd_start(update, ctx)
-        update.message.reply_text.assert_called_once_with(_WELCOME)
+        update.message.reply_text.assert_called_once_with(bot._welcome)
+
+    @pytest.mark.asyncio
+    async def test_unknown_user_welcome_contains_webui_url(self):
+        bot = HannahBot(token="test", hannah=_make_hannah(), webui_url="https://example.com")
+        update, ctx = _make_update()
+        await bot._cmd_start(update, ctx)
+        text = update.message.reply_text.call_args[0][0]
+        assert "https://example.com" in text
 
     @pytest.mark.asyncio
     async def test_known_user_gets_greeting(self):
@@ -201,44 +207,7 @@ class TestCmdStart:
         update, ctx = _make_update()
         await bot._cmd_start(update, ctx)
         text = update.message.reply_text.call_args[0][0]
-        assert text != _WELCOME
-
-
-class TestCmdLink:
-    @pytest.mark.asyncio
-    async def test_no_args_prompts_for_username(self):
-        bot = _make_bot()
-        update, ctx = _make_update(args=[])
-        await bot._cmd_link(update, ctx)
-        text = update.message.reply_text.call_args[0][0]
-        assert "username" in text.lower() or "Benutzernamen" in text
-
-    @pytest.mark.asyncio
-    async def test_unknown_username_reports_error(self):
-        bot = _make_bot(_make_hannah(known=False))
-        update, ctx = _make_update(args=["unbekannt"])
-        await bot._cmd_link(update, ctx)
-        text = update.message.reply_text.call_args[0][0]
-        assert "nicht gefunden" in text
-
-    @pytest.mark.asyncio
-    async def test_valid_username_calls_link_account(self):
-        user = _make_user(trust_level=5, user_id=42)
-        hannah = _make_hannah(known=False)
-        hannah.get_user_by_username = AsyncMock(return_value=(True, user, None))
-        hannah.link_account = AsyncMock(return_value=(True, "ok"))
-        bot = _make_bot(hannah)
-        update, ctx = _make_update(chat_id=99999, args=["leonie"])
-        await bot._cmd_link(update, ctx)
-        hannah.link_account.assert_called_once_with(42, "99999")
-
-    @pytest.mark.asyncio
-    async def test_group_chat_rejected(self):
-        bot = _make_bot()
-        update, ctx = _make_update(chat_id=-100123456, args=["leonie"])
-        await bot._cmd_link(update, ctx)
-        text = update.message.reply_text.call_args[0][0]
-        assert "privaten Chat" in text
+        assert text != bot._welcome
 
 
 class TestHasTrust:

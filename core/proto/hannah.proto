@@ -226,9 +226,10 @@ message LinkAccountRequest {
 }
 
 message UnlinkAccountRequest {
-  int32  user_id    = 1;
-  string service    = 2;
-  string account_id = 3;
+  int32  user_id       = 1;
+  string service       = 2;
+  string account_id    = 3;
+  int32  requestor_id  = 4;
 }
 
 message SetTrustLevelRequest {

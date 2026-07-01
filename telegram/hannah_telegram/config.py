@@ -17,6 +17,7 @@ class GrpcConfig:
 class Config:
     # Telegram Bot Token (from @BotFather)
     telegram_token: str = ""
+    webui_url: str = ""
     grpc: GrpcConfig = field(default_factory=GrpcConfig)
 
 
@@ -30,5 +31,6 @@ def load(path: str | Path = "config.yaml") -> Config:
 
     return Config(
         telegram_token=raw.get("telegram_token", ""),
+        webui_url=raw.get("webui_url", ""),
         grpc=_section(GrpcConfig, "grpc"),
     )

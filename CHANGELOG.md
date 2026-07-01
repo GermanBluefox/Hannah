@@ -5,6 +5,14 @@
 -->
 
 
+
+## 0.49.0
+### Hannah Core
+* Changed: `LinkAccount` gRPC handler now validates the provider against a known set (`residents`, `telegram`, `microsoft`) and rejects duplicate account links (same `service`+`account_id` already linked to a different user) with `ALREADY_EXISTS`. `UnlinkAccountRequest` gains an optional `requestor_id` field — when set, Core enforces that the requestor is either the target user themselves or holds trust level 10; `requestor_id=0` (default) bypasses the check for internal/system callers (Refs #112)
+
+### Telegram
+* Changed: `/verknuepfen` command removed — unlinked users now receive a link to the Hannah WebUI instead. WebUI URL is configurable via `webui_url` in `config.yaml` (Refs #112)
+
 ## 0.48.2
 ### Hannah Core
 * Added: `SetSatelliteRoom`/`SetSatelliteDisplayName`/`SetSatelliteOwner`/`DeleteSatellite` now enforce trust-level/ownership checks in `SatelliteManager` via a new `requestor_id` field on each request (proto, additive, no consumer in this repo yet — WebUI needs to start sending it). `DeleteSatellite`/`SetSatelliteOwner` require trust level 10; `SetSatelliteRoom`/`SetSatelliteDisplayName` require trust level 5 and ownership of the satellite (trust level 10 is unrestricted). `requestor_id` omitted (`None`) bypasses the check entirely, for internal/system callers. New `SatellitePermissionError`, raised by `SatelliteManager` and translated to `ok=False, message="forbidden"` in the gRPC layer. `SatelliteManager.get_satellite()` now returns the real `Satellite` model instead of a hand-built dict — fixes a latent bug in `DeleteSatellite` that treated the previous dict as an object (`sat.device_id`/`sat.room_id`, `AttributeError` on the actual dict, untested until now) (Refs #111)

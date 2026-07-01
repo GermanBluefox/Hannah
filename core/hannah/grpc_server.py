@@ -25,6 +25,7 @@ from hannah.models.satellite import Satellite
 
 log = logging.getLogger(__name__)
 
+_KNOWN_PROVIDERS = {"residents", "telegram", "microsoft"}
 
 # ------------------------------------------------------------------
 # Event subscriber (one per connected SubscribeEvents call)
@@ -310,15 +311,25 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         return pb.UserResponse(found=True, user=_user_to_pb(raw))
 
     def LinkAccount(self, request, context):
+        if request.service not in _KNOWN_PROVIDERS:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f"Unbekannter Provider: {request.service}")
+            return pb.StatusResponse(ok=False, message=f"Unbekannter Provider: {request.service}")
+
         user: User = self._user_manager.get_user_by_id(request.user_id)
         if not user:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("User nicht gefunden.")
             return pb.StatusResponse(ok=False, message="User nicht gefunden.")
-        
+
+        existing = self._user_manager.get_user_by_linked_account(request.service, request.account_id)
+        if existing and existing.id != request.user_id:
+            context.set_code(grpc.StatusCode.ALREADY_EXISTS)
+            context.set_details("Account bereits mit einem anderen User verknüpft.")
+            return pb.StatusResponse(ok=False, message="Account bereits mit einem anderen User verknüpft.")
+
         user.link_account(request.service, request.account_id, provider_payload=request.provider_payload)
-        msg = "verknüpft" if user else "Fehler bei Verknüpfung"
-        return pb.StatusResponse(ok=(True if user else False), message=msg)
+        return pb.StatusResponse(ok=True, message="verknüpft")
 
     def UnlinkAccount(self, request, context):
         user: User = self._user_manager.get_user_by_id(request.user_id)
@@ -326,11 +337,17 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details("User nicht gefunden.")
             return pb.StatusResponse(ok=False, message="User nicht gefunden.")
-        
+
+        if request.requestor_id:
+            requestor = self._user_manager.get_user_by_id(request.requestor_id)
+            requestor_trust = requestor.trust_level if requestor else 0
+            if request.requestor_id != request.user_id and requestor_trust < 10:
+                context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+                context.set_details("forbidden")
+                return pb.StatusResponse(ok=False, message="forbidden")
+
         user.unlink_account(request.service)
-        
-        msg = "entfernt" if user else "Fehler bei Aufhebung der Verknüpfung"
-        return pb.StatusResponse(ok=(True if user else False), message=msg)
+        return pb.StatusResponse(ok=True, message="entfernt")
 
     def SetTrustLevel(self, request, context):
         user = self._user_manager.get_user_by_id(request.user_id)

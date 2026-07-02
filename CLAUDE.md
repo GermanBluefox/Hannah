@@ -39,9 +39,7 @@ hannah/                          ← Mono-Repo
 │   │   ├── audio.py             ← Audio-Utilities (Resampling, VAD)
 │   │   └── proto/               ← Generierte gRPC-Stubs
 |   ├── main.py                  ← Einstiegspunkt, Orchestrierung
-│   ├── config.yaml
-│   ├── triggers.yaml            ← veraltet, nicht mehr geladen (siehe routines.py/trigger_engine.py)
-│   └── routines.yaml            ← veraltet, nicht mehr geladen (siehe routines.py/trigger_engine.py)
+│   └── config.yaml              ← Infra-/Bootstrap-Config; NLU-Wortlisten, llm.system_prompt, ble.tags, cars und iobroker.state_names liegen in der DB (hannah.db, Settings-Tabelle) statt hier — siehe GetSettings/UpdateConfig gRPC
 │
 ├── proxy/                       ← Go gRPC-Proxy (UDP-Satelliten → gRPC → Core)
 │   └── proto/hannah.proto       ← Kopie des Protokolls (Source of Truth: core/proto/hannah.proto)

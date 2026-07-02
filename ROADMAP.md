@@ -92,8 +92,9 @@ letzte N Erinnerungen werden pro Person in den System-Prompt injiziert.
 
 ### Trigger-Engine: Proaktive Ansagen aus ioBroker
 Zeit-Trigger (`days`-Filter), Sensor-Trigger (`value`/`above`/`below`), Kombinations-Trigger
-(`also:`), `unless`-Bedingung, Cooldown, Hot-Reload (`triggers.yaml`) und `extra_state_prefixes`
-für beliebige ioBroker-Topics — alles implementiert und produktiv.
+(`also:`), `unless`-Bedingung, Cooldown und `extra_state_prefixes` für beliebige ioBroker-Topics
+— alles implementiert und produktiv. Trigger/Routinen liegen DB-backed (`hannah.db`, Admin-UI
+über `GetTriggers`/`CreateTrigger`/… gRPC) statt in `triggers.yaml`/`routines.yaml`.
 
 ### Hannah-Agent: Nativer ioBroker-Adapter (`iobroker.hannah`)
 Ersetzt den externen MQTT-Kanal zwischen ioBroker und Hannah vollständig durch gRPC.

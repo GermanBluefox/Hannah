@@ -34,11 +34,8 @@ mqtt:
   # hannah/satellite/{device}/status  → idle | listening | processing | speaking
   # hannah/satellite/{device}/online  → true | false (LWT vom Satellit)
 
-# Fahrzeug-Integration (optional, beliebig viele Einträge)
-# cars:
-#   - topic_prefix: "javascript/0/virtualDevice/Auto/Person/Auto1"
-#     home_address: "Musterstraße 1, 12345 Musterstadt, Deutschland"
-#     owner_roomies: ["person"]   # Roomie-IDs mit Zugriff auf dieses Auto
+# Fahrzeug-Integration: wird über die DB-Settings verwaltet (Kategorie "cars"),
+# nicht mehr hier — siehe Admin-UI / GetSettings/UpdateConfig gRPC.
 
 # BLE Indoor-Lokalisierung (optional)
 # Satelliten scannen passiv BLE-Advertisements und melden RSSI per MQTT.
@@ -46,13 +43,7 @@ mqtt:
 # Ergebnis: hannah/ble/{label}/location (MQTT, retained) + hannah.0.ble.{label}.* (ioBroker Adapter)
 # ble:
 #   stale_timeout: 30    # Sekunden ohne Report → Tag gilt als "nicht sichtbar"
-#   tags:
-#     - mac: "aa:bb:cc:dd:ee:ff"
-#       label: "leonie"          # wird als State-Pfad verwendet (keine Leerzeichen)
-#       username: "leonie"       # optional: Hannah-Username — bei Sichtung wird User.presence auf True gesetzt
-#     - mac: "11:22:33:44:55:66"
-#       label: "zoey"
-#       username: "zoey"
+# Tag-Liste (mac/label/username) liegt in den DB-Settings (Kategorie "ble.tags"), nicht hier.
 
 grpc:
   host: "0.0.0.0"   # Bind-Adresse des gRPC-Servers
@@ -80,20 +71,8 @@ iobroker:
   # Pfad-Prefix der virtualDevice-Geräte in ioBroker
   virtual_device_prefix: "javascript.0.virtualDevice"
   feedback_timeout: 3.0   # Sekunden bis "Gerät antwortet nicht"
-  # State-Namen der Geräte (anpassen falls abweichend)
-  state_names:
-    "on":        "on"
-    level:       "level"
-    color:       "color"
-    colorTemp:   "colorTemp"
-    # Sensor-States (an tatsächliche ioBroker-State-Namen anpassen)
-    current:     "current"       # z.B. Temperaturen.*.*.Raumtemperatur.current
-    expected:    "expected"      # z.B. Temperaturen.*.*.Raumtemperatur.expected
-    illuminance: "illuminance"   # z.B. Helligkeit.*.*.illuminance
-    open:        "open"          # z.B. Fenster.*.*.open
-    iaq:         "iaq"           # z.B. AirQuality.*.*.iaq
-    co2_equiv:   "co2_equiv"     # z.B. AirQuality.*.*.co2_equiv
-    voc_equiv:   "voc_equiv"     # z.B. AirQuality.*.*.voc_equiv
+  # State-Namen der Geräte liegen in den DB-Settings (Kategorie "iobroker.state_names"),
+  # nicht mehr hier — siehe Admin-UI / GetSettings/UpdateConfig gRPC.
 
 tts:
   # Backend: piper (lokal/offline) | azure | polly
@@ -157,71 +136,9 @@ audio:
   # "auto" versucht WAV-Header zu erkennen, fällt auf raw_pcm zurück
   format: "auto"
 
-nlu:
-  # Aktions-Wörter (deutsch)
-  turn_on_words:
-    - "an"
-    - "einschalten"
-    - "anschalten"
-    - "anmachen"
-    - "einmachen"
-    - "starte"
-    - "aktiviere"
-  turn_off_words:
-    - "aus"
-    - "ausschalten"
-    - "ausmachen"
-    - "ausdrehen"
-    - "stoppe"
-    - "deaktiviere"
-  # Kategorie-Filter: Wort im Befehl → nur Geräte dieser Kategorie schalten
-  # Werte müssen den device_type-Keys entsprechen: light, socket, thermostat,
-  # temperature_sensor, window, door, blind, air_quality_sensor, humidity_sensor
-  category_words:
-    licht:        "light"
-    lichter:      "light"
-    lampe:        "light"
-    lampen:       "light"
-    stecker:      "socket"
-    strom:        "socket"
-    heizung:      "thermostat"
-    heizungen:    "thermostat"
-    temperatur:   "temperature_sensor"
-    temperaturen: "temperature_sensor"
-    warm:         "temperature_sensor"
-    fenster:      "window"
-    tuer:         "door"
-    tueren:       "door"
-    rollladen:    "blind"
-    luftqualitaet: "air_quality_sensor"
-    iaq:          "air_quality_sensor"
-    co2:          "air_quality_sensor"
-    voc:          "air_quality_sensor"
-    luftguete:    "air_quality_sensor"
-    luft:         "air_quality_sensor"
-    raumluft:     "air_quality_sensor"
-    luftfeuchtigkeit: "humidity_sensor"
-    luftfeuchte:  "humidity_sensor"
-    feuchtigkeit: "humidity_sensor"
-    feuchte:      "humidity_sensor"
-  # Fragewörter (lösen Query-Intent aus)
-  query_words:
-    - "ist"
-    - "sind"
-    - "wie"
-    - "was"
-    - "welche"
-    - "wieviel"
-    - "status"
-  # Einheiten für SetValue
-  temperature_units:
-    - "grad"
-    - "°c"
-    - "°"
-    - "celsius"
-  percentage_units:
-    - "prozent"
-    - "%"
+# NLU-Wortlisten (turn_on_words, turn_off_words, category_words, query_words,
+# temperature_units, percentage_units) liegen komplett in den DB-Settings
+# (Kategorie "nlu"), nicht mehr hier — siehe Admin-UI / GetSettings/UpdateConfig gRPC.
 
 llm:
   enabled: false          # true = LLM aktiv (Smalltalk, Notification-Reformulierung)
@@ -239,19 +156,9 @@ llm:
   #   → Funktioniert nur mit selbst gehostetem Ollama.
   #
   # Für Cloud-Anbieter (OpenAI, Groq, Mistral) oder Standard-Modelle:
-  #   system_prompt hier eintragen. Antworten werden per TTS vorgelesen —
-  #   kurze Sätze, kein Markdown, keine Emojis.
-  #
-  # system_prompt: |
-  #   Du bist Hannah. Deine Antworten werden per Sprachausgabe vorgelesen.
-  #   Deshalb: maximal 2 kurze Sätze, keine Listen, keine Aufzählungen, keine Klammern,
-  #   keine Emojis, keine Markdown-Formatierung. Schreib wie du sprichst.
-  #
-  #   Wer du bist:
-  #   [Hier deine Figur beschreiben]
-  #
-  #   Persönlichkeit:
-  #   [Charakter, Werte, Hobbys, Besonderheiten]
+  #   system_prompt liegt in den DB-Settings (Kategorie "llm", Key "system_prompt"),
+  #   nicht mehr hier — siehe Admin-UI / GetSettings/UpdateConfig gRPC.
+  #   Antworten werden per TTS vorgelesen — kurze Sätze, kein Markdown, keine Emojis.
 
 memory:
   db: "memory.db"        # SQLite-Datei für Langzeitgedächtnis (relativ zum Arbeitsverzeichnis)

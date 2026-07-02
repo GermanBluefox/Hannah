@@ -5,6 +5,11 @@
 -->
 
 
+## 0.50.1
+### Hannah Core
+* Changed: `config.example.yaml` trimmed to the settings that actually stay YAML-only — `nlu.*` (word lists), `llm.system_prompt`, `ble.tags`, `cars` and `iobroker.state_names` are DB-Settings now (`migrate_config_settings.py`, #27 Phase 5); `config.yaml` keeps infra/bootstrap config (connections, credentials, paths)
+* Removed: `core/routines.yaml`/`core/triggers.yaml` — dead since routines/triggers moved to the DB-backed `Routine`/`Trigger` models (`migrate_triggers_routines.py`, #27 Phase 4); nothing in the codebase loaded them anymore
+
 ## 0.50.0
 ### Hannah Core
 * Added: recurring alarm clock ("Wecker"), fully rebuilt on top of a new DB-backed `Alarm` model/`AlarmManager` (replaces the old JSON-file-backed, one-shot-only `AlarmManager`). Voice support for setting ("stelle einen Wecker für Montag 8 Uhr", with a Mon-Fri recurring follow-up question for a single weekday), deleting ("lösche meinen Wecker für morgen 8 Uhr" — matches across all satellites, not just the one it's bound to; deleting one occurrence of a recurring series asks whether to delete the whole series), querying ("welche Wecker habe ich"), and stopping a currently-ringing alarm via the existing generic `StopIntent` ("Stopp"). Ringing plays a looping `alarm_ring` asset with alternating volume via MQTT until stopped, then restores the satellite's prior volume. New `Alarm` gRPC message + `GetAlarms`/`CreateAlarm`/`UpdateAlarm`/`DeleteAlarm` RPCs for the future WebUI's alarm management (no consumer in this repo yet). `pending_clarification` (used for the Mon-Fri yes/no follow-ups) gained a `kind`/`payload` discriminator, backward-compatible with the existing room-disambiguation flow (Refs #4)

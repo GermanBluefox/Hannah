@@ -1,0 +1,79 @@
+import datetime
+
+import pytest
+
+from hannah.nlu import NLU, resolve_yes_no
+
+
+@pytest.fixture
+def nlu():
+    return NLU(cfg={}, rooms={}, devices={})
+
+
+class TestSetAlarmWeekday:
+    """#4 — SetAlarm erkennt jetzt zusätzlich zur Uhrzeit einen einzelnen Wochentag."""
+
+    def test_single_weekday_parsed(self, nlu):
+        intent = nlu.parse("stelle einen wecker fuer montag 8 uhr")
+
+        assert intent.name == "SetAlarm"
+        assert intent.value == "08:00"
+        assert intent.weekdays == [0]
+
+    def test_no_weekday_falls_back_to_time_only(self, nlu):
+        intent = nlu.parse("stelle einen wecker um 8 uhr")
+
+        assert intent.name == "SetAlarm"
+        assert intent.value == "08:00"
+        assert intent.weekdays == []
+
+
+class TestDeleteAlarm:
+    """#4 — 'lösche'/'entferne' im Wecker-Kontext geht vor SetAlarm, auch wenn eine
+    Uhrzeit im Satz steckt."""
+
+    def test_relative_date_and_time(self, nlu):
+        intent = nlu.parse("loesche meinen wecker fuer morgen 8 uhr")
+
+        assert intent.name == "DeleteAlarm"
+        assert intent.value == "08:00"
+        assert intent.resolved_date == datetime.date.today() + datetime.timedelta(days=1)
+
+    def test_weekday_resolves_to_concrete_date(self, nlu):
+        intent = nlu.parse("loesche meinen wecker fuer montag")
+
+        assert intent.name == "DeleteAlarm"
+        assert intent.resolved_date is not None
+        assert intent.resolved_date.weekday() == 0
+
+    def test_takes_priority_over_set_alarm(self, nlu):
+        """Ohne die Priorisierung würde das enthaltene alarm_time='08:00' das als
+        SetAlarm durchgehen lassen."""
+        intent = nlu.parse("entferne den wecker fuer heute 8 uhr")
+
+        assert intent.name == "DeleteAlarm"
+        assert intent.resolved_date == datetime.date.today()
+
+
+class TestQueryAlarms:
+    def test_welche_wecker(self, nlu):
+        intent = nlu.parse("welche wecker habe ich gestellt")
+
+        assert intent.name == "QueryAlarms"
+
+    def test_non_alarm_query_unaffected(self, nlu):
+        """Ohne Wecker-Kontext darf 'welche' keine QueryAlarms triggern."""
+        intent = nlu.parse("welche temperatur haben wir")
+
+        assert intent.name != "QueryAlarms"
+
+
+class TestResolveYesNo:
+    def test_yes(self):
+        assert resolve_yes_no("ja gerne") is True
+
+    def test_no(self):
+        assert resolve_yes_no("nein danke") is False
+
+    def test_unrecognized(self):
+        assert resolve_yes_no("was meinst du") is None

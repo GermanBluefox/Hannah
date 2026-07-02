@@ -83,6 +83,12 @@ service HannahService {
   rpc UpdateTrigger (UpdateTriggerRequest) returns (StatusResponse);
   rpc DeleteTrigger (DeleteTriggerRequest) returns (StatusResponse);
 
+  // --- Alarms (Wecker, #4) ---
+  rpc GetAlarms    (Empty)              returns (GetAlarmsResponse);
+  rpc CreateAlarm  (CreateAlarmRequest) returns (CreateAlarmResponse);
+  rpc UpdateAlarm  (UpdateAlarmRequest) returns (StatusResponse);
+  rpc DeleteAlarm  (DeleteAlarmRequest) returns (StatusResponse);
+
   // --- Settings (Admin-UI, #27 Phase 5) ---
   rpc GetSettings   (Empty)                returns (GetSettingsResponse);
   rpc UpdateConfig  (UpdateConfigRequest)  returns (StatusResponse);
@@ -502,6 +508,61 @@ message UpdateTriggerRequest {
 
 message DeleteTriggerRequest {
   string id = 1;
+}
+
+// --- Alarms (Wecker, #4) ---
+//
+// Anders als Routine.actions_json/Trigger.when_json sind weekdays/skip_dates flache
+// skalare Listen (Ints 0-6 / ISO-Datumsstrings) ohne heterogene Verschachtelung, daher
+// als native repeated-Felder statt als JSON-String-Blob modelliert. Semantik siehe
+// AlarmManager-Docstring in core/hannah/timers.py: weekdays leer = One-off-Alarm
+// (one_shot_date ist dann das einzige Zieldatum), weekdays gesetzt = wiederkehrend
+// (skip_dates schließt einzelne Termine aus der Serie aus).
+
+message Alarm {
+  int32  id            = 1;
+  string satellite_id  = 2;
+  string time          = 3;   // "HH:MM"
+  repeated int32  weekdays   = 4;   // 0=Mo..6=So; leer = One-off
+  repeated string skip_dates = 5;   // ISO-Daten, aus einer wiederkehrenden Serie ausgeschlossen
+  string one_shot_date = 6;   // ISO-Datum; nur relevant wenn weekdays leer ist
+  bool   enabled        = 7;
+  string label           = 8;
+  int32  user_id         = 9;
+}
+
+message GetAlarmsResponse {
+  repeated Alarm alarms = 1;
+}
+
+message CreateAlarmRequest {
+  string satellite_id  = 1;
+  string time          = 2;
+  repeated int32 weekdays = 3;
+  string one_shot_date = 4;
+  string label          = 5;
+  int32  user_id        = 6;
+}
+
+message CreateAlarmResponse {
+  bool   ok      = 1;
+  int32  id      = 2;
+  string message = 3;
+}
+
+message UpdateAlarmRequest {
+  int32  id             = 1;
+  string satellite_id   = 2;
+  string time           = 3;
+  repeated int32  weekdays   = 4;
+  repeated string skip_dates = 5;
+  string one_shot_date  = 6;
+  bool   enabled         = 7;
+  string label            = 8;
+}
+
+message DeleteAlarmRequest {
+  int32 id = 1;
 }
 
 // --- Settings (Admin-UI, #27 Phase 5) ---

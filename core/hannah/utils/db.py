@@ -100,6 +100,22 @@ CREATE TABLE IF NOT EXISTS "routines" (
 	UNIQUE("name")
 );
 
+CREATE TABLE IF NOT EXISTS "alarms" (
+	"id"	INTEGER NOT NULL,
+	"satellite_id"	TEXT NOT NULL,
+	"time"	TEXT NOT NULL,
+	"weekdays"	TEXT,
+	"skip_dates"	TEXT NOT NULL DEFAULT '[]',
+	"one_shot_date"	TEXT,
+	"enabled"	INTEGER NOT NULL DEFAULT 1,
+	"label"	TEXT,
+	"user_id"	INTEGER NOT NULL,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("satellite_id") REFERENCES "satellites"("device_id") ON DELETE CASCADE,
+	FOREIGN KEY("user_id") REFERENCES "users"("id") ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS "settings_category" (
 	"id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,

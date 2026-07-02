@@ -118,6 +118,10 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         create_trigger: Optional[Callable[..., bool]] = None,                    # (id, when, cancel_when, on_response, say, ask, rephrase, room, cooldown, delay) → bool
         update_trigger: Optional[Callable[..., bool]] = None,                    # gleiche Signatur wie create_trigger → bool
         delete_trigger: Optional[Callable[[str], bool]] = None,                  # (id) → bool
+        get_alarm_records: Optional[Callable[[], list]] = None,                  # () → [{id, satellite_id, time, weekdays, skip_dates, one_shot_date, enabled, label, user_id}]
+        create_alarm: Optional[Callable[..., dict]] = None,                      # (satellite_id, time, weekdays, one_shot_date, user_id, label) → dict
+        update_alarm: Optional[Callable[..., bool]] = None,                      # (id, satellite_id, time, weekdays, skip_dates, one_shot_date, enabled, label) → bool
+        delete_alarm: Optional[Callable[[int], bool]] = None,                    # (id) → bool
         get_categories: Optional[Callable[[], list]] = None,                     # () → [{id, name, parent}]
         get_settings_records: Optional[Callable[[], list]] = None,               # () → [{id, category, name, value}]
         create_setting: Optional[Callable[[int, str, object], Optional[dict]]] = None,  # (category_id, name, value) → dict | None
@@ -180,6 +184,10 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._create_trigger            = create_trigger or (lambda *_: False)
         self._update_trigger            = update_trigger or (lambda *_: False)
         self._delete_trigger            = delete_trigger or (lambda *_: False)
+        self._get_alarm_records         = get_alarm_records or (lambda: [])
+        self._create_alarm              = create_alarm or (lambda *_a, **_k: None)
+        self._update_alarm              = update_alarm or (lambda *_: False)
+        self._delete_alarm              = delete_alarm or (lambda *_: False)
         self._get_categories            = get_categories or (lambda: [])
         self._get_settings_records      = get_settings_records or (lambda: [])
         self._create_setting            = create_setting or (lambda *_: None)
@@ -645,6 +653,29 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
 
     def DeleteTrigger(self, request, _context):
         ok = self._delete_trigger(request.id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
+
+    # ------------------------------------------------------------------
+    # Alarms (Wecker, #4)
+
+    def GetAlarms(self, _request, _context):
+        return pb.GetAlarmsResponse(alarms=[_alarm_to_pb(a) for a in self._get_alarm_records()])
+
+    def CreateAlarm(self, request, _context):
+        record = self._create_alarm(request.satellite_id, request.time, list(request.weekdays) or None,
+                                     request.one_shot_date or None, request.user_id, request.label)
+        if record is None:
+            return pb.CreateAlarmResponse(ok=False, message="invalid alarm")
+        return pb.CreateAlarmResponse(ok=True, id=record["id"], message="created")
+
+    def UpdateAlarm(self, request, _context):
+        ok = self._update_alarm(request.id, request.satellite_id, request.time, list(request.weekdays) or None,
+                                 list(request.skip_dates), request.one_shot_date or None, request.enabled,
+                                 request.label)
+        return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
+
+    def DeleteAlarm(self, request, _context):
+        ok = self._delete_alarm(request.id)
         return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
 
     # ------------------------------------------------------------------
@@ -1474,6 +1505,20 @@ def _trigger_to_pb(t: dict) -> pb.Trigger:
         room=t.get("room") or "all",
         cooldown=int(t.get("cooldown") or 3600),
         delay=t.get("delay") or "",
+    )
+
+
+def _alarm_to_pb(a: dict) -> pb.Alarm:
+    return pb.Alarm(
+        id=a["id"],
+        satellite_id=a.get("satellite_id") or "",
+        time=a.get("time") or "",
+        weekdays=a.get("weekdays") or [],
+        skip_dates=a.get("skip_dates") or [],
+        one_shot_date=a.get("one_shot_date") or "",
+        enabled=bool(a.get("enabled", True)),
+        label=a.get("label") or "",
+        user_id=a.get("user_id") or 0,
     )
 
 

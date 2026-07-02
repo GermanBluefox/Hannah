@@ -11,10 +11,10 @@ from hannah.user_manager import UserManager
 from hannah.models.user import User
 from hannah.residents.Roomie import Roomie
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, SetSatelliteOwnerRequest, DeleteSatelliteRequest, AnnounceRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, SetSatelliteOwnerRequest, DeleteSatelliteRequest, AnnounceRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, CreateAlarmRequest, UpdateAlarmRequest, DeleteAlarmRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
 from hannah.satellite_manager import SatellitePermissionError
 
-def _make_server(user_manager=None,satellite_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,set_satellite_owner=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None,get_residents=None):
+def _make_server(user_manager=None,satellite_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,set_satellite_owner=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_alarm_records=None,create_alarm=None,update_alarm=None,delete_alarm=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None,get_residents=None):
     return HannahServicer(
         user_manager=user_manager or MagicMock(),
         satellite_manager=satellite_manager or MagicMock(),
@@ -48,6 +48,10 @@ def _make_server(user_manager=None,satellite_manager=None,handle_text=None,handl
         create_trigger=create_trigger,
         update_trigger=update_trigger,
         delete_trigger=delete_trigger,
+        get_alarm_records=get_alarm_records,
+        create_alarm=create_alarm,
+        update_alarm=update_alarm,
+        delete_alarm=delete_alarm,
         get_categories=get_categories,
         get_settings_records=get_settings_records,
         create_setting=create_setting,
@@ -721,6 +725,73 @@ class TestTriggerRpcs:
         response = servicer.DeleteTrigger(DeleteTriggerRequest(id="fenster_kalt"), None)
 
         delete_trigger.assert_called_once_with("fenster_kalt")
+        assert response.ok is True
+
+class TestAlarmRpcs:
+    """#4 — Verdrahtung auf AlarmManager.get_alarm_records/create_alarm/update_alarm/
+    delete_alarm. Wie bei Routine/Trigger reine Weiterleitung, Berechtigungs-/Fachlogik
+    lebt im Manager (siehe test_alarm_manager.py)."""
+
+    def test_get_alarms(self):
+        get_alarm_records = MagicMock(return_value=[{
+            "id": 1, "satellite_id": "wz-sat", "time": "08:00", "weekdays": [0, 1, 2, 3, 4],
+            "skip_dates": [], "one_shot_date": "", "enabled": True, "label": "Aufstehen", "user_id": 3,
+        }])
+        servicer = _make_server(get_alarm_records=get_alarm_records)
+
+        response = servicer.GetAlarms(None, None)
+
+        assert len(response.alarms) == 1
+        a = response.alarms[0]
+        assert a.id == 1
+        assert a.satellite_id == "wz-sat"
+        assert list(a.weekdays) == [0, 1, 2, 3, 4]
+        assert a.label == "Aufstehen"
+        assert a.user_id == 3
+
+    def test_create_alarm_ok(self):
+        create_alarm = MagicMock(return_value={"id": 7})
+        servicer = _make_server(create_alarm=create_alarm)
+
+        response = servicer.CreateAlarm(CreateAlarmRequest(
+            satellite_id="wz-sat", time="08:00", weekdays=[0], one_shot_date="", label="", user_id=3,
+        ), None)
+
+        create_alarm.assert_called_once_with("wz-sat", "08:00", [0], None, 3, "")
+        assert response.ok is True
+        assert response.id == 7
+
+    def test_create_alarm_one_off_no_weekdays(self):
+        create_alarm = MagicMock(return_value={"id": 8})
+        servicer = _make_server(create_alarm=create_alarm)
+
+        servicer.CreateAlarm(CreateAlarmRequest(
+            satellite_id="wz-sat", time="08:00", one_shot_date="2026-07-06", user_id=3,
+        ), None)
+
+        create_alarm.assert_called_once_with("wz-sat", "08:00", None, "2026-07-06", 3, "")
+
+    def test_create_alarm_invalid(self):
+        servicer = _make_server(create_alarm=MagicMock(return_value=None))
+
+        response = servicer.CreateAlarm(CreateAlarmRequest(satellite_id="wz-sat", time="08:00"), None)
+
+        assert response.ok is False
+
+    def test_update_alarm_not_found(self):
+        servicer = _make_server(update_alarm=MagicMock(return_value=False))
+
+        response = servicer.UpdateAlarm(UpdateAlarmRequest(id=99, satellite_id="wz-sat", time="08:00"), None)
+
+        assert response.ok is False
+
+    def test_delete_alarm_ok(self):
+        delete_alarm = MagicMock(return_value=True)
+        servicer = _make_server(delete_alarm=delete_alarm)
+
+        response = servicer.DeleteAlarm(DeleteAlarmRequest(id=7), None)
+
+        delete_alarm.assert_called_once_with(7)
         assert response.ok is True
 
 class TestSettingsRpcs:

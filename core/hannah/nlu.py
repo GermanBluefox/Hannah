@@ -1,3 +1,4 @@
+import datetime
 import re
 import logging
 from dataclasses import dataclass, field
@@ -23,6 +24,11 @@ _MINUTE_WORDS: dict[str, int] = {
     "null": 0, "fuenf": 5, "zehn": 10, "fuenfzehn": 15, "zwanzig": 20,
     "fuenfundzwanzig": 25, "dreissig": 30, "fuenfunddreissig": 35,
     "vierzig": 40, "fuenfundvierzig": 45, "fuenfzig": 50, "fuenfundfuenfzig": 55,
+}
+
+_WEEKDAYS_DE: dict[str, int] = {
+    "montag": 0, "dienstag": 1, "mittwoch": 2, "donnerstag": 3,
+    "freitag": 4, "samstag": 5, "sonnabend": 5, "sonntag": 6,
 }
 
 def _normalize(s: str) -> str:
@@ -75,6 +81,8 @@ class Intent:
     raw_text: str = ""
     confidence: float = 1.0
     candidates: list = field(default_factory=list)  # [(room_id, room_name), ...] bei Mehrdeutigkeit
+    weekdays: list = field(default_factory=list)     # [0-6, ...] SetAlarm: erkannter Wochentag (max. 1)
+    resolved_date: Optional[object] = None           # datetime.date; DeleteAlarm: konkretes Zieldatum
 
     def to_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items() if v is not None and v != []}
@@ -168,6 +176,14 @@ class NLU:
             "stumm", "mikrofon",
         ]))
 
+        # DeleteAlarm / QueryAlarms: nur im Wecker-Kontext relevant (#4)
+        self._alarm_delete_words: set[str] = set(cfg.get("alarm_delete_words", [
+            "loesche", "loeschen", "entferne", "entfernen",
+        ]))
+        self._alarm_query_words: set[str] = set(cfg.get("alarm_query_words", [
+            "welche", "welchen", "welchem", "was", "liste", "zeig", "zeige",
+        ]))
+
     def _split_compounds(self, text: str) -> str:
         """Trennt deutsche Komposita aus Raumteil + Kategorie.
 
@@ -221,7 +237,10 @@ class NLU:
         _timer_trigger = bool({"timer"} & norm_tokens) or any(t.startswith("erinner") for t in norm_tokens)
         timer_seconds       = self._find_timer_seconds(raw) if _timer_trigger else None
         timer_label         = self._find_timer_label(raw) if timer_seconds is not None else None
-        alarm_time          = self._find_alarm_time(raw) if bool({"wecker", "alarm"} & norm_tokens) else None
+        _alarm_context      = bool({"wecker", "alarm"} & norm_tokens)
+        alarm_time          = self._find_alarm_time(raw) if _alarm_context else None
+        alarm_weekday       = self._find_weekday(norm_tokens) if _alarm_context else None
+        alarm_relative_date = self._find_relative_date(norm_tokens) if _alarm_context else None
 
         no_device_context = device is None and room_key is None and category_filter is None
         # Mehrdeutige Farbwörter (z.B. "weiß" = Verb) nur werten wenn Gerätekontext vorhanden
@@ -297,6 +316,15 @@ class NLU:
             and bool(self._mute_words & norm_tokens)
         )
 
+        # DeleteAlarm / QueryAlarms: nur mit Wecker-Kontext (#4). is_delete_alarm hat
+        # Vorrang, damit "lösche meinen Wecker für morgen 8 Uhr" nicht wegen des
+        # enthaltenen alarm_time als SetAlarm durchgeht.
+        is_delete_alarm = _alarm_context and bool(self._alarm_delete_words & norm_tokens)
+        is_query_alarms = (
+            _alarm_context and not is_delete_alarm
+            and bool(self._alarm_query_words & norm_tokens)
+        )
+
         # Smalltalk-Fallback: keine ausführbare Aktion, kein Spezial-Intent.
         # Wenn kein Gerätekontext (Raum/Gerät/Kategorie) vorliegt → immer Smalltalk.
         # Wenn ein Gerätekontext vorliegt aber kein Steuerbefehl ableitbar ist, dann
@@ -313,6 +341,8 @@ class NLU:
             and not is_resume
             and not is_dnd
             and not is_mute_cmd
+            and not is_delete_alarm
+            and not is_query_alarms
             and (action is None or not _has_action_context)
             and level is None
             and temperature is None
@@ -326,6 +356,8 @@ class NLU:
         )
 
         intent_label: Optional[str] = None
+        intent_weekdays: list[int] = []
+        intent_resolved_date: Optional[datetime.date] = None
 
         if is_car:
             car_scope = self._find_car_scope(norm_tokens)
@@ -350,8 +382,16 @@ class NLU:
         elif timer_seconds is not None:
             intent_name, value, unit = "SetTimer", timer_seconds, None
             intent_label = timer_label
+        elif is_delete_alarm:
+            intent_name, value, unit = "DeleteAlarm", alarm_time, None
+            intent_resolved_date = alarm_relative_date or (
+                self._weekday_to_next_date(alarm_weekday) if alarm_weekday is not None else None
+            )
+        elif is_query_alarms:
+            intent_name, value, unit = "QueryAlarms", None, None
         elif alarm_time is not None:
             intent_name, value, unit = "SetAlarm", alarm_time, None
+            intent_weekdays = [alarm_weekday] if alarm_weekday is not None else []
         elif is_smalltalk:
             intent_name, value, unit = "Smalltalk", None, None
         elif is_query and not no_device_context:
@@ -388,6 +428,8 @@ class NLU:
             label=intent_label,
             raw_text=raw,
             candidates=room_candidates if _actionable else [],
+            weekdays=intent_weekdays,
+            resolved_date=intent_resolved_date,
         )
         log.debug(f"NLU: {intent}")
         return intent
@@ -596,6 +638,33 @@ class NLU:
 
         return None
 
+    def _find_weekday(self, norm_tokens: set[str]) -> Optional[int]:
+        """Erkennt einen einzelnen Wochentag aus normalisierten Tokens (0=Mo..6=So).
+        Nur EIN Wochentag pro Äußerung wird unterstützt — der SetAlarm-Handler fragt bei
+        einem einzelnen Tag explizit nach einer Mo-Fr-Erweiterung nach (#4)."""
+        for word, idx in _WEEKDAYS_DE.items():
+            if word in norm_tokens:
+                return idx
+        return None
+
+    def _find_relative_date(self, norm_tokens: set[str]) -> Optional[datetime.date]:
+        """'heute'/'morgen'/'übermorgen' → konkretes Datum, sonst None (Wochentage werden
+        separat in _find_weekday erkannt und vom Aufrufer zu einem Datum aufgelöst)."""
+        today = datetime.date.today()
+        if "morgen" in norm_tokens:
+            return today + datetime.timedelta(days=1)
+        if "uebermorgen" in norm_tokens:
+            return today + datetime.timedelta(days=2)
+        if "heute" in norm_tokens:
+            return today
+        return None
+
+    def _weekday_to_next_date(self, weekday: int) -> datetime.date:
+        """Nächstes Datum (heute oder später) für den gegebenen Wochentag (0=Mo..6=So)."""
+        today = datetime.date.today()
+        delta = (weekday - today.weekday()) % 7
+        return today + datetime.timedelta(days=delta)
+
     def _find_fan_speed(self, norm_tokens: set[str]) -> Optional[str]:
         """Erkennt Lüftergeschwindigkeit aus normalisierten Tokens."""
         if norm_tokens & {"leise", "langsam", "niedrig", "schwach"}:
@@ -710,3 +779,19 @@ def resolve_clarification_answer(
             best = (room_id, room_name)
 
     return best if best_score > 0 else None
+
+
+_YES_WORDS = {"ja", "jep", "jup", "jo", "klar", "gerne", "genau", "positiv", "mach"}
+_NO_WORDS  = {"nein", "ne", "nee", "negativ", "lass"}
+
+
+def resolve_yes_no(text: str) -> Optional[bool]:
+    """Gibt True/False zurück, oder None wenn weder eindeutig Ja noch Nein erkannt wurde.
+    Für Ja/Nein-Rückfragen (z.B. Wecker-Serie-Erweiterung/-Löschung, #4) — NICHT für
+    Raum-Klarifizierung, siehe resolve_clarification_answer."""
+    words = set(_normalize(text).split())
+    if words & _NO_WORDS:
+        return False
+    if words & _YES_WORDS:
+        return True
+    return None

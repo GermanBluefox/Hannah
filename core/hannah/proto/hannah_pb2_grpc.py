@@ -227,6 +227,26 @@ class HannahServiceStub:
                 request_serializer=hannah__pb2.DeleteTriggerRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
+        self.GetAlarms = channel.unary_unary(
+                '/hannah.HannahService/GetAlarms',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetAlarmsResponse.FromString,
+                _registered_method=True)
+        self.CreateAlarm = channel.unary_unary(
+                '/hannah.HannahService/CreateAlarm',
+                request_serializer=hannah__pb2.CreateAlarmRequest.SerializeToString,
+                response_deserializer=hannah__pb2.CreateAlarmResponse.FromString,
+                _registered_method=True)
+        self.UpdateAlarm = channel.unary_unary(
+                '/hannah.HannahService/UpdateAlarm',
+                request_serializer=hannah__pb2.UpdateAlarmRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteAlarm = channel.unary_unary(
+                '/hannah.HannahService/DeleteAlarm',
+                request_serializer=hannah__pb2.DeleteAlarmRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.GetSettings = channel.unary_unary(
                 '/hannah.HannahService/GetSettings',
                 request_serializer=hannah__pb2.Empty.SerializeToString,
@@ -579,6 +599,31 @@ class HannahServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAlarms(self, request, context):
+        """--- Alarms (Wecker, #4) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateAlarm(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateAlarm(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteAlarm(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetSettings(self, request, context):
         """--- Settings (Admin-UI, #27 Phase 5) ---
         """
@@ -919,6 +964,26 @@ def add_HannahServiceServicer_to_server(servicer, server):
             'DeleteTrigger': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteTrigger,
                     request_deserializer=hannah__pb2.DeleteTriggerRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetAlarms': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAlarms,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetAlarmsResponse.SerializeToString,
+            ),
+            'CreateAlarm': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateAlarm,
+                    request_deserializer=hannah__pb2.CreateAlarmRequest.FromString,
+                    response_serializer=hannah__pb2.CreateAlarmResponse.SerializeToString,
+            ),
+            'UpdateAlarm': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateAlarm,
+                    request_deserializer=hannah__pb2.UpdateAlarmRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteAlarm': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteAlarm,
+                    request_deserializer=hannah__pb2.DeleteAlarmRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
             'GetSettings': grpc.unary_unary_rpc_method_handler(
@@ -2006,6 +2071,114 @@ class HannahService:
             target,
             '/hannah.HannahService/DeleteTrigger',
             hannah__pb2.DeleteTriggerRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAlarms(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetAlarms',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetAlarmsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateAlarm(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateAlarm',
+            hannah__pb2.CreateAlarmRequest.SerializeToString,
+            hannah__pb2.CreateAlarmResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateAlarm(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateAlarm',
+            hannah__pb2.UpdateAlarmRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteAlarm(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteAlarm',
+            hannah__pb2.DeleteAlarmRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
             options,
             channel_credentials,

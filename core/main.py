@@ -34,7 +34,7 @@ from hannah.routines import RoutineManager
 from hannah.grpc_server import GrpcServer, HannahServicer, make_car_parked_event, make_firmware_event, make_resident_event, make_system_notification_event, pb
 from hannah.iobroker import IoBrokerClient
 from hannah.mqtt_handler import MQTTHandler
-from hannah.nlu import NLU, Intent, build_clarification_question, resolve_clarification_answer
+from hannah.nlu import NLU, Intent, build_clarification_question, resolve_clarification_answer, resolve_yes_no
 from hannah.residents_manager import ResidentsClient
 from hannah.stt import STT
 from hannah.tts import TTS
@@ -49,7 +49,7 @@ from hannah.settings_manager import SettingsManager
 from hannah.weather import WeatherCache
 from hannah.trigger_engine import TriggerEngine
 from hannah.ble_location import BleLocationEngine, BleTag
-from hannah.timers import AlarmManager, HannahTimerStore, format_duration, next_alarm_dt
+from hannah.timers import AlarmManager, HannahTimerStore, format_duration
 from hannah.__version__ import VERSION as HANNAH_VERSION
 
 
@@ -203,6 +203,84 @@ def main():
     audio_cfg = cfg.get("audio", {})
 
     # ------------------------------------------------------------------
+    # Wecker-Attribuierung (#4): Sprecher (Voice-ID) → Satelliten-Owner → System-User "hannah".
+    # pipeline() (reiner UDP-Pfad, kein Proxy/VoiceID) hat nie einen speaker_user_id und
+    # landet damit praktisch immer bei Owner/System-User.
+
+    _hannah_system_user_id: Optional[int] = None
+
+    def _resolve_alarm_user_id(speaker_user_id, device: str) -> int:
+        nonlocal _hannah_system_user_id
+        if speaker_user_id:
+            try:
+                return int(speaker_user_id)
+            except (TypeError, ValueError):
+                pass
+        owner = satellite_manager.get_satellite_owner(device)
+        if owner:
+            return owner
+        if _hannah_system_user_id is None:
+            hannah_user = _user_manager.get_user_by_username("hannah")
+            _hannah_system_user_id = hannah_user.id if hannah_user else 0
+        return _hannah_system_user_id
+
+    _WEEKDAY_NAMES_DE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+
+    def _next_alarm_date(time_str: str) -> datetime.date:
+        """Ersetzt next_alarm_dt() aus der alten JSON-AlarmManager-Implementierung —
+        nächstes Datum (heute oder morgen) für eine Uhrzeit ohne Wochentagsangabe."""
+        h, m = map(int, time_str.split(":"))
+        now = datetime.datetime.now()
+        dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        if dt <= now:
+            dt += datetime.timedelta(days=1)
+        return dt.date()
+
+    def _alarm_weekday_to_date(weekday: int) -> datetime.date:
+        today = datetime.date.today()
+        return today + datetime.timedelta(days=(weekday - today.weekday()) % 7)
+
+    def _format_alarm_date(d: datetime.date) -> str:
+        today = datetime.date.today()
+        if d == today:
+            return "heute"
+        if d == today + datetime.timedelta(days=1):
+            return "morgen"
+        return _WEEKDAY_NAMES_DE[d.weekday()]
+
+    def _format_alarm_list(records: list[dict], requesting_device: str) -> str:
+        if not records:
+            return "Du hast keine Wecker gestellt."
+        parts = []
+        for r in records:
+            if r["weekdays"]:
+                when = ", ".join(_WEEKDAY_NAMES_DE[w] for w in r["weekdays"])
+            else:
+                when = _format_alarm_date(datetime.date.fromisoformat(r["one_shot_date"]))
+            loc = f" auf {r['satellite_id']}" if r["satellite_id"] != requesting_device else ""
+            parts.append(f"{when} um {r['time']} Uhr{loc}")
+        return "Deine Wecker: " + "; ".join(parts) + "."
+
+    def _resolve_alarm_confirmation(kind: str, payload: dict, text: str) -> str:
+        """Antwortet auf die Ja/Nein-Rückfragen aus SetAlarm/DeleteAlarm (#4)."""
+        answer = resolve_yes_no(text)
+        if kind == "alarm_expand":
+            if answer is True:
+                weekday = payload["weekday"]
+                alarm_manager.update_alarm(
+                    payload["alarm_id"], payload["satellite_id"], payload["time"],
+                    weekdays=list(range(weekday, 5)), skip_dates=[], one_shot_date=None, enabled=True,
+                )
+                return f"Ok, Wecker von {_WEEKDAY_NAMES_DE[weekday]} bis Freitag angelegt."
+            return "Ok, bleibt bei dem einen Termin."
+        if kind == "alarm_delete_series":
+            if answer is True:
+                alarm_manager.delete_alarm(payload["alarm_id"])
+                return "Ok, den ganzen Wecker gelöscht."
+            return "Ok, der Rest der Serie bleibt bestehen."
+        return ""
+
+    # ------------------------------------------------------------------
     # Kern-Pipeline: numpy-Array → Intent → Gerät schalten (Sprach-Pfad)
 
     def pipeline(device: str, audio_array, publish_error, publish_answer):
@@ -235,6 +313,12 @@ def main():
         # Offene Rückfrage auflösen
         if conv_ctx.has_clarification(device):
             clarification = conv_ctx.get_clarification(device)
+            kind = clarification.get("type", "room")
+            if kind in ("alarm_expand", "alarm_delete_series"):
+                conv_ctx.clear_clarification(device)
+                reply = _resolve_alarm_confirmation(kind, clarification["payload"], text)
+                _handle_feedback(device, True, reply)
+                return
             resolved = resolve_clarification_answer(text, clarification["candidates"])
             if resolved:
                 conv_ctx.clear_clarification(device)
@@ -293,6 +377,10 @@ def main():
         elif intent.name in ("StopIntent", "PauseIntent", "ResumeIntent"):
             cmd_type = {"StopIntent": "stop", "PauseIntent": "pause", "ResumeIntent": "resume"}[intent.name]
             targets = _resolve_targets(intent.room_id or device)
+            if intent.name == "StopIntent":
+                for t in targets:
+                    if alarm_manager.is_ringing(t):
+                        alarm_manager.stop_ringing(t)
             for t in targets:
                 udp_server.send_command(t, {"type": cmd_type})
         elif intent.name == "SetTimer":
@@ -308,12 +396,49 @@ def main():
                 reply = f"Timer für {format_duration(seconds)} gesetzt: {intent.label}."
             _handle_feedback(device, True, reply)
         elif intent.name == "SetAlarm":
-            alarm_cfg = cfg.get("alarm", {})
-            target = alarm_cfg.get("satellite") or device
-            alarm_manager.set(target, intent.value, set_by=device)
-            dt = next_alarm_dt(intent.value)
-            label = f"morgen um {dt.strftime('%H:%M')} Uhr" if dt.date() > datetime.datetime.now().date() else f"um {dt.strftime('%H:%M')} Uhr"
-            _handle_feedback(device, True, f"Wecker gestellt {label}.")
+            user_id = _resolve_alarm_user_id(None, device)
+            weekday = intent.weekdays[0] if intent.weekdays else None
+            if weekday is not None:
+                target_date = _alarm_weekday_to_date(weekday)
+                record = alarm_manager.create_alarm(device, intent.value, None, target_date.isoformat(), user_id)
+                weekday_name = _WEEKDAY_NAMES_DE[weekday]
+                conv_ctx.set_clarification(device, None, [], kind="alarm_expand", payload={
+                    "alarm_id": record["id"], "satellite_id": device, "time": intent.value, "weekday": weekday,
+                })
+                _handle_feedback(device, True, (
+                    f"Wecker für {weekday_name} um {intent.value} Uhr gestellt. "
+                    f"Soll ich den Wecker von {weekday_name} bis Freitag anlegen?"
+                ))
+            else:
+                target_date = _next_alarm_date(intent.value)
+                alarm_manager.create_alarm(device, intent.value, None, target_date.isoformat(), user_id)
+                label = _format_alarm_date(target_date)
+                _handle_feedback(device, True, f"Wecker gestellt für {label} um {intent.value} Uhr.")
+        elif intent.name == "DeleteAlarm":
+            if intent.resolved_date is None:
+                _handle_feedback(device, False, "Für welchen Tag soll ich den Wecker löschen?")
+            else:
+                matches = alarm_manager.find_occurrences(None, intent.resolved_date)
+                if intent.value:
+                    matches = [m for m in matches if m["time"] == intent.value]
+                if not matches:
+                    _handle_feedback(device, False, "Ich habe dafür keinen Wecker gefunden.")
+                else:
+                    series_matches = [m for m in matches if m["weekdays"]]
+                    for m in matches:
+                        if m["weekdays"]:
+                            alarm_manager.skip_occurrence(m["id"], intent.resolved_date.isoformat())
+                        else:
+                            alarm_manager.delete_alarm(m["id"])
+                    reply = f"Ok, habe den Wecker für {_format_alarm_date(intent.resolved_date)} gelöscht."
+                    if len(series_matches) == 1:
+                        weekday_name = _WEEKDAY_NAMES_DE[intent.resolved_date.weekday()]
+                        conv_ctx.set_clarification(device, None, [], kind="alarm_delete_series",
+                                                    payload={"alarm_id": series_matches[0]["id"]})
+                        reply += f" Soll ich den Wecker für {weekday_name} bis Freitag löschen?"
+                    _handle_feedback(device, True, reply)
+        elif intent.name == "QueryAlarms":
+            _handle_feedback(device, True, _format_alarm_list(alarm_manager.get_alarm_records(), device))
         elif intent.name == "SetDND":
             active = intent.value == "on"
             _apply_global_dnd(active)
@@ -410,6 +535,10 @@ def main():
 
         if conv_ctx.has_clarification(_source):
             clarification = conv_ctx.get_clarification(_source)
+            kind = clarification.get("type", "room")
+            if kind in ("alarm_expand", "alarm_delete_series"):
+                conv_ctx.clear_clarification(_source)
+                return _resolve_alarm_confirmation(kind, clarification["payload"], text), "Alarm"
             resolved = resolve_clarification_answer(text, clarification["candidates"])
             if resolved:
                 conv_ctx.clear_clarification(_source)
@@ -459,6 +588,10 @@ def main():
             cmd_type = {"StopIntent": "stop", "PauseIntent": "pause", "ResumeIntent": "resume"}[intent.name]
             source_device = source if source in {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()} else None
             targets = _resolve_targets(intent.room_id or source_device or "all")
+            if intent.name == "StopIntent":
+                for t in targets:
+                    if alarm_manager.is_ringing(t):
+                        alarm_manager.stop_ringing(t)
             for t in targets:
                 udp_server.send_command(t, {"type": cmd_type})
             answer = ""
@@ -482,12 +615,51 @@ def main():
             if intent.label:
                 answer = f"Timer für {format_duration(seconds)} gesetzt: {intent.label}."
         elif intent.name == "SetAlarm":
-            alarm_cfg = cfg.get("alarm", {})
-            target = alarm_cfg.get("satellite") or _source
-            alarm_manager.set(target, intent.value, set_by=_source)
-            dt = next_alarm_dt(intent.value)
-            label = f"morgen um {dt.strftime('%H:%M')} Uhr" if dt.date() > datetime.datetime.now().date() else f"um {dt.strftime('%H:%M')} Uhr"
-            answer = f"Wecker gestellt {label}."
+            target = source if source in {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()} else None
+            if target is None:
+                answer = "Einen Wecker kann ich nur auf einem Satelliten stellen."
+            else:
+                user_id = _resolve_alarm_user_id(speaker_user_id, target)
+                weekday = intent.weekdays[0] if intent.weekdays else None
+                if weekday is not None:
+                    target_date = _alarm_weekday_to_date(weekday)
+                    record = alarm_manager.create_alarm(target, intent.value, None, target_date.isoformat(), user_id)
+                    weekday_name = _WEEKDAY_NAMES_DE[weekday]
+                    conv_ctx.set_clarification(_source, None, [], kind="alarm_expand", payload={
+                        "alarm_id": record["id"], "satellite_id": target, "time": intent.value, "weekday": weekday,
+                    })
+                    answer = (
+                        f"Wecker für {weekday_name} um {intent.value} Uhr gestellt. "
+                        f"Soll ich den Wecker von {weekday_name} bis Freitag anlegen?"
+                    )
+                else:
+                    target_date = _next_alarm_date(intent.value)
+                    alarm_manager.create_alarm(target, intent.value, None, target_date.isoformat(), user_id)
+                    answer = f"Wecker gestellt für {_format_alarm_date(target_date)} um {intent.value} Uhr."
+        elif intent.name == "DeleteAlarm":
+            if intent.resolved_date is None:
+                answer = "Für welchen Tag soll ich den Wecker löschen?"
+            else:
+                matches = alarm_manager.find_occurrences(None, intent.resolved_date)
+                if intent.value:
+                    matches = [m for m in matches if m["time"] == intent.value]
+                if not matches:
+                    answer = "Ich habe dafür keinen Wecker gefunden."
+                else:
+                    series_matches = [m for m in matches if m["weekdays"]]
+                    for m in matches:
+                        if m["weekdays"]:
+                            alarm_manager.skip_occurrence(m["id"], intent.resolved_date.isoformat())
+                        else:
+                            alarm_manager.delete_alarm(m["id"])
+                    answer = f"Ok, habe den Wecker für {_format_alarm_date(intent.resolved_date)} gelöscht."
+                    if len(series_matches) == 1:
+                        weekday_name = _WEEKDAY_NAMES_DE[intent.resolved_date.weekday()]
+                        conv_ctx.set_clarification(_source, None, [], kind="alarm_delete_series",
+                                                    payload={"alarm_id": series_matches[0]["id"]})
+                        answer += f" Soll ich den Wecker für {weekday_name} bis Freitag löschen?"
+        elif intent.name == "QueryAlarms":
+            answer = _format_alarm_list(alarm_manager.get_alarm_records(), source)
         elif intent.name == "Smalltalk":
             sp = prepare_prompt(llm_system_prompt, iobroker) + _speaker_context(speaker_user_id)
             history = conv_ctx.get_llm_history(_source)
@@ -683,8 +855,12 @@ def main():
 
     ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room, _user_manager)
     alarm_manager = AlarmManager(
-        persist_path=cfg.get("alarm", {}).get("persist", "alarms.json"),
-        on_fire=lambda alarm_id, target: _handle_feedback(target, True, "Wecker! Guten Morgen!"),
+        db=get_db,
+        on_fire=lambda record: _on_alarm_fire(record),
+        play_asset_fn=mqtt_handler.publish_play_asset,
+        set_volume_fn=mqtt_handler.publish_volume_set,
+        get_volume_fn=lambda d: _device_volume.get(d, _global_volume),
+        cycle_seconds=_asset_manifest.get("alarm_ring", {}).get("meta", {}).get("duration_s", 4.0),
     )
     timer_store = HannahTimerStore(
         db_path=cfg.get("timers", {}).get("db", "timers.db"),
@@ -1060,6 +1236,13 @@ def main():
 
     _iobroker_ready: bool = False
 
+    def _on_alarm_fire(record: dict):
+        """AlarmManager.on_fire — TTS-Ansage beim Auslösen. Der eigentliche Klingel-Loop
+        (Weckton + alternierende Lautstärke) läuft separat in AlarmManager selbst (#4)."""
+        label = record.get("label")
+        text = f"Wecker! {label}." if label else "Wecker! Guten Morgen!"
+        _handle_feedback(record["satellite_id"], True, text)
+
     def _on_timer_fired(timer_id: str, label: str):
         if label.startswith("trigger:"):
             trigger_id = label[len("trigger:"):]
@@ -1221,6 +1404,10 @@ def main():
         create_trigger=trigger_engine.create_trigger,
         update_trigger=trigger_engine.update_trigger,
         delete_trigger=trigger_engine.delete_trigger,
+        get_alarm_records=alarm_manager.get_alarm_records,
+        create_alarm=alarm_manager.create_alarm,
+        update_alarm=alarm_manager.update_alarm,
+        delete_alarm=alarm_manager.delete_alarm,
         get_categories=settings_manager.get_categories,
         get_settings_records=settings_manager.get_settings,
         create_setting=settings_manager.create_setting,

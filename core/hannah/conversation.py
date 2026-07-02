@@ -32,7 +32,7 @@ class _SourceCtx:
     unit: Optional[str] = None
     history: deque = field(default_factory=deque)
     ts: float = field(default_factory=time.time)
-    pending_clarification: Optional[dict] = None  # {"intent": Intent, "candidates": list}
+    pending_clarification: Optional[dict] = None  # {"type": str, "intent": Intent, "candidates": list, "payload": dict}
     smalltalk_active: bool = False
 
 
@@ -142,10 +142,16 @@ class ConversationContext:
                 ctx.unit = intent.unit
             ctx.ts = time.time()
 
-    def set_clarification(self, source: str, intent: "Intent", candidates: list) -> None:
+    def set_clarification(self, source: str, intent: Optional["Intent"], candidates: list,
+                           *, kind: str = "room", payload: Optional[dict] = None) -> None:
+        """kind='room' (Default, Raum-Klarifizierung — intent/candidates wie bisher) oder
+        z.B. 'alarm_expand'/'alarm_delete_series' (Ja/Nein-Rückfragen, #4) — dann trägt
+        `payload` die für die Antwort nötigen Daten, intent/candidates bleiben leer."""
         with self._lock:
             ctx = self._ensure(source)
-            ctx.pending_clarification = {"intent": intent, "candidates": candidates}
+            ctx.pending_clarification = {
+                "type": kind, "intent": intent, "candidates": candidates, "payload": payload or {},
+            }
             ctx.ts = time.time()
 
     def has_clarification(self, source: str) -> bool:

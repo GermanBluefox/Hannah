@@ -474,6 +474,9 @@ class IoBrokerClient:
         "humidity_sensor": [
             ("current", "%", None),
         ],
+        "illuminance_sensor": [
+            ("illuminance", "lx", None),
+        ],
     }
 
     def _describe_category(self, category: str, targets: list, room: str) -> Optional[str]:

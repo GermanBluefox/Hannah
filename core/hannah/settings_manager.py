@@ -39,6 +39,7 @@ DEFAULT_NLU_SETTINGS: dict = {
         "raumluft": "air_quality_sensor",
         "luftfeuchtigkeit": "humidity_sensor", "luftfeuchte": "humidity_sensor",
         "feuchtigkeit": "humidity_sensor", "feuchte": "humidity_sensor",
+        "helligkeit": "illuminance_sensor", "lux": "illuminance_sensor",
     },
     "query_words": ["ist", "sind", "wie", "was", "welche", "wieviel", "status"],
     "temperature_units": ["grad", "°c", "°", "celsius"],

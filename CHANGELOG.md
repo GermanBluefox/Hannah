@@ -5,6 +5,10 @@
 -->
 
 
+## 0.51.2
+### Hannah Core
+* Added: Helligkeits-/Illuminance-Kategorie (`illuminance_sensor`) wieder in `_CATEGORY_STATES` (`core/hannah/iobroker.py`) ergänzt — kategorienweite Abfragen wie "wie hell ist es im Wohnzimmer" funktionieren wieder (Einheit `lx`, State-Suffix `illuminance` war bereits vorhanden). Passende `category_words`-Einträge `helligkeit`/`lux` in `DEFAULT_NLU_SETTINGS` (`core/hannah/settings_manager.py`) ergänzt (Refs #120)
+
 ## 0.51.1
 ### Hannah Core
 * Fixed: `main.py` crashed on startup (`TypeError: HannahServicer.__init__() got an unexpected keyword argument 'create_setting'`) — v0.51.0's `CreateSetting`/`DeleteSetting` removal (#115) only got `delete_setting` cleaned out of the `HannahServicer(...)` call site, `create_setting=settings_manager.create_setting` was left behind (Refs #118)

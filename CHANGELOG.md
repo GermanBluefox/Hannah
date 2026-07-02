@@ -5,6 +5,10 @@
 -->
 
 
+## 0.51.1
+### Hannah Core
+* Fixed: `main.py` crashed on startup (`TypeError: HannahServicer.__init__() got an unexpected keyword argument 'create_setting'`) — v0.51.0's `CreateSetting`/`DeleteSetting` removal (#115) only got `delete_setting` cleaned out of the `HannahServicer(...)` call site, `create_setting=settings_manager.create_setting` was left behind (Refs #118)
+
 ## 0.51.0
 ### Hannah Core
 * Fixed: `AlarmManager`'s ringing loop (`play_asset` for `alarm_ring`) was completely fire-and-forget — a satellite that couldn't play the sound (asset not cached, e.g. wrong asset-server namespace tagging) never told Core, so the alarm rang silently forever with no audible feedback at all. Satellites now report back per-attempt success/failure over a new `hannah/satellite/{device}/play_asset/result` MQTT topic (`MQTTHandler.set_play_asset_result_handler`); `AlarmManager.on_play_result()` switches the ringing loop from the (broken) asset sound to a repeated TTS announcement on the first nack for that device, so the alarm stays audible instead of going completely silent (Refs #116)

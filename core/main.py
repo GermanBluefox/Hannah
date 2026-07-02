@@ -1428,7 +1428,6 @@ def main():
         delete_alarm=alarm_manager.delete_alarm,
         get_categories=settings_manager.get_categories,
         get_settings_records=settings_manager.get_settings,
-        create_setting=settings_manager.create_setting,
         update_setting_value=settings_manager.update_setting_value,
         get_ble_tag_records=ble_tag_manager.get_tag_records,
         create_ble_tag=ble_tag_manager.create_tag,

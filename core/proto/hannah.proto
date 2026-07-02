@@ -90,12 +90,25 @@ service HannahService {
   rpc DeleteAlarm  (DeleteAlarmRequest) returns (StatusResponse);
 
   // --- Settings (Admin-UI, #27 Phase 5) ---
+  // CreateSetting/DeleteSetting wurden mit #115 entfernt: ble.tags/cars haben jetzt
+  // eigene Modelle+CRUD (unten), nlu/iobroker.state_names/llm.system_prompt sind immer
+  // vorab bekannt/geseedet — es gibt keinen verbleibenden Bedarf, neue Settings anzulegen.
   rpc GetSettings   (Empty)                returns (GetSettingsResponse);
   rpc UpdateConfig  (UpdateConfigRequest)  returns (StatusResponse);
-  rpc CreateSetting (CreateSettingRequest) returns (CreateSettingResponse);
-  rpc DeleteSetting (DeleteSettingRequest) returns (StatusResponse);
 
-  // --- Car ---
+  // --- BLE Tags (Admin-UI, #115 — eigenes Modell statt Settings-JSON-Blob) ---
+  rpc GetBleTags    (Empty)               returns (GetBleTagsResponse);
+  rpc CreateBleTag  (CreateBleTagRequest) returns (CreateBleTagResponse);
+  rpc UpdateBleTag  (UpdateBleTagRequest) returns (StatusResponse);
+  rpc DeleteBleTag  (DeleteBleTagRequest) returns (StatusResponse);
+
+  // --- Cars (Admin-UI, #115 — eigenes Modell + user_to_car-Pivot statt Settings-JSON-Blob) ---
+  rpc GetCars    (Empty)             returns (GetCarsResponse);
+  rpc CreateCar  (CreateCarRequest)  returns (CreateCarResponse);
+  rpc UpdateCar  (UpdateCarRequest)  returns (StatusResponse);
+  rpc DeleteCar  (DeleteCarRequest)  returns (StatusResponse);
+
+  // --- Car state (Live-VW-Connect-Status, unabhängig von der Car-Konfiguration oben) ---
   // Returns the current cached car state (available=false if no data received yet).
   rpc GetCarState      (Empty)            returns (CarStateResponse);
   // Returns all tracked car states (one per configured car).
@@ -594,20 +607,79 @@ message UpdateConfigRequest {
   repeated SettingUpdate updates = 1;
 }
 
-message CreateSettingRequest {
-  int32  category_id = 1;
-  string name        = 2;
-  string value       = 3;
+// --- BLE Tags (Admin-UI, #115) ---
+
+message BleTag {
+  int32  id          = 1;
+  string mac_address = 2;
+  string label       = 3;
+  int32  user_id     = 4;  // 0 = kein Owner zugeordnet
 }
 
-message CreateSettingResponse {
+message GetBleTagsResponse {
+  repeated BleTag tags = 1;
+}
+
+message CreateBleTagRequest {
+  string mac_address = 1;
+  string label       = 2;
+  int32  user_id     = 3;
+}
+
+message CreateBleTagResponse {
   bool   ok      = 1;
   int32  id      = 2;
   string message = 3;
 }
 
-message DeleteSettingRequest {
-  int32 setting_id = 1;
+message UpdateBleTagRequest {
+  int32  id          = 1;
+  string mac_address = 2;
+  string label       = 3;
+  int32  user_id     = 4;
+}
+
+message DeleteBleTagRequest {
+  int32 id = 1;
+}
+
+// --- Cars (Admin-UI, #115) ---
+//
+// Konfiguration eines getrackten Autos — unabhängig von CarStateProto weiter unten,
+// das den live per MQTT empfangenen Fahrzeugstatus abbildet.
+
+message Car {
+  int32  id                     = 1;
+  string topic_prefix           = 2;
+  string home_address           = 3;
+  repeated int32 owner_user_ids = 4;
+}
+
+message GetCarsResponse {
+  repeated Car cars = 1;
+}
+
+message CreateCarRequest {
+  string topic_prefix           = 1;
+  string home_address           = 2;
+  repeated int32 owner_user_ids = 3;
+}
+
+message CreateCarResponse {
+  bool   ok      = 1;
+  int32  id      = 2;
+  string message = 3;
+}
+
+message UpdateCarRequest {
+  int32  id                     = 1;
+  string topic_prefix           = 2;
+  string home_address           = 3;
+  repeated int32 owner_user_ids = 4;
+}
+
+message DeleteCarRequest {
+  int32 id = 1;
 }
 
 // ============================================================

@@ -30,6 +30,8 @@ from hannah.residents import Roomie, Guest, Pet, Resident, HOME_PRESENCE_STATE
 from hannah import audio as audio_mod
 from hannah import config as config_mod
 from hannah.car_tracker import CarManager, CarTracker
+from hannah.car_registry import CarRegistry
+from hannah.ble_tags import BleTagManager
 from hannah.routines import RoutineManager
 from hannah.grpc_server import GrpcServer, HannahServicer, make_car_parked_event, make_firmware_event, make_resident_event, make_system_notification_event, pb
 from hannah.iobroker import IoBrokerClient
@@ -103,10 +105,32 @@ def main():
     init_db()
     _user_manager = UserManager(get_db)
 
-    # Settings (ble.tags/cars/nlu.*/llm.system_prompt/iobroker.state_names — #27 Phase 5,
-    # aus config.yaml migriert via deploy/migrate_config_settings.py). Fällt auf cfg/
-    # Code-Defaults zurück, solange eine Kategorie noch nicht migriert ist.
+    def _resolve_roomie_id(speaker_user_id: str) -> str:
+        """Löst eine Hannah-User-ID auf die verlinkte ioBroker-Roomie-ID auf (sofern verlinkt).
+
+        Roomie-IDs leben in residents/car_tracker (ioBroker-Welt), die User-ID ist Hannahs
+        eigene, davon entkoppelte Identität — hier wird zwischen beiden vermittelt.
+        """
+        if not speaker_user_id:
+            return ""
+        user = _user_manager.get_user_by_id(speaker_user_id)
+        if not user:
+            return ""
+        for la in user.linked_accounts:
+            if la.provider == "residents":
+                return (la.provider_payload or {}).get("roomie_id", "")
+        return ""
+
+    # Settings (nlu.*/llm.system_prompt/iobroker.state_names — #27 Phase 5, aus config.yaml
+    # migriert via deploy/migrate_config_settings.py). Fällt auf cfg/Code-Defaults zurück,
+    # solange eine Kategorie noch nicht migriert ist. ble.tags/cars haben seit #115 eigene
+    # Modelle (BleTagManager/CarRegistry) statt hier als JSON-Blob zu laufen.
     settings_manager = SettingsManager(get_db)
+    ble_tag_manager = BleTagManager(get_db)
+    car_registry = CarRegistry(get_db)
+    # nlu/iobroker.state_names/llm.system_prompt automatisch mit generischen Defaults
+    # befüllen, falls die Kategorie noch leer ist (Neuinstallation, #114/#115).
+    settings_manager.seed_defaults()
 
     # Hannah selbst als Roomie verlinken (für Trust-Level/Announcements über die
     # residents-Bridge) — einmalig, danach bereits über linked_accounts auffindbar.
@@ -190,9 +214,11 @@ def main():
         topic_prefix=weather_cfg.get("topic_prefix", "openweathermap/0/forecast")
     )
 
-    # Auto-Tracker (cars: Liste; car: alter Einzeleintrag — Backward-Compat)
+    # Auto-Tracker: cars-Tabelle (CarRegistry, #115) mit Owner-User-IDs → Roomie-IDs
+    # übersetzt (car_tracker.py kennt nur Roomie-IDs); cfg["cars"]/cfg["car"] bleiben
+    # Fallback für Installationen, die noch nie migriert wurden.
     _car_cfgs = (
-        list(settings_manager.get_settings_dict("cars").values())
+        car_registry.get_tracker_configs(_resolve_roomie_id)
         or cfg.get("cars")
         or ([cfg["car"]] if cfg.get("car") else [{}])
     )
@@ -485,22 +511,6 @@ def main():
             f" Vertrauenslevel: {trust_level}/10."
             f"{mem}"
         )
-
-    def _resolve_roomie_id(speaker_user_id: str) -> str:
-        """Löst eine Hannah-User-ID auf die verlinkte ioBroker-Roomie-ID auf (sofern verlinkt).
-
-        Roomie-IDs leben in residents/car_tracker (ioBroker-Welt), die User-ID ist Hannahs
-        eigene, davon entkoppelte Identität — hier wird zwischen beiden vermittelt.
-        """
-        if not speaker_user_id:
-            return ""
-        user = _user_manager.get_user_by_id(speaker_user_id)
-        if not user:
-            return ""
-        for la in user.linked_accounts:
-            if la.provider == "residents":
-                return (la.provider_payload or {}).get("roomie_id", "")
-        return ""
 
     def _handle_text(text: str, speaker_user_id: str = "", source: str = "") -> tuple[str, str]:
         """
@@ -843,24 +853,32 @@ def main():
     mqtt_handler.set_mute_handler(_on_mute)
     mqtt_handler.set_dnd_handler(_on_dnd)
 
-    # BLE-Lokalisierung
+    # BLE-Lokalisierung: Tags kommen aus der ble_tags-Tabelle (BleTagManager, #115) mit
+    # user_id bereits aufgelöst — Fallback auf cfg["ble"]["tags"] für un-migrierte Installs.
     ble_cfg = {**cfg.get("ble", {})}
-    _ble_tags_by_label = settings_manager.get_settings_dict("ble.tags")
-    if _ble_tags_by_label:
-        ble_cfg["tags"] = [{"label": label, **tag} for label, tag in _ble_tags_by_label.items()]
+    _ble_tag_records = ble_tag_manager.get_tag_records()
+    if _ble_tag_records:
+        ble_cfg["tags"] = _ble_tag_records
 
     def _get_satellite_room(device: str) -> Optional[str]:
         all_devices = {**udp_server.registered_devices(), **grpc_servicer.proxy_satellites()}
         return all_devices.get(device)
 
-    ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room, _user_manager)
+    ble_engine = BleLocationEngine(ble_cfg, _get_satellite_room)
     alarm_manager = AlarmManager(
         db=get_db,
         on_fire=lambda record: _on_alarm_fire(record),
         play_asset_fn=mqtt_handler.publish_play_asset,
         set_volume_fn=mqtt_handler.publish_volume_set,
         get_volume_fn=lambda d: _device_volume.get(d, _global_volume),
+        # TTS-Fallback, falls der Satellit einen play_asset-Versuch nackt (#116) —
+        # _handle_feedback ist erst weiter unten definiert, gleiches Forward-Reference-
+        # Muster wie _on_alarm_fire oben.
+        announce_fn=lambda device, text: _handle_feedback(device, True, text),
         cycle_seconds=_asset_manifest.get("alarm_ring", {}).get("meta", {}).get("duration_s", 4.0),
+    )
+    mqtt_handler.set_play_asset_result_handler(
+        lambda device, asset_id, ok: alarm_manager.on_play_result(device, asset_id, ok)
     )
     timer_store = HannahTimerStore(
         db_path=cfg.get("timers", {}).get("db", "timers.db"),
@@ -1412,7 +1430,14 @@ def main():
         get_settings_records=settings_manager.get_settings,
         create_setting=settings_manager.create_setting,
         update_setting_value=settings_manager.update_setting_value,
-        delete_setting=settings_manager.delete_setting,
+        get_ble_tag_records=ble_tag_manager.get_tag_records,
+        create_ble_tag=ble_tag_manager.create_tag,
+        update_ble_tag=ble_tag_manager.update_tag,
+        delete_ble_tag=ble_tag_manager.delete_tag,
+        get_car_records=car_registry.get_car_records,
+        create_car=car_registry.create_car,
+        update_car=car_registry.update_car,
+        delete_car=car_registry.delete_car,
         # `residents` ist erst weiter unten definiert (ResidentsClient) — Lambda löst das
         # Forward-Reference-Problem (gleiches Muster wie get_satellites oben mit grpc_servicer).
         get_residents=lambda: residents.all_residents(),

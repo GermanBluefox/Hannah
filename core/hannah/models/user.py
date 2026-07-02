@@ -87,3 +87,21 @@ class User(BaseModel, EventEmitterMixin):
         if not self._db or not self.id:
             return []
         return Satellite.select(self._db).where(owner_user_id=self.id).all()
+
+    @property
+    def ble_tags(self):
+        """Gibt alle BLE-Tags zurück, die diesem User als Owner zugeordnet sind."""
+        from hannah.models.ble_tag import BleTag
+        if not self._db or not self.id:
+            return []
+        return BleTag.select(self._db).where(user_id=self.id).all()
+
+    @property
+    def cars(self):
+        """Gibt alle Autos zurück, bei denen dieser User als Owner eingetragen ist (user_to_car-Pivot)."""
+        from hannah.models.car import Car
+        if not self._db or not self.id:
+            return []
+        return Car.select(self._db).join(
+            "user_to_car utc", on="utc.car_id = cars.id"
+        ).where("utc.user_id = ?", self.id).all()

@@ -3,7 +3,11 @@ import os
 import pytest
 
 import hannah.utils.db as db_module
-from hannah.settings_manager import SettingsManager
+from hannah.settings_manager import (
+    DEFAULT_IOBROKER_STATE_NAMES,
+    DEFAULT_NLU_SETTINGS,
+    SettingsManager,
+)
 
 
 @pytest.fixture
@@ -47,3 +51,63 @@ class TestScalarJsonFieldRoundtrip:
         settings = manager.get_settings()
         stored = next(s for s in settings if s["id"] == created["id"])
         assert stored["value"] == ["a", "b"]
+
+
+class TestSeedDefaults:
+    """#114: a fresh install with an empty DB used to lose nlu.py's turn_on_words/
+    turn_off_words/query_words (no code-level fallback, unlike category_words) and
+    iobroker.py's sensor state_names (built-in default only covers on/level/color/
+    colorTemp) once config.example.yaml's examples were trimmed. seed_defaults()
+    restores working defaults for a fresh DB without ever touching a DB that already
+    has data (migrated or admin-edited). #115 extends this to llm.system_prompt=""
+    (a safe no-op default, see llm.py's `if system_prompt:` guard) — this removes the
+    last remaining reason for CreateSetting to exist (every settings category is now
+    either fully static or auto-seeded)."""
+
+    def test_seeds_nlu_and_iobroker_when_empty(self, manager):
+        manager.seed_defaults()
+
+        nlu = manager.get_settings_dict("nlu")
+        assert nlu == DEFAULT_NLU_SETTINGS
+
+        iobroker = manager.get_settings_dict("iobroker")
+        assert iobroker == {"state_names": DEFAULT_IOBROKER_STATE_NAMES}
+
+    def test_seeds_llm_system_prompt_when_empty(self, manager):
+        manager.seed_defaults()
+
+        assert manager.get_settings_dict("llm") == {"system_prompt": ""}
+
+    def test_does_not_overwrite_existing_nlu_values(self, manager):
+        cat_id = manager.ensure_category("nlu")
+        manager.create_setting(cat_id, "turn_on_words", ["custom_on"])
+
+        manager.seed_defaults()
+
+        nlu = manager.get_settings_dict("nlu")
+        assert nlu == {"turn_on_words": ["custom_on"]}
+
+    def test_does_not_overwrite_existing_iobroker_state_names(self, manager):
+        cat_id = manager.ensure_category("iobroker")
+        manager.create_setting(cat_id, "state_names", {"on": "custom_on"})
+
+        manager.seed_defaults()
+
+        iobroker = manager.get_settings_dict("iobroker")
+        assert iobroker == {"state_names": {"on": "custom_on"}}
+
+    def test_does_not_overwrite_existing_llm_system_prompt(self, manager):
+        cat_id = manager.ensure_category("llm")
+        manager.create_setting(cat_id, "system_prompt", "Du bist Hannah.")
+
+        manager.seed_defaults()
+
+        assert manager.get_settings_dict("llm") == {"system_prompt": "Du bist Hannah."}
+
+    def test_idempotent_on_repeated_calls(self, manager):
+        manager.seed_defaults()
+        manager.seed_defaults()
+
+        assert manager.get_settings_dict("nlu") == DEFAULT_NLU_SETTINGS
+        # + iobroker.state_names + llm.system_prompt
+        assert len(manager.get_settings()) == len(DEFAULT_NLU_SETTINGS) + 2

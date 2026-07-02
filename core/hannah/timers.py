@@ -66,7 +66,10 @@ class AlarmManager:
     WebUI-CRUD über gRPC), Pro-Alarm-Scheduling per `threading.Timer` (kein
     Poll-Loop wie bei TriggerEngine — ein Wecker muss pünktlich klingeln) und
     "klingelt gerade"-State (wiederholender Weckton mit alternierender
-    Lautstärke via MQTT, bis `stop_ringing()` aufgerufen wird — #4)."""
+    Lautstärke via MQTT, bis `stop_ringing()` aufgerufen wird — #4). Meldet der
+    Satellit per on_play_result() einen fehlgeschlagenen Play-Versuch (Asset nicht
+    im Cache o.ä.), schaltet der Loop auf eine TTS-Ansage um statt weiter stumm
+    ins Leere zu klingeln (#116)."""
 
     def __init__(
         self,
@@ -75,10 +78,12 @@ class AlarmManager:
         play_asset_fn: Callable[[str, str], None],
         set_volume_fn: Callable[[str, int], None],
         get_volume_fn: Callable[[str], int],
+        announce_fn: Optional[Callable[[str, str], None]] = None,
         asset_id: str = "alarm_ring",
         volume_low: int = 30,
         volume_high: int = 80,
         cycle_seconds: float = 4.0,
+        fallback_text: str = "Wecker! Wecker!",
     ):
         """
         db: liefert eine sqlite3-Connection, z.B. hannah.utils.db.get_db.
@@ -86,16 +91,23 @@ class AlarmManager:
             vollen Alarm-Record (dict), nicht nur die ID.
         play_asset_fn/set_volume_fn: mqtt_handler.publish_play_asset/publish_volume_set.
         get_volume_fn(satellite_id): aktuelle Lautstärke, für Restore nach dem Stoppen.
+        announce_fn(satellite_id, text): TTS-Fallback für den Klingel-Loop, sobald ein
+            play_asset-Versuch per on_play_result() ein Nack meldet (#116) — der Ring-Ton
+            allein war komplett Fire-and-Forget und konnte bei einem defekten/fehlenden
+            Asset-Cache still für immer ins Leere laufen. None = kein Fallback (alter
+            Zustand, z.B. für Tests ohne MQTT-Ack-Wiring).
         """
         self._db = db
         self._on_fire = on_fire
         self._play_asset_fn = play_asset_fn
         self._set_volume_fn = set_volume_fn
         self._get_volume_fn = get_volume_fn
+        self._announce_fn = announce_fn
         self._asset_id = asset_id
         self._volume_low = volume_low
         self._volume_high = volume_high
         self._cycle_seconds = cycle_seconds
+        self._fallback_text = fallback_text
 
         self._timers: dict[int, threading.Timer] = {}
         self._lock = threading.Lock()
@@ -103,6 +115,7 @@ class AlarmManager:
         self._ringing: dict[str, Optional[threading.Timer]] = {}
         self._ring_high: dict[str, bool] = {}
         self._pre_ring_volume: dict[str, int] = {}
+        self._asset_broken: dict[str, bool] = {}
         self._ringing_lock = threading.Lock()
 
         self._load_and_reschedule_all()
@@ -268,6 +281,7 @@ class AlarmManager:
                 return  # schon am Klingeln (z.B. zwei Alarme kurz hintereinander auf demselben Satelliten)
             self._pre_ring_volume[satellite_id] = self._get_volume_fn(satellite_id)
             self._ring_high[satellite_id] = False
+            self._asset_broken[satellite_id] = False
             self._ringing[satellite_id] = None  # Platzhalter, verhindert Re-Entry vor dem ersten Zyklus
         self._ringing_cycle(satellite_id)
 
@@ -278,12 +292,30 @@ class AlarmManager:
             high = not self._ring_high.get(satellite_id, False)
             self._ring_high[satellite_id] = high
             level = self._volume_high if high else self._volume_low
+            asset_broken = self._asset_broken.get(satellite_id, False)
             t = threading.Timer(self._cycle_seconds, self._ringing_cycle, args=(satellite_id,))
             t.daemon = True
             self._ringing[satellite_id] = t
         self._set_volume_fn(satellite_id, level)
-        self._play_asset_fn(satellite_id, self._asset_id)
+        if asset_broken and self._announce_fn:
+            self._announce_fn(satellite_id, self._fallback_text)
+        else:
+            self._play_asset_fn(satellite_id, self._asset_id)
         t.start()
+
+    def on_play_result(self, satellite_id: str, asset_id: str, ok: bool) -> None:
+        """Reagiert auf das MQTT-Ack/Nack vom Satelliten (hannah_net.c/hannah_asset.c)
+        für einen play_asset-Versuch (#116). Bei einem Nack während des Klingelns
+        schaltet der Loop für diesen Satelliten von (kaputtem) Asset-Sound auf eine
+        TTS-Ansage um — vorher blieb ein defektes/fehlendes Asset komplett unbemerkt
+        und der Wecker klingelte still für immer ins Leere."""
+        if asset_id != self._asset_id or ok:
+            return
+        with self._ringing_lock:
+            if satellite_id not in self._ringing or self._asset_broken.get(satellite_id):
+                return
+            self._asset_broken[satellite_id] = True
+        log.warning(f"[alarm] Weckton '{asset_id}' auf '{satellite_id}' fehlgeschlagen — falle auf TTS-Ansage zurück.")
 
     def stop_ringing(self, satellite_id: str) -> bool:
         """Bricht den Klingel-Loop ab und stellt die Lautstärke von vor dem Klingeln
@@ -292,6 +324,7 @@ class AlarmManager:
             was_ringing = satellite_id in self._ringing
             t = self._ringing.pop(satellite_id, None)
             self._ring_high.pop(satellite_id, None)
+            self._asset_broken.pop(satellite_id, None)
             pre_volume = self._pre_ring_volume.pop(satellite_id, None)
         if t is not None:
             t.cancel()

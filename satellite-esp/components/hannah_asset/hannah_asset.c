@@ -22,6 +22,8 @@ static const char *TAG        = "hannah_asset";
 #define ASSET_MOUNT   "/assets"
 #define ASSET_NVS_NS  "hna"   /* max 15 chars für nvs namespace */
 
+static hannah_asset_play_result_cb_t s_play_result_cb = NULL;
+
 
 /* ── WAV-Chunk-Scanner ───────────────────────────────────────────────────── */
 
@@ -332,7 +334,7 @@ void hannah_asset_init(void)
     xTaskCreate(update_task, "asset_upd", 16384, NULL, 3, NULL);
 }
 
-void hannah_asset_play(const char *asset_id)
+bool hannah_asset_play(const char *asset_id)
 {
     char path[72];
     snprintf(path, sizeof(path), ASSET_MOUNT "/%s.wav", asset_id);
@@ -340,7 +342,7 @@ void hannah_asset_play(const char *asset_id)
     FILE *f = fopen(path, "rb");
     if (!f) {
         ESP_LOGW(TAG, "Asset '%s' nicht im Cache: %s", asset_id, path);
-        return;
+        return false;
     }
 
     uint32_t sample_rate = 16000;
@@ -350,7 +352,7 @@ void hannah_asset_play(const char *asset_id)
     if (!wav_find_data(f, &sample_rate, &channels, &data_size)) {
         ESP_LOGE(TAG, "WAV-Header ungültig: %s", path);
         fclose(f);
-        return;
+        return false;
     }
 
     ESP_LOGI(TAG, "Asset %s: %"PRIu32"Hz %uch, %"PRIu32" bytes PCM",
@@ -363,12 +365,14 @@ void hannah_asset_play(const char *asset_id)
     }
     hannah_audio_play_end();
     fclose(f);
+    return true;
 }
 
 static void play_task(void *arg)
 {
     char *asset_id = (char *)arg;
-    hannah_asset_play(asset_id);
+    bool ok = hannah_asset_play(asset_id);
+    if (s_play_result_cb) s_play_result_cb(asset_id, ok);
     free(asset_id);
     vTaskDelete(NULL);
 }
@@ -381,4 +385,9 @@ void hannah_asset_play_async(const char *asset_id)
         free(id);
         ESP_LOGE(TAG, "Play-Task konnte nicht gestartet werden.");
     }
+}
+
+void hannah_asset_set_play_result_callback(hannah_asset_play_result_cb_t cb)
+{
+    s_play_result_cb = cb;
 }

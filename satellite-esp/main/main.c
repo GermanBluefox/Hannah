@@ -30,6 +30,20 @@ static void on_play_asset(const char *asset_id)
     hannah_asset_play_async(asset_id);
 }
 
+/* Meldet das Ergebnis eines play_asset-Versuchs an Core zurück (#116) — vorher war
+ * play_asset komplett Fire-and-Forget, ein fehlgeschlagenes Play (Asset nicht im
+ * Cache, kaputter WAV-Header) blieb rein lokal auf dem Gerät sichtbar (ESP_LOGW). */
+static void on_play_asset_result(const char *asset_id, bool ok)
+{
+    char topic[128];
+    snprintf(topic, sizeof(topic), "hannah/satellite/%s/play_asset/result",
+             hannah_config_get()->device_id);
+    char payload[96];
+    snprintf(payload, sizeof(payload), "{\"asset_id\":\"%s\",\"ok\":%s}",
+             asset_id, ok ? "true" : "false");
+    hannah_net_mqtt_publish(topic, payload, 1, false);
+}
+
 /* Mute beim Start gedrückt halten → WiFi-Einstellungen löschen → AP-Modus */
 static void check_factory_reset(void)
 {
@@ -101,6 +115,7 @@ void app_main(void)
 
     /* Asset-Cache (WAV-Sounds) */
     hannah_net_set_play_asset_callback(on_play_asset);
+    hannah_asset_set_play_result_callback(on_play_asset_result);
     hannah_asset_init();
 
     /* BLE-Scanner für Indoor-Lokalisierung */

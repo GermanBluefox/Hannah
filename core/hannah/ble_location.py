@@ -2,7 +2,6 @@ import logging
 import threading
 import time
 from typing import Callable, Optional
-from hannah.user_manager import UserManager
 
 log = logging.getLogger(__name__)
 
@@ -29,33 +28,28 @@ class BleLocationEngine:
     Aggregiert BLE-RSSI-Reports von mehreren ESP32-Satelliten und bestimmt
     per „stärkster RSSI gewinnt" den aktuellen Aufenthaltsort pro BLE-Tag.
 
-    Tags werden über config.yaml definiert (mac, label, optionale roomie-ID).
-    Für jeden Tag werden RSSI-Messungen pro Satellit gehalten. Sobald alle
-    Einträge eines Tags älter als stale_timeout sind, gilt er als nicht sichtbar.
-    Bei jeder Lageänderung wird der on_location_change-Callback aufgerufen.
+    Tags kommen aus der BleTag-DB-Tabelle (mac_address, label, optionale user_id;
+    siehe hannah.ble_tags.BleTagManager, #115). Für jeden Tag werden RSSI-Messungen
+    pro Satellit gehalten. Sobald alle Einträge eines Tags älter als stale_timeout
+    sind, gilt er als nicht sichtbar. Bei jeder Lageänderung wird der
+    on_location_change-Callback aufgerufen.
     """
 
-    def __init__(self, cfg: dict, get_satellite_room: Callable[[str], Optional[str]], user_manager : UserManager):
+    def __init__(self, cfg: dict, get_satellite_room: Callable[[str], Optional[str]]):
         """
-        cfg                 : ble-Abschnitt aus config.yaml
+        cfg                 : ble-Abschnitt aus config.yaml, "tags" via BleTagManager.get_tag_records() befüllt
         get_satellite_room  : fn(device) → room-Name oder None
         """
         self._stale = float(cfg.get("stale_timeout", 30))
         self._get_room = get_satellite_room
         self._lock = threading.Lock()
-        self._user_manager = user_manager
 
         self._tags: dict[str, BleTag] = {}
         for t in cfg.get("tags", []):
-            mac = t.get("mac", "").lower()
+            mac = (t.get("mac") or t.get("mac_address") or "").lower()
             label = t.get("label", mac)
             if mac:
-                username = t.get("username")
-                user = self._user_manager.get_user_by_username(username=username) if username else None
-                if username and user is None:
-                    log.warning(f"BLE: Tag {label!r} verweist auf unbekannten User {username!r} — Tippfehler in config.yaml?")
-                userID = user.id if user else None
-                self._tags[mac] = BleTag(mac, label, userID)
+                self._tags[mac] = BleTag(mac, label, t.get("user_id"))
 
         # {mac → {satellite → _Report}}
         self._reports: dict[str, dict[str, _Report]] = {}

@@ -35,6 +35,7 @@ class MQTTHandler:
         self._on_firmware:    Optional[Callable[[str, str], None]] = None
         self._on_ble_report:  Optional[Callable[[str, str, int], None]] = None
         self._on_sensor:      Optional[Callable[[str, float, float, float, float, int, float, float], None]] = None
+        self._on_play_asset_result: Optional[Callable[[str, str, bool], None]] = None
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
@@ -108,6 +109,11 @@ class MQTTHandler:
 
     def set_ble_report_handler(self, callback: Callable[[str, str, int], None]):
         self._on_ble_report = callback
+
+    def set_play_asset_result_handler(self, callback: Callable[[str, str, bool], None]):
+        """callback(device, asset_id, ok) — Ack/Nack vom Satelliten für einen
+        play_asset-Versuch (#116, vorher komplett Fire-and-Forget)."""
+        self._on_play_asset_result = callback
 
     def publish_ble_watchlist(self, device: str, macs: list[str]):
         topic = f"hannah/satellite/{device}/ble/watchlist"
@@ -207,7 +213,8 @@ class MQTTHandler:
         client.subscribe("hannah/satellite/+/firmware", qos=1)
         client.subscribe("hannah/satellite/+/ble/report", qos=0)
         client.subscribe("hannah/satellite/+/sensors", qos=0)
-        log.info("OTA / firmware / BLE / sensors abonniert")
+        client.subscribe("hannah/satellite/+/play_asset/result", qos=1)
+        log.info("OTA / firmware / BLE / sensors / play_asset-Ergebnis abonniert")
 
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
@@ -252,6 +259,18 @@ class MQTTHandler:
                     version = data.get("version", "")
                     if version:
                         self._on_firmware(parts[2], version)
+                except Exception:
+                    pass
+            return
+
+        if topic.startswith("hannah/satellite/") and topic.endswith("/play_asset/result"):
+            parts = topic.split("/")
+            if len(parts) == 5 and self._on_play_asset_result:
+                try:
+                    data = json.loads(msg.payload.decode())
+                    asset_id = data.get("asset_id", "")
+                    if asset_id:
+                        self._on_play_asset_result(parts[2], asset_id, bool(data.get("ok")))
                 except Exception:
                     pass
             return

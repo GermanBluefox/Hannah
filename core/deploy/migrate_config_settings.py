@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""One-time migration for Issue #27 Phase 5: copy the config.yaml sections that move
-into the new Settings module (ble.tags, cars, nlu.*, llm.system_prompt,
-iobroker.state_names) into hannah.db (settings_category/settings tables, see
-hannah.utils.db.SCHEMA). Safe to re-run - uses INSERT OR IGNORE (matched by
-settings_category.name / settings.(category, name)).
+"""One-time migration for Issue #27 Phase 5 (extended by #115): copy the config.yaml
+sections that move out of static YAML config into hannah.db. nlu.*/llm.system_prompt/
+iobroker.state_names go into the generic Settings module (settings_category/settings
+tables). ble.tags/cars go directly into their own tables (ble_tags/cars/user_to_car,
+#115 — these were never a good fit for the generic JSON-blob Settings schema). Safe to
+re-run - uses INSERT OR IGNORE throughout.
 
-Assumes hannah.db already has the "settings_category"/"settings" tables (i.e.
-init_db() has run at least once - they're created by Hannah Core's normal startup).
+Assumes hannah.db already has all tables from hannah.utils.db.SCHEMA (i.e. init_db()
+has run at least once - they're created by Hannah Core's normal startup), including
+"users"/"linked_accounts" (needed to resolve ble.tags' username / cars' owner_roomies
+to a Hannah users.id).
 
 Everything else in config.yaml (udp, web_ui, grpc, audio, mqtt/asset_server
 connection data, stt/tts backend & credentials, ble.stale_timeout, iobroker.
@@ -41,19 +44,39 @@ def _create_setting(db: sqlite3.Connection, category_id: int, name: str, value) 
     return cur.rowcount > 0
 
 
+def _user_id_by_username(db: sqlite3.Connection, username: str) -> int | None:
+    row = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    return row[0] if row else None
+
+
+def _user_id_by_roomie_id(db: sqlite3.Connection, roomie_id: str) -> int | None:
+    row = db.execute(
+        "SELECT user_id FROM linked_accounts WHERE provider = 'residents' AND external_id = ?",
+        (f"{roomie_id}_roomie",),
+    ).fetchone()
+    return row[0] if row else None
+
+
 def migrate_ble_tags(cfg: dict, db: sqlite3.Connection) -> int:
     tags = cfg.get("ble", {}).get("tags", [])
     if not tags:
         return 0
-    cat = _ensure_category(db, "ble.tags")
     count = 0
     for tag in tags:
-        label = tag.get("label") or tag.get("mac", "")
-        if not label:
+        mac = tag.get("mac", "").lower()
+        label = tag.get("label") or mac
+        if not mac:
             continue
-        value = {"mac": tag.get("mac", ""), "username": tag.get("username")}
-        if _create_setting(db, cat, label, value):
-            count += 1
+        username = tag.get("username")
+        user_id = _user_id_by_username(db, username) if username else None
+        if username and user_id is None:
+            print(f"  ble.tags: '{label}' verweist auf unbekannten User '{username}' — Tippfehler in config.yaml?")
+        cur = db.execute(
+            "INSERT OR IGNORE INTO ble_tags (mac_address, label, user_id) VALUES (?, ?, ?)",
+            (mac, label, user_id),
+        )
+        count += cur.rowcount
+    db.commit()
     return count
 
 
@@ -61,28 +84,29 @@ def migrate_cars(cfg: dict, db: sqlite3.Connection) -> int:
     cars = cfg.get("cars") or ([cfg["car"]] if cfg.get("car") else [])
     if not cars:
         return 0
-    cat = _ensure_category(db, "cars")
-    used_names: set[str] = set()
     count = 0
     for car in cars:
         topic_prefix = car.get("topic_prefix", "")
-        base = topic_prefix.rsplit("/", 1)[-1] or "car"
-        name = base
-        suffix = 2
-        while name in used_names:
-            name = f"{base}_{suffix}"
-            suffix += 1
-        used_names.add(name)
+        if not topic_prefix:
+            continue
+        cur = db.execute(
+            "INSERT OR IGNORE INTO cars (topic_prefix, home_address) VALUES (?, ?)",
+            (topic_prefix, car.get("home_address", "")),
+        )
+        if cur.rowcount == 0:
+            continue
+        count += 1
+        car_id = cur.lastrowid
         owner_roomies = car.get("owner_roomies", car.get("owner_roomie", ""))
         if not isinstance(owner_roomies, list):
             owner_roomies = [owner_roomies] if owner_roomies else []
-        value = {
-            "topic_prefix": topic_prefix,
-            "home_address": car.get("home_address", ""),
-            "owner_roomies": owner_roomies,
-        }
-        if _create_setting(db, cat, name, value):
-            count += 1
+        for roomie_id in owner_roomies:
+            user_id = _user_id_by_roomie_id(db, roomie_id)
+            if user_id is None:
+                print(f"  cars: '{topic_prefix}' verweist auf unverlinkte Roomie-ID '{roomie_id}' — Owner wird übersprungen")
+                continue
+            db.execute("INSERT OR IGNORE INTO user_to_car (user_id, car_id) VALUES (?, ?)", (user_id, car_id))
+    db.commit()
     return count
 
 

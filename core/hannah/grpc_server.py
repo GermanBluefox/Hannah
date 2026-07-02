@@ -124,9 +124,15 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         delete_alarm: Optional[Callable[[int], bool]] = None,                    # (id) → bool
         get_categories: Optional[Callable[[], list]] = None,                     # () → [{id, name, parent}]
         get_settings_records: Optional[Callable[[], list]] = None,               # () → [{id, category, name, value}]
-        create_setting: Optional[Callable[[int, str, object], Optional[dict]]] = None,  # (category_id, name, value) → dict | None
         update_setting_value: Optional[Callable[[int, object], bool]] = None,    # (setting_id, value) → bool
-        delete_setting: Optional[Callable[[int], bool]] = None,                  # (setting_id) → bool
+        get_ble_tag_records: Optional[Callable[[], list]] = None,                # () → [{id, mac_address, label, user_id}]
+        create_ble_tag: Optional[Callable[..., Optional[dict]]] = None,          # (mac_address, label, user_id) → dict | None
+        update_ble_tag: Optional[Callable[..., bool]] = None,                    # (id, mac_address, label, user_id) → bool
+        delete_ble_tag: Optional[Callable[[int], bool]] = None,                  # (id) → bool
+        get_car_records: Optional[Callable[[], list]] = None,                    # () → [{id, topic_prefix, home_address, owner_user_ids}]
+        create_car: Optional[Callable[..., Optional[dict]]] = None,              # (topic_prefix, home_address, owner_user_ids) → dict | None
+        update_car: Optional[Callable[..., bool]] = None,                        # (id, topic_prefix, home_address, owner_user_ids) → bool
+        delete_car: Optional[Callable[[int], bool]] = None,                      # (id) → bool
         get_residents: Optional[Callable[[], list]] = None,                      # () → [Resident]
     ):
         self._user_manager          = user_manager
@@ -190,9 +196,15 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         self._delete_alarm              = delete_alarm or (lambda *_: False)
         self._get_categories            = get_categories or (lambda: [])
         self._get_settings_records      = get_settings_records or (lambda: [])
-        self._create_setting            = create_setting or (lambda *_: None)
         self._update_setting_value      = update_setting_value or (lambda *_: False)
-        self._delete_setting            = delete_setting or (lambda *_: False)
+        self._get_ble_tag_records       = get_ble_tag_records or (lambda: [])
+        self._create_ble_tag            = create_ble_tag or (lambda *_a, **_k: None)
+        self._update_ble_tag            = update_ble_tag or (lambda *_: False)
+        self._delete_ble_tag            = delete_ble_tag or (lambda *_: False)
+        self._get_car_records           = get_car_records or (lambda: [])
+        self._create_car                = create_car or (lambda *_a, **_k: None)
+        self._update_car                = update_car or (lambda *_: False)
+        self._delete_car                = delete_car or (lambda *_: False)
         self._get_residents             = get_residents or (lambda: [])
 
         self._subscribers: list[_Subscriber] = []
@@ -697,18 +709,44 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
                 return pb.StatusResponse(ok=False, message=f"setting {u.setting_id} not found")
         return pb.StatusResponse(ok=True, message="updated")
 
-    def CreateSetting(self, request, _context):
-        try:
-            value = json.loads(request.value) if request.value else None
-        except json.JSONDecodeError as e:
-            return pb.CreateSettingResponse(ok=False, message=f"invalid JSON: {e}")
-        result = self._create_setting(request.category_id, request.name, value)
-        if result is None:
-            return pb.CreateSettingResponse(ok=False, message="name existiert bereits in dieser Kategorie")
-        return pb.CreateSettingResponse(ok=True, id=result["id"], message="created")
+    # ------------------------------------------------------------------
+    # BLE Tags (Admin-UI, #115)
 
-    def DeleteSetting(self, request, _context):
-        ok = self._delete_setting(request.setting_id)
+    def GetBleTags(self, _request, _context):
+        return pb.GetBleTagsResponse(tags=[_ble_tag_to_pb(t) for t in self._get_ble_tag_records()])
+
+    def CreateBleTag(self, request, _context):
+        result = self._create_ble_tag(request.mac_address, request.label, request.user_id or None)
+        if result is None:
+            return pb.CreateBleTagResponse(ok=False, message="mac_address existiert bereits")
+        return pb.CreateBleTagResponse(ok=True, id=result["id"], message="created")
+
+    def UpdateBleTag(self, request, _context):
+        ok = self._update_ble_tag(request.id, request.mac_address, request.label, request.user_id or None)
+        return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
+
+    def DeleteBleTag(self, request, _context):
+        ok = self._delete_ble_tag(request.id)
+        return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
+
+    # ------------------------------------------------------------------
+    # Cars (Admin-UI, #115)
+
+    def GetCars(self, _request, _context):
+        return pb.GetCarsResponse(cars=[_car_config_to_pb(c) for c in self._get_car_records()])
+
+    def CreateCar(self, request, _context):
+        result = self._create_car(request.topic_prefix, request.home_address, list(request.owner_user_ids))
+        if result is None:
+            return pb.CreateCarResponse(ok=False, message="topic_prefix existiert bereits")
+        return pb.CreateCarResponse(ok=True, id=result["id"], message="created")
+
+    def UpdateCar(self, request, _context):
+        ok = self._update_car(request.id, request.topic_prefix, request.home_address, list(request.owner_user_ids))
+        return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
+
+    def DeleteCar(self, request, _context):
+        ok = self._delete_car(request.id)
         return pb.StatusResponse(ok=ok, message="deleted" if ok else "not found")
 
     def TriggerFirmwareUpdate(self, request, _context):
@@ -1536,6 +1574,24 @@ def _setting_to_pb(s: dict) -> pb.Setting:
         category_id=s["category"],
         name=s["name"],
         value=json.dumps(s.get("value")),
+    )
+
+
+def _ble_tag_to_pb(t: dict) -> pb.BleTag:
+    return pb.BleTag(
+        id=t["id"],
+        mac_address=t.get("mac_address") or "",
+        label=t.get("label") or "",
+        user_id=t.get("user_id") or 0,
+    )
+
+
+def _car_config_to_pb(c: dict) -> pb.Car:
+    return pb.Car(
+        id=c["id"],
+        topic_prefix=c.get("topic_prefix") or "",
+        home_address=c.get("home_address") or "",
+        owner_user_ids=c.get("owner_user_ids") or [],
     )
 
 

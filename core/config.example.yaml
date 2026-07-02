@@ -34,8 +34,9 @@ mqtt:
   # hannah/satellite/{device}/status  → idle | listening | processing | speaking
   # hannah/satellite/{device}/online  → true | false (LWT vom Satellit)
 
-# Fahrzeug-Integration: wird über die DB-Settings verwaltet (Kategorie "cars"),
-# nicht mehr hier — siehe Admin-UI / GetSettings/UpdateConfig gRPC.
+# Fahrzeug-Integration: wird über die "cars"-Tabelle verwaltet (eigenes Modell +
+# user_to_car-Pivot für Owner, #115), nicht mehr hier — siehe Admin-UI / GetCars/
+# CreateCar/UpdateCar/DeleteCar gRPC.
 
 # BLE Indoor-Lokalisierung (optional)
 # Satelliten scannen passiv BLE-Advertisements und melden RSSI per MQTT.
@@ -43,7 +44,7 @@ mqtt:
 # Ergebnis: hannah/ble/{label}/location (MQTT, retained) + hannah.0.ble.{label}.* (ioBroker Adapter)
 # ble:
 #   stale_timeout: 30    # Sekunden ohne Report → Tag gilt als "nicht sichtbar"
-# Tag-Liste (mac/label/username) liegt in den DB-Settings (Kategorie "ble.tags"), nicht hier.
+# Tag-Liste (mac_address/label/user_id) liegt in der "ble_tags"-Tabelle (eigenes Modell, #115), nicht hier.
 
 grpc:
   host: "0.0.0.0"   # Bind-Adresse des gRPC-Servers
@@ -71,8 +72,10 @@ iobroker:
   # Pfad-Prefix der virtualDevice-Geräte in ioBroker
   virtual_device_prefix: "javascript.0.virtualDevice"
   feedback_timeout: 3.0   # Sekunden bis "Gerät antwortet nicht"
-  # State-Namen der Geräte liegen in den DB-Settings (Kategorie "iobroker.state_names"),
-  # nicht mehr hier — siehe Admin-UI / GetSettings/UpdateConfig gRPC.
+  # State-Namen der Geräte liegen in den DB-Settings (Kategorie "iobroker", Setting
+  # "state_names"), nicht mehr hier. Wird bei leerer DB automatisch mit generischen
+  # Defaults befüllt (SettingsManager.seed_defaults(), #114) — siehe Admin-UI /
+  # GetSettings/UpdateConfig gRPC zum Anpassen.
 
 tts:
   # Backend: piper (lokal/offline) | azure | polly
@@ -137,8 +140,10 @@ audio:
   format: "auto"
 
 # NLU-Wortlisten (turn_on_words, turn_off_words, category_words, query_words,
-# temperature_units, percentage_units) liegen komplett in den DB-Settings
-# (Kategorie "nlu"), nicht mehr hier — siehe Admin-UI / GetSettings/UpdateConfig gRPC.
+# temperature_units, percentage_units) liegen komplett in den DB-Settings (Kategorie
+# "nlu"), nicht mehr hier. Wird bei leerer DB automatisch mit generischen Defaults
+# befüllt (SettingsManager.seed_defaults(), #114) — siehe Admin-UI / GetSettings/
+# UpdateConfig gRPC zum Anpassen.
 
 llm:
   enabled: false          # true = LLM aktiv (Smalltalk, Notification-Reformulierung)

@@ -257,14 +257,44 @@ class HannahServiceStub:
                 request_serializer=hannah__pb2.UpdateConfigRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
-        self.CreateSetting = channel.unary_unary(
-                '/hannah.HannahService/CreateSetting',
-                request_serializer=hannah__pb2.CreateSettingRequest.SerializeToString,
-                response_deserializer=hannah__pb2.CreateSettingResponse.FromString,
+        self.GetBleTags = channel.unary_unary(
+                '/hannah.HannahService/GetBleTags',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetBleTagsResponse.FromString,
                 _registered_method=True)
-        self.DeleteSetting = channel.unary_unary(
-                '/hannah.HannahService/DeleteSetting',
-                request_serializer=hannah__pb2.DeleteSettingRequest.SerializeToString,
+        self.CreateBleTag = channel.unary_unary(
+                '/hannah.HannahService/CreateBleTag',
+                request_serializer=hannah__pb2.CreateBleTagRequest.SerializeToString,
+                response_deserializer=hannah__pb2.CreateBleTagResponse.FromString,
+                _registered_method=True)
+        self.UpdateBleTag = channel.unary_unary(
+                '/hannah.HannahService/UpdateBleTag',
+                request_serializer=hannah__pb2.UpdateBleTagRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteBleTag = channel.unary_unary(
+                '/hannah.HannahService/DeleteBleTag',
+                request_serializer=hannah__pb2.DeleteBleTagRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetCars = channel.unary_unary(
+                '/hannah.HannahService/GetCars',
+                request_serializer=hannah__pb2.Empty.SerializeToString,
+                response_deserializer=hannah__pb2.GetCarsResponse.FromString,
+                _registered_method=True)
+        self.CreateCar = channel.unary_unary(
+                '/hannah.HannahService/CreateCar',
+                request_serializer=hannah__pb2.CreateCarRequest.SerializeToString,
+                response_deserializer=hannah__pb2.CreateCarResponse.FromString,
+                _registered_method=True)
+        self.UpdateCar = channel.unary_unary(
+                '/hannah.HannahService/UpdateCar',
+                request_serializer=hannah__pb2.UpdateCarRequest.SerializeToString,
+                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteCar = channel.unary_unary(
+                '/hannah.HannahService/DeleteCar',
+                request_serializer=hannah__pb2.DeleteCarRequest.SerializeToString,
                 response_deserializer=hannah__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetCarState = channel.unary_unary(
@@ -626,6 +656,9 @@ class HannahServiceServicer:
 
     def GetSettings(self, request, context):
         """--- Settings (Admin-UI, #27 Phase 5) ---
+        CreateSetting/DeleteSetting wurden mit #115 entfernt: ble.tags/cars haben jetzt
+        eigene Modelle+CRUD (unten), nlu/iobroker.state_names/llm.system_prompt sind immer
+        vorab bekannt/geseedet — es gibt keinen verbleibenden Bedarf, neue Settings anzulegen.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -637,20 +670,58 @@ class HannahServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def CreateSetting(self, request, context):
+    def GetBleTags(self, request, context):
+        """--- BLE Tags (Admin-UI, #115 — eigenes Modell statt Settings-JSON-Blob) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateBleTag(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteSetting(self, request, context):
+    def UpdateBleTag(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteBleTag(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCars(self, request, context):
+        """--- Cars (Admin-UI, #115 — eigenes Modell + user_to_car-Pivot statt Settings-JSON-Blob) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateCar(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateCar(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteCar(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetCarState(self, request, context):
-        """--- Car ---
+        """--- Car state (Live-VW-Connect-Status, unabhängig von der Car-Konfiguration oben) ---
         Returns the current cached car state (available=false if no data received yet).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -996,14 +1067,44 @@ def add_HannahServiceServicer_to_server(servicer, server):
                     request_deserializer=hannah__pb2.UpdateConfigRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
-            'CreateSetting': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateSetting,
-                    request_deserializer=hannah__pb2.CreateSettingRequest.FromString,
-                    response_serializer=hannah__pb2.CreateSettingResponse.SerializeToString,
+            'GetBleTags': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetBleTags,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetBleTagsResponse.SerializeToString,
             ),
-            'DeleteSetting': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteSetting,
-                    request_deserializer=hannah__pb2.DeleteSettingRequest.FromString,
+            'CreateBleTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateBleTag,
+                    request_deserializer=hannah__pb2.CreateBleTagRequest.FromString,
+                    response_serializer=hannah__pb2.CreateBleTagResponse.SerializeToString,
+            ),
+            'UpdateBleTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateBleTag,
+                    request_deserializer=hannah__pb2.UpdateBleTagRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteBleTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteBleTag,
+                    request_deserializer=hannah__pb2.DeleteBleTagRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetCars': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCars,
+                    request_deserializer=hannah__pb2.Empty.FromString,
+                    response_serializer=hannah__pb2.GetCarsResponse.SerializeToString,
+            ),
+            'CreateCar': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateCar,
+                    request_deserializer=hannah__pb2.CreateCarRequest.FromString,
+                    response_serializer=hannah__pb2.CreateCarResponse.SerializeToString,
+            ),
+            'UpdateCar': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateCar,
+                    request_deserializer=hannah__pb2.UpdateCarRequest.FromString,
+                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteCar': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteCar,
+                    request_deserializer=hannah__pb2.DeleteCarRequest.FromString,
                     response_serializer=hannah__pb2.StatusResponse.SerializeToString,
             ),
             'GetCarState': grpc.unary_unary_rpc_method_handler(
@@ -2245,7 +2346,7 @@ class HannahService:
             _registered_method=True)
 
     @staticmethod
-    def CreateSetting(request,
+    def GetBleTags(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2258,9 +2359,9 @@ class HannahService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/hannah.HannahService/CreateSetting',
-            hannah__pb2.CreateSettingRequest.SerializeToString,
-            hannah__pb2.CreateSettingResponse.FromString,
+            '/hannah.HannahService/GetBleTags',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetBleTagsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2272,7 +2373,7 @@ class HannahService:
             _registered_method=True)
 
     @staticmethod
-    def DeleteSetting(request,
+    def CreateBleTag(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2285,8 +2386,170 @@ class HannahService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/hannah.HannahService/DeleteSetting',
-            hannah__pb2.DeleteSettingRequest.SerializeToString,
+            '/hannah.HannahService/CreateBleTag',
+            hannah__pb2.CreateBleTagRequest.SerializeToString,
+            hannah__pb2.CreateBleTagResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateBleTag(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateBleTag',
+            hannah__pb2.UpdateBleTagRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteBleTag(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteBleTag',
+            hannah__pb2.DeleteBleTagRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCars(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetCars',
+            hannah__pb2.Empty.SerializeToString,
+            hannah__pb2.GetCarsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateCar(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateCar',
+            hannah__pb2.CreateCarRequest.SerializeToString,
+            hannah__pb2.CreateCarResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateCar(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateCar',
+            hannah__pb2.UpdateCarRequest.SerializeToString,
+            hannah__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteCar(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteCar',
+            hannah__pb2.DeleteCarRequest.SerializeToString,
             hannah__pb2.StatusResponse.FromString,
             options,
             channel_credentials,

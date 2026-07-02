@@ -34,18 +34,20 @@ def _create_user(db, username="leonie", trust_level=5) -> int:
 
 @pytest.fixture
 def manager(db):
-    fired, played, volumes = [], [], []
+    fired, played, volumes, announced = [], [], [], []
     mgr = AlarmManager(
         db=db,
         on_fire=lambda record: fired.append(record),
         play_asset_fn=lambda device, asset: played.append((device, asset)),
         set_volume_fn=lambda device, level: volumes.append((device, level)),
         get_volume_fn=lambda device: 50,
+        announce_fn=lambda device, text: announced.append((device, text)),
         cycle_seconds=999,  # real Timer delay irrelevant — tests invoke cycles directly
     )
     mgr.fired = fired
     mgr.played = played
     mgr.volumes = volumes
+    mgr.announced = announced
     return mgr
 
 
@@ -258,3 +260,75 @@ class TestRinging:
         manager._start_ringing(sat_b)
 
         assert set(manager.ringing_devices()) == {sat_a, sat_b}
+
+
+class TestPlayResultFallback:
+    """#116: play_asset war Fire-and-Forget — ein Nack vom Satelliten (Asset nicht
+    im Cache o.ä.) blieb unbemerkt und der Klingel-Loop feuerte still für immer
+    weiter. on_play_result() schaltet stattdessen auf eine TTS-Ansage um."""
+
+    def test_nack_switches_next_cycle_to_announce(self, db, manager):
+        sat = _create_satellite(db)
+        manager._start_ringing(sat)
+        assert manager.played == [(sat, "alarm_ring")]
+
+        manager.on_play_result(sat, "alarm_ring", ok=False)
+        manager._ringing_cycle(sat)
+
+        assert manager.played == [(sat, "alarm_ring")]  # kein weiterer Play-Versuch
+        assert manager.announced == [(sat, manager._fallback_text)]
+
+    def test_ack_keeps_playing_asset(self, db, manager):
+        sat = _create_satellite(db)
+        manager._start_ringing(sat)
+
+        manager.on_play_result(sat, "alarm_ring", ok=True)
+        manager._ringing_cycle(sat)
+
+        assert manager.played == [(sat, "alarm_ring"), (sat, "alarm_ring")]
+        assert manager.announced == []
+
+    def test_nack_for_non_ringing_device_is_ignored(self, manager):
+        manager.on_play_result("idle-sat", "alarm_ring", ok=False)
+
+        assert manager.announced == []
+
+    def test_nack_for_different_asset_is_ignored(self, db, manager):
+        sat = _create_satellite(db)
+        manager._start_ringing(sat)
+
+        manager.on_play_result(sat, "timer_jingle", ok=False)
+        manager._ringing_cycle(sat)
+
+        assert manager.announced == []
+        assert manager.played == [(sat, "alarm_ring"), (sat, "alarm_ring")]
+
+    def test_stop_and_restart_resets_fallback(self, db, manager):
+        sat = _create_satellite(db)
+        manager._start_ringing(sat)
+        manager.on_play_result(sat, "alarm_ring", ok=False)
+        manager.stop_ringing(sat)
+
+        manager._start_ringing(sat)
+
+        assert manager.played[-1] == (sat, "alarm_ring")  # wieder Asset, nicht TTS
+
+    def test_without_announce_fn_keeps_retrying_asset(self, db):
+        """Ohne announce_fn (None) bleibt das alte Verhalten: play_asset wird trotz
+        Nack weiter versucht statt auf eine TTS-Ansage umzuschalten."""
+        played = []
+        mgr = AlarmManager(
+            db=db,
+            on_fire=lambda record: None,
+            play_asset_fn=lambda device, asset: played.append((device, asset)),
+            set_volume_fn=lambda device, level: None,
+            get_volume_fn=lambda device: 50,
+            cycle_seconds=999,
+        )
+        sat = _create_satellite(db)
+        mgr._start_ringing(sat)
+
+        mgr.on_play_result(sat, "alarm_ring", ok=False)
+        mgr._ringing_cycle(sat)
+
+        assert played == [(sat, "alarm_ring"), (sat, "alarm_ring")]

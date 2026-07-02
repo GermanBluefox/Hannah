@@ -134,6 +134,34 @@ CREATE TABLE IF NOT EXISTS "settings" (
 	UNIQUE("category","name"),
 	FOREIGN KEY("category") REFERENCES "settings_category"("id") ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS "ble_tags" (
+	"id"	INTEGER NOT NULL,
+	"mac_address"	TEXT NOT NULL,
+	"label"	TEXT NOT NULL,
+	"user_id"	INTEGER,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("mac_address"),
+	FOREIGN KEY("user_id") REFERENCES "users"("id") ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS "cars" (
+	"id"	INTEGER NOT NULL,
+	"topic_prefix"	TEXT NOT NULL,
+	"home_address"	TEXT,
+	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
+	PRIMARY KEY("id" AUTOINCREMENT),
+	UNIQUE("topic_prefix")
+);
+
+CREATE TABLE IF NOT EXISTS "user_to_car" (
+	"user_id"	INTEGER NOT NULL,
+	"car_id"	INTEGER NOT NULL,
+	PRIMARY KEY("user_id","car_id"),
+	FOREIGN KEY("user_id") REFERENCES "users"("id") ON DELETE CASCADE,
+	FOREIGN KEY("car_id") REFERENCES "cars"("id") ON DELETE CASCADE
+);
 """
 
 

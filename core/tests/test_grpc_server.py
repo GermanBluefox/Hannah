@@ -11,10 +11,10 @@ from hannah.user_manager import UserManager
 from hannah.models.user import User
 from hannah.residents.Roomie import Roomie
 from hannah.iobroker import IoBrokerClient
-from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, SetSatelliteOwnerRequest, DeleteSatelliteRequest, AnnounceRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, CreateAlarmRequest, UpdateAlarmRequest, DeleteAlarmRequest, UpdateConfigRequest, SettingUpdate, CreateSettingRequest, DeleteSettingRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
+from hannah.proto.hannah_pb2 import AgentDevice, AgentStateValue, AgentResident, AgentRoom, SatelliteRegistration, ResidentType, LinkAccountRequest, ProxyHeartbeat, CreateGroupRequest, UpdateGroupRequest, DeleteGroupRequest, SetGroupRoomsRequest, SetSatelliteRoomRequest, SetSatelliteDisplayNameRequest, SetSatelliteOwnerRequest, DeleteSatelliteRequest, AnnounceRequest, LoginRequest, CreateRoutineRequest, UpdateRoutineRequest, DeleteRoutineRequest, CreateTriggerRequest, UpdateTriggerRequest, DeleteTriggerRequest, CreateAlarmRequest, UpdateAlarmRequest, DeleteAlarmRequest, UpdateConfigRequest, SettingUpdate, CreateBleTagRequest, UpdateBleTagRequest, DeleteBleTagRequest, CreateCarRequest, UpdateCarRequest, DeleteCarRequest, CreateUserRequest, UpdateUserRequest, DeleteUserRequest
 from hannah.satellite_manager import SatellitePermissionError
 
-def _make_server(user_manager=None,satellite_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,set_satellite_owner=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_alarm_records=None,create_alarm=None,update_alarm=None,delete_alarm=None,get_categories=None,get_settings_records=None,create_setting=None,update_setting_value=None,delete_setting=None,get_residents=None):
+def _make_server(user_manager=None,satellite_manager=None,handle_text=None,handle_voice=None,get_satellites=None,get_car_state=None,announce=None,notificate=None,on_agent_device_snapshot=None,on_agent_send_residents=None,on_agent_room_snapshot=None,on_satellite_change=None,resolve_satellite_room=None,upsert_satellite=None,get_rooms=None,get_groups=None,create_group=None,update_group=None,delete_group=None,set_group_rooms=None,get_db_satellites=None,set_satellite_room=None,set_satellite_display_name=None,set_satellite_owner=None,get_routine_records=None,create_routine=None,update_routine=None,delete_routine=None,get_trigger_records=None,create_trigger=None,update_trigger=None,delete_trigger=None,get_alarm_records=None,create_alarm=None,update_alarm=None,delete_alarm=None,get_categories=None,get_settings_records=None,update_setting_value=None,get_ble_tag_records=None,create_ble_tag=None,update_ble_tag=None,delete_ble_tag=None,get_car_records=None,create_car=None,update_car=None,delete_car=None,get_residents=None):
     return HannahServicer(
         user_manager=user_manager or MagicMock(),
         satellite_manager=satellite_manager or MagicMock(),
@@ -54,9 +54,15 @@ def _make_server(user_manager=None,satellite_manager=None,handle_text=None,handl
         delete_alarm=delete_alarm,
         get_categories=get_categories,
         get_settings_records=get_settings_records,
-        create_setting=create_setting,
         update_setting_value=update_setting_value,
-        delete_setting=delete_setting,
+        get_ble_tag_records=get_ble_tag_records,
+        create_ble_tag=create_ble_tag,
+        update_ble_tag=update_ble_tag,
+        delete_ble_tag=delete_ble_tag,
+        get_car_records=get_car_records,
+        create_car=create_car,
+        update_car=update_car,
+        delete_car=delete_car,
         get_residents=get_residents,
     )
 
@@ -796,7 +802,8 @@ class TestAlarmRpcs:
 
 class TestSettingsRpcs:
     """#27 Phase 5 — Verdrahtung auf SettingsManager.get_categories/get_settings/
-    create_setting/update_setting_value/delete_setting."""
+    update_setting_value. CreateSetting/DeleteSetting wurden mit #115 entfernt
+    (ble.tags/cars haben jetzt eigene Modelle, siehe TestBleTagRpcs/TestCarRpcs)."""
 
     def test_get_settings(self):
         get_categories = MagicMock(return_value=[
@@ -851,32 +858,112 @@ class TestSettingsRpcs:
         update_setting_value.assert_not_called()
         assert response.ok is False
 
-    def test_create_setting_ok(self):
-        create_setting = MagicMock(return_value={"id": 5, "category": 2, "name": "zoey", "value": {"mac": "11:22"}})
-        servicer = _make_server(create_setting=create_setting)
+class TestBleTagRpcs:
+    """#115 — Verdrahtung auf BleTagManager.get_tag_records/create_tag/update_tag/
+    delete_tag (eigenes Modell statt Settings-JSON-Blob)."""
 
-        response = servicer.CreateSetting(CreateSettingRequest(
-            category_id=2, name="zoey", value=json.dumps({"mac": "11:22"}),
+    def test_get_ble_tags(self):
+        get_ble_tag_records = MagicMock(return_value=[
+            {"id": 1, "mac_address": "aa:bb:cc:dd:ee:ff", "label": "leonie", "user_id": 3},
+        ])
+        servicer = _make_server(get_ble_tag_records=get_ble_tag_records)
+
+        response = servicer.GetBleTags(None, None)
+
+        assert len(response.tags) == 1
+        t = response.tags[0]
+        assert t.id == 1
+        assert t.mac_address == "aa:bb:cc:dd:ee:ff"
+        assert t.label == "leonie"
+        assert t.user_id == 3
+
+    def test_create_ble_tag_ok(self):
+        create_ble_tag = MagicMock(return_value={"id": 5})
+        servicer = _make_server(create_ble_tag=create_ble_tag)
+
+        response = servicer.CreateBleTag(CreateBleTagRequest(
+            mac_address="aa:bb:cc:dd:ee:ff", label="leonie", user_id=3,
         ), None)
 
-        create_setting.assert_called_once_with(2, "zoey", {"mac": "11:22"})
+        create_ble_tag.assert_called_once_with("aa:bb:cc:dd:ee:ff", "leonie", 3)
         assert response.ok is True
         assert response.id == 5
 
-    def test_create_setting_duplicate_name(self):
-        servicer = _make_server(create_setting=MagicMock(return_value=None))
+    def test_create_ble_tag_duplicate_mac(self):
+        servicer = _make_server(create_ble_tag=MagicMock(return_value=None))
 
-        response = servicer.CreateSetting(CreateSettingRequest(category_id=2, name="zoey", value="{}"), None)
+        response = servicer.CreateBleTag(CreateBleTagRequest(mac_address="aa:bb:cc:dd:ee:ff", label="leonie"), None)
 
         assert response.ok is False
 
-    def test_delete_setting_ok(self):
-        delete_setting = MagicMock(return_value=True)
-        servicer = _make_server(delete_setting=delete_setting)
+    def test_update_ble_tag_not_found(self):
+        servicer = _make_server(update_ble_tag=MagicMock(return_value=False))
 
-        response = servicer.DeleteSetting(DeleteSettingRequest(setting_id=5), None)
+        response = servicer.UpdateBleTag(UpdateBleTagRequest(id=99, mac_address="aa:bb", label="x"), None)
 
-        delete_setting.assert_called_once_with(5)
+        assert response.ok is False
+
+    def test_delete_ble_tag_ok(self):
+        delete_ble_tag = MagicMock(return_value=True)
+        servicer = _make_server(delete_ble_tag=delete_ble_tag)
+
+        response = servicer.DeleteBleTag(DeleteBleTagRequest(id=5), None)
+
+        delete_ble_tag.assert_called_once_with(5)
+        assert response.ok is True
+
+class TestCarRpcs:
+    """#115 — Verdrahtung auf CarRegistry.get_car_records/create_car/update_car/
+    delete_car (eigenes Modell + user_to_car-Pivot statt Settings-JSON-Blob)."""
+
+    def test_get_cars(self):
+        get_car_records = MagicMock(return_value=[
+            {"id": 1, "topic_prefix": "javascript/0/virtualDevice/Auto/Leonie/Auto1",
+             "home_address": "Musterstr. 1", "owner_user_ids": [3, 4]},
+        ])
+        servicer = _make_server(get_car_records=get_car_records)
+
+        response = servicer.GetCars(None, None)
+
+        assert len(response.cars) == 1
+        c = response.cars[0]
+        assert c.id == 1
+        assert c.topic_prefix == "javascript/0/virtualDevice/Auto/Leonie/Auto1"
+        assert list(c.owner_user_ids) == [3, 4]
+
+    def test_create_car_ok(self):
+        create_car = MagicMock(return_value={"id": 7})
+        servicer = _make_server(create_car=create_car)
+
+        response = servicer.CreateCar(CreateCarRequest(
+            topic_prefix="auto1", home_address="Musterstr. 1", owner_user_ids=[3],
+        ), None)
+
+        create_car.assert_called_once_with("auto1", "Musterstr. 1", [3])
+        assert response.ok is True
+        assert response.id == 7
+
+    def test_create_car_duplicate_topic_prefix(self):
+        servicer = _make_server(create_car=MagicMock(return_value=None))
+
+        response = servicer.CreateCar(CreateCarRequest(topic_prefix="auto1", home_address=""), None)
+
+        assert response.ok is False
+
+    def test_update_car_not_found(self):
+        servicer = _make_server(update_car=MagicMock(return_value=False))
+
+        response = servicer.UpdateCar(UpdateCarRequest(id=99, topic_prefix="auto1"), None)
+
+        assert response.ok is False
+
+    def test_delete_car_ok(self):
+        delete_car = MagicMock(return_value=True)
+        servicer = _make_server(delete_car=delete_car)
+
+        response = servicer.DeleteCar(DeleteCarRequest(id=7), None)
+
+        delete_car.assert_called_once_with(7)
         assert response.ok is True
 
 def test_notify_satellite_gone_does_not_double_send():

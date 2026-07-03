@@ -28,11 +28,12 @@ mkdir -p proto/hannah
 MODULE="dev.kernstock.net/gessinger/voice/hannah/proxy"
 OUR_PKG="${MODULE}/proto/hannah"
 
-# #44: hannah.proto (upstream: core/proto/) was split by scope into multiple
-# files (import-linked) — protoc needs every file listed explicitly (doesn't
-# follow imports transitively for codegen) and a Go package mapping (-M) per
-# file. Same PROTO_FILES list + loop structure as hannah-timer/proto/gen.sh
-# (#45) — only MODULE/OUR_PKG/output dir differ between the two consumers.
+# #44: hannah.proto (upstream: gessinger/voice/hannah-proto, submoduled at
+# repo root as ../proto) was split by scope into multiple files (import-linked)
+# — protoc needs every file listed explicitly (doesn't follow imports
+# transitively for codegen) and a Go package mapping (-M) per file. Same
+# PROTO_FILES list + loop structure as hannah-timer/proto/gen.sh (#45) — only
+# MODULE/OUR_PKG/output dir differ between the two consumers.
 PROTO_FILES=(
   shared.proto
   user_registry.proto
@@ -55,11 +56,11 @@ FILES=()
 for f in "${PROTO_FILES[@]}"; do
   GO_OPTS+=(--go_opt="M${f}=${OUR_PKG}")
   GRPC_OPTS+=(--go-grpc_opt="M${f}=${OUR_PKG}")
-  FILES+=("proto/${f}")
+  FILES+=("../proto/${f}")
 done
 
 protoc \
-  -I proto \
+  -I ../proto \
   --go_out=. \
   --go_opt=module="${MODULE}" \
   "${GO_OPTS[@]}" \

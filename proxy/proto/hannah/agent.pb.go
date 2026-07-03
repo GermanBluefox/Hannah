@@ -255,8 +255,7 @@ func (*AgentMessage_SendRooms) isAgentMessage_Payload() {}
 // Adapter instructs Hannah to control satellites in a room or a specific satellite.
 // room: room_id (enum ID segment) or "all" for all rooms.
 // device_id: if non-empty, only the named satellite is targeted (volume/mute only);
-//
-//	room is still required (used for room-scoped commands and as fallback).
+//            room is still required (used for room-scoped commands and as fallback).
 type AgentSatelliteControl struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Room     string                 `protobuf:"bytes,1,opt,name=room,proto3" json:"room,omitempty"`

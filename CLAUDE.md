@@ -42,7 +42,7 @@ hannah/                          ← Mono-Repo
 │   └── config.yaml              ← Infra-/Bootstrap-Config; NLU-Wortlisten, llm.system_prompt, ble.tags, cars und iobroker.state_names liegen in der DB (hannah.db, Settings-Tabelle) statt hier — siehe GetSettings/UpdateConfig gRPC. nlu/iobroker.state_names werden bei leerer DB automatisch mit generischen Defaults befüllt (SettingsManager.seed_defaults(), #114)
 │
 ├── proxy/                       ← Go gRPC-Proxy (UDP-Satelliten → gRPC → Core)
-│   └── proto/hannah.proto       ← Kopie des Protokolls (Source of Truth: core/proto/hannah.proto)
+│   └── proto/hannah/            ← Generierter Go-Code (Quelle: /proto-Submodule)
 │
 ├── satellite-esp/               ← ESP32-S3 Firmware (ESP-IDF, C)
 │   ├── main/main.c
@@ -61,10 +61,10 @@ hannah/                          ← Mono-Repo
 │
 ├── satellite-pi/                ← Raspberry Pi Satellit (Python, Legacy)
 ├── telegram/                    ← Telegram-Bot Microservice (Python)
-│   └── proto/hannah.proto       ← Kopie des Protokolls (Source of Truth: core/proto/hannah.proto)
 ├── voiceid/                     ← Speaker-ID Service (Python)
-├── audiolib/                    ← C-Audio-Bibliothek (frühe Phase)
-├── iobroker.hannah/             ← ioBroker-Adapter (TypeScript)
+├── audiolib/                    ← C-Audio-Bibliothek (frühe Phase, eigenes Repo als Submodule)
+├── iobroker.hannah/             ← ioBroker-Adapter (TypeScript, eigenes Repo als Submodule)
+├── proto/                       ← Proto-Schema (eigenes Repo hannah-proto als Submodule, Source of Truth)
 └── scripts/                     ← Build- und Release-Scripts
 ```
 
@@ -136,7 +136,7 @@ Kein TLS auf UDP (zu teuer für ESP32, im LAN akzeptabel).
 
 ### gRPC (Hannah Core ↔ externe Services)
 
-- **Proto:** `core/proto/` — einzige Source of Truth, seit #44 nach Scope in mehrere `.proto`-Dateien aufgeteilt (`shared`, `user_registry`, `control`, `car_state`, `event_stream`, `satellite_proxy`, `device_control_menu`, `satellite_provisioning`, `speaker_enrollment`, `agent`, `wakeword_capture`, `timer_service`), per `import` verknüpft; `hannah.proto` selbst enthält nur noch den einen `service HannahService`. Bei Änderungen manuell alle Dateien in die Konsumenten kopieren (`proxy/proto/`, `iobroker.hannah/src/proto/`, `telegram/proto/`), dann Stubs neu generieren via `scripts/gen_proto.sh` (Python: Core + Telegram) bzw. `proxy/Makefile`s `proto`-Target (Go). `iobroker.hannah` lädt das Proto dynamisch (`@grpc/proto-loader`), kein Codegen-Schritt nötig.
+- **Proto:** eigenes Repo [hannah-proto](https://dev.kernstock.net/gessinger/voice/hannah-proto) (seit #43) — einzige Source of Truth, nach Scope in mehrere `.proto`-Dateien aufgeteilt (`shared`, `user_registry`, `control`, `car_state`, `event_stream`, `satellite_proxy`, `device_control_menu`, `satellite_provisioning`, `speaker_enrollment`, `agent`, `wakeword_capture`, `timer_service`), per `import` verknüpft; `hannah.proto` selbst enthält nur noch den einen `service HannahService`. Consumer, die selbst Git-Submodule verwenden können, binden es ein, gepinnt auf einen Release-Tag (Muster wie `audiolib`, siehe Git-Workflow #11): im Hannah-Monorepo als gemeinsames Root-Submodule `/proto` (core, telegram, proxy lesen alle von dort), außerdem eigenständig in Hannah-Timer und WakewordCollector. **Ausnahme `iobroker.hannah`:** kein Submodule, weil ioBrokers geteilte GitHub-Actions-Workflows (`ioBroker/testing-action-*`) keinen Submodule-Checkout unterstützen und das nicht angefasst werden soll (Konvention). Stattdessen holt `scripts/sync_proto_to_iobroker.py` (im Monorepo, nicht im Adapter) die `.proto`-Dateien aus dem lokalen `/proto`-Submodule und öffnet einen normalen PR im Adapter-Repo — für den Adapter unsichtbar, sieht aus wie jeder andere PR. Codegen bleibt Sache jedes Consumers: `scripts/gen_proto.sh` (Python: Core + Telegram) bzw. `proxy/gen_proto.sh` (Go, analog zu Hannah-Timers `proto/gen.sh`, seit #45 kein Makefile-Target mehr). `iobroker.hannah` lädt das Proto dynamisch (`@grpc/proto-loader`), kein Codegen-Schritt nötig. Public-Mirror-Pendant: [github.com/NurPech/hannah-proto](https://github.com/NurPech/hannah-proto) (Push per `sync:public` CI-Job bei Tag).
 - **Port:** 50051 (lokal)
 
 | Methode | Funktion |
@@ -352,11 +352,17 @@ Gilt für das Hannah-Mono-Repo **und** das `iobroker.hannah`-Submodule (eigener 
 8. **Commit Messages bei funktionalen Änderungen referenzieren das Work Item** mit `Refs #ID` (im jeweils zuständigen Tracker aus Punkt 7).
 9. **MR/PR-Beschreibungen schließen das Work Item** mit `Closes #ID`.
 10. **Adapter-Changelog (`README.md` in `iobroker.hannah`) enthält keine Issue-/Ticket-Referenzen**, egal welcher Tracker — das sind öffentliche, nutzerseitige Release Notes (npm/ioBroker-Nutzer ohne Zugriff auf interne Tracker), keine internen Entwickler-Notizen.
-11. **Submodule-Pointer im Hannah-Repo (`iobroker.hannah`, `audiolib`) zeigen immer auf einen Release-Tag**, nie auf einen Branch-/Feature-Commit. Ablauf: PR im Submodule mergen → Release schneiden (Tag entsteht) → erst dann den Pointer im Hannah-Repo auf diesen Tag bumpen (eigener, fokussierter Commit, getrennt von der eigentlichen Feature-Arbeit). **Dabei immer auch das jeweilige `branch`-Feld in `.gitmodules` auf denselben Tag aktualisieren** — sonst hält Renovate den Pointer für veraltet (vergleicht gegen `.gitmodules`) und versucht ihn auf den alten Tag zurückzudrehen.
+11. **Submodule-Pointer im Hannah-Repo (`iobroker.hannah`, `audiolib`, `proto`) zeigen immer auf einen Release-Tag**, nie auf einen Branch-/Feature-Commit. Ablauf: PR im Submodule mergen → Release schneiden (Tag entsteht) → erst dann den Pointer im Hannah-Repo auf diesen Tag bumpen (eigener, fokussierter Commit, getrennt von der eigentlichen Feature-Arbeit). **Dabei immer auch das jeweilige `branch`-Feld in `.gitmodules` auf denselben Tag aktualisieren** — sonst hält Renovate den Pointer für veraltet (vergleicht gegen `.gitmodules`) und versucht ihn auf den alten Tag zurückzudrehen.
 
 Punkte 7–9 gelten für funktionale Änderungen (Features, Bugfixes) — nicht für reine Doku-/Chore-Änderungen wie diesen Abschnitt selbst.
 
 Nach MR-Erstellung: siehe CI-Pipeline-Hinweise unten zur Beobachtung.
+
+### Public Mirror
+
+Damit Dritte Pull Requests schicken können (der eigentliche Zweck des Mirrors), gibt es einen öffentlichen GitHub-Mirror des Hannah-Monorepos: [github.com/NurPech/hannah](https://github.com/NurPech/hannah). Erzeugt/aktualisiert wird er per `scripts/copy_public.py`, das bei jedem Tag automatisch von der CI (`sync:public`-Job) ausgeführt wird. Es kopiert den getrackten Dateibaum, filtert dabei Sensibles raus (Config-Dateien, KiCad-Dateien, `.gitlab-ci.yml`, Binärdateien) und schreibt eine eigene `.gitmodules` fürs Public Repo: Nur Submodule mit einem öffentlichen Pendant (`iobroker.hannah`, `audiolib`, `proto` — siehe `PUBLIC_SUBMODULE_URLS` im Script) werden referenziert, jeweils auf ihre öffentliche GitHub-URL umgebogen; alle anderen Submodule fallen komplett raus.
+
+`audiolib` und `proto` (`hannah-proto`) haben dafür selbst einen eigenen `sync:public`-CI-Job (nur bei `$CI_COMMIT_TAG`, kein Filtering nötig, da unkritischer Inhalt), der sie nach [github.com/NurPech/AudioLib](https://github.com/NurPech/AudioLib) bzw. [github.com/NurPech/hannah-proto](https://github.com/NurPech/hannah-proto) synct. Pull Requests von Dritten gegen einen dieser öffentlichen Mirrors werden manuell zurück ins jeweilige private GitLab-Repo cherry-gepickt (bislang rein theoretischer Fall, noch nicht vorgekommen).
 
 ---
 

@@ -10,8 +10,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROTO_CORE="$REPO_ROOT/core/proto"      # kanonische Quelle für Core + Adapter
-PROTO_TELEGRAM="$REPO_ROOT/telegram/proto"  # Telegram-Subset
+PROTO_DIR="$REPO_ROOT/proto"  # hannah-proto Submodule (gessinger/voice/hannah-proto), Source of Truth
 
 # Python mit grpcio-tools finden
 PYTHON=""
@@ -37,23 +36,23 @@ fi
 
 echo "Nutze Python: $PYTHON"
 
-# Core-Stubs generieren (alle Scope-Dateien — core/proto/hannah.proto #44 in mehrere
+# Core-Stubs generieren (alle Scope-Dateien — hannah.proto #44 in mehrere
 # .proto-Dateien aufgeteilt, siehe deren import-Block. Alle Dateien müssen protoc
 # explizit übergeben werden, es reicht nicht die Haupt-Datei zu nennen.)
 echo "→ core/hannah/proto/"
 "$PYTHON" -m grpc_tools.protoc \
-    -I "$PROTO_CORE" \
+    -I "$PROTO_DIR" \
     --python_out="$REPO_ROOT/core/hannah/proto" \
     --grpc_python_out="$REPO_ROOT/core/hannah/proto" \
-    "$PROTO_CORE"/*.proto
+    "$PROTO_DIR"/*.proto
 
-# Telegram-Stubs generieren (Telegram-Subset)
+# Telegram-Stubs generieren (dieselbe Quelle, eigenes Ausgabe-Package)
 echo "→ telegram/hannah_telegram/proto/"
 "$PYTHON" -m grpc_tools.protoc \
-    -I "$PROTO_TELEGRAM" \
+    -I "$PROTO_DIR" \
     --python_out="$REPO_ROOT/telegram/hannah_telegram/proto" \
     --grpc_python_out="$REPO_ROOT/telegram/hannah_telegram/proto" \
-    "$PROTO_TELEGRAM"/*.proto
+    "$PROTO_DIR"/*.proto
 
 # protoc erzeugt absolute Imports (in *_grpc.py wie auch in jeder *_pb2.py, die eine
 # andere Scope-Datei importiert — seit #44 also mehrere Dateien, nicht mehr nur

@@ -5,6 +5,16 @@
 -->
 
 
+## 0.51.5
+### Hannah Core
+* Changed: Proto schema extracted into its own repo, [hannah-proto](https://dev.kernstock.net/gessinger/voice/hannah-proto) (history-preserving subtree split from `core/proto/`), consumed as a Git submodule (`proto/` at repo root) instead of being manually copied into each consumer. `scripts/gen_proto.sh` now reads from the shared submodule path instead of separate `core/proto`/`telegram/proto` copies (Refs #43)
+
+### Hannah Proxy
+* Changed: `proxy/gen_proto.sh` reads proto sources from the shared `../proto` submodule instead of its own local copy (Refs #43)
+
+### Telegram
+* Changed: `telegram/proto/` (manually copied proto sources) removed — codegen now reads from the shared `proto/` submodule (Refs #43)
+
 ## 0.51.4
 ### Hannah Core
 * Changed: `core/proto/hannah.proto` (1241 lines, ~80 messages) split by scope into 12 separate `.proto` files (`shared`, `user_registry`, `control`, `car_state`, `event_stream`, `satellite_proxy`, `device_control_menu`, `satellite_provisioning`, `speaker_enrollment`, `agent`, `wakeword_capture`, `timer_service`), linked via `import`; `hannah.proto` itself now only holds the header/imports and the single `service HannahService` (unchanged, no service split — the codegen footprint reduction that would require doesn't pay off for the current all-backend consumer set, see #44). `scripts/gen_proto.sh`/`core/proto/gen_proto.sh` updated to pass all `.proto` files to `protoc` (it doesn't follow imports transitively for codegen) and to patch relative imports across every generated `*_pb2*.py`, not just `hannah_pb2_grpc.py`. Python (unlike Go/TS) keeps each file's generated messages in that file's own module instead of re-exporting them into `hannah_pb2` — `core/hannah/proto/__init__.py` now patches every scope module's public names onto `hannah_pb2` so existing `pb.AgentDevice`/`pb.ResidentType.ROOMIE`-style call sites across `grpc_server.py`/`iobroker.py`/`residents_manager.py` keep working unchanged (Refs #44)

@@ -5,6 +5,13 @@
 -->
 
 
+## 0.51.6
+### Hannah Core
+* Added: regression test (`core/tests/test_proto_reexport.py`) walking every scope-split `*_pb2` module and asserting nothing is missing from `hannah_pb2` — guards against the class of bug fixed in Telegram below (Refs #125)
+
+### Telegram
+* Fixed: `hannah_telegram.proto.hannah_pb2` was missing every scope-split message (`EventFilter` and others) — `telegram/hannah_telegram/proto/__init__.py` never got the re-export patch that `core/hannah/proto/__init__.py` received in #44, so it stayed empty. Service crash-looped on every `subscribe_events` call (`AttributeError: module ... has no attribute 'EventFilter'`) (Refs #125)
+
 ## 0.51.5
 ### Hannah Core
 * Changed: Proto schema extracted into its own repo, [hannah-proto](https://dev.kernstock.net/gessinger/voice/hannah-proto) (history-preserving subtree split from `core/proto/`), consumed as a Git submodule (`proto/` at repo root) instead of being manually copied into each consumer. `scripts/gen_proto.sh` now reads from the shared submodule path instead of separate `core/proto`/`telegram/proto` copies (Refs #43)

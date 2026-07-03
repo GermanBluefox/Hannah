@@ -17,9 +17,11 @@ python -m grpc_tools.protoc \
   -I proto \
   --python_out=hannah/proto \
   --grpc_python_out=hannah/proto \
-  proto/hannah.proto
+  proto/*.proto
 
-# grpc_tools-Bug: "import hannah_pb2" → "from . import hannah_pb2"
-sed -i 's/^import hannah_pb2/from . import hannah_pb2/' hannah/proto/hannah_pb2_grpc.py
+# grpc_tools-Bug: absolute statt relative Imports — betrifft seit #44 (Proto in
+# mehrere Scope-Dateien aufgeteilt) jede generierte *_pb2.py mit einem Cross-File-
+# Import, nicht mehr nur hannah_pb2_grpc.py.
+sed -i -E 's/^import ([a-z0-9_]+) as ([a-z0-9_]+)$/from . import \1 as \2/' hannah/proto/*_pb2*.py
 
 echo "✓ Python proto stubs generated in hannah/proto/"

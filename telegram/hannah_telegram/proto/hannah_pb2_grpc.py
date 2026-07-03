@@ -3,7 +3,18 @@
 import grpc
 import warnings
 
-from . import hannah_pb2 as hannah__pb2
+from . import agent_pb2 as agent__pb2
+from . import car_state_pb2 as car__state__pb2
+from . import control_pb2 as control__pb2
+from . import device_control_menu_pb2 as device__control__menu__pb2
+from . import event_stream_pb2 as event__stream__pb2
+from . import satellite_provisioning_pb2 as satellite__provisioning__pb2
+from . import satellite_proxy_pb2 as satellite__proxy__pb2
+from . import shared_pb2 as shared__pb2
+from . import speaker_enrollment_pb2 as speaker__enrollment__pb2
+from . import timer_service_pb2 as timer__service__pb2
+from . import user_registry_pb2 as user__registry__pb2
+from . import wakeword_capture_pb2 as wakeword__capture__pb2
 
 GRPC_GENERATED_VERSION = '1.81.1'
 GRPC_VERSION = grpc.__version__
@@ -49,273 +60,333 @@ class HannahServiceStub:
         """
         self.GetUsers = channel.unary_unary(
                 '/hannah.HannahService/GetUsers',
-                request_serializer=hannah__pb2.GetUsersRequest.SerializeToString,
-                response_deserializer=hannah__pb2.GetUsersResponse.FromString,
+                request_serializer=user__registry__pb2.GetUsersRequest.SerializeToString,
+                response_deserializer=user__registry__pb2.GetUsersResponse.FromString,
                 _registered_method=True)
         self.GetUser = channel.unary_unary(
                 '/hannah.HannahService/GetUser',
-                request_serializer=hannah__pb2.GetUserRequest.SerializeToString,
-                response_deserializer=hannah__pb2.UserResponse.FromString,
+                request_serializer=user__registry__pb2.GetUserRequest.SerializeToString,
+                response_deserializer=user__registry__pb2.UserResponse.FromString,
                 _registered_method=True)
         self.LinkAccount = channel.unary_unary(
                 '/hannah.HannahService/LinkAccount',
-                request_serializer=hannah__pb2.LinkAccountRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=user__registry__pb2.LinkAccountRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.UnlinkAccount = channel.unary_unary(
                 '/hannah.HannahService/UnlinkAccount',
-                request_serializer=hannah__pb2.UnlinkAccountRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=user__registry__pb2.UnlinkAccountRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.SetTrustLevel = channel.unary_unary(
                 '/hannah.HannahService/SetTrustLevel',
-                request_serializer=hannah__pb2.SetTrustLevelRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=user__registry__pb2.SetTrustLevelRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.SetSystemMessages = channel.unary_unary(
                 '/hannah.HannahService/SetSystemMessages',
-                request_serializer=hannah__pb2.SetSystemMessagesRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=user__registry__pb2.SetSystemMessagesRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.Login = channel.unary_unary(
                 '/hannah.HannahService/Login',
-                request_serializer=hannah__pb2.LoginRequest.SerializeToString,
-                response_deserializer=hannah__pb2.UserResponse.FromString,
+                request_serializer=user__registry__pb2.LoginRequest.SerializeToString,
+                response_deserializer=user__registry__pb2.UserResponse.FromString,
                 _registered_method=True)
         self.CreateUser = channel.unary_unary(
                 '/hannah.HannahService/CreateUser',
-                request_serializer=hannah__pb2.CreateUserRequest.SerializeToString,
-                response_deserializer=hannah__pb2.CreateUserResponse.FromString,
+                request_serializer=user__registry__pb2.CreateUserRequest.SerializeToString,
+                response_deserializer=user__registry__pb2.CreateUserResponse.FromString,
                 _registered_method=True)
         self.UpdateUser = channel.unary_unary(
                 '/hannah.HannahService/UpdateUser',
-                request_serializer=hannah__pb2.UpdateUserRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=user__registry__pb2.UpdateUserRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.DeleteUser = channel.unary_unary(
                 '/hannah.HannahService/DeleteUser',
-                request_serializer=hannah__pb2.DeleteUserRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=user__registry__pb2.DeleteUserRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetResidents = channel.unary_unary(
                 '/hannah.HannahService/GetResidents',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetResidentsResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=user__registry__pb2.GetResidentsResponse.FromString,
                 _registered_method=True)
         self.GetDevices = channel.unary_unary(
                 '/hannah.HannahService/GetDevices',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetDevicesResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=device__control__menu__pb2.GetDevicesResponse.FromString,
                 _registered_method=True)
         self.ControlDevice = channel.unary_unary(
                 '/hannah.HannahService/ControlDevice',
-                request_serializer=hannah__pb2.ControlDeviceRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=device__control__menu__pb2.ControlDeviceRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.SubmitText = channel.unary_unary(
                 '/hannah.HannahService/SubmitText',
-                request_serializer=hannah__pb2.SubmitTextRequest.SerializeToString,
-                response_deserializer=hannah__pb2.SubmitTextResponse.FromString,
+                request_serializer=control__pb2.SubmitTextRequest.SerializeToString,
+                response_deserializer=control__pb2.SubmitTextResponse.FromString,
                 _registered_method=True)
         self.SubmitVoice = channel.unary_unary(
                 '/hannah.HannahService/SubmitVoice',
-                request_serializer=hannah__pb2.SubmitVoiceRequest.SerializeToString,
-                response_deserializer=hannah__pb2.SubmitVoiceResponse.FromString,
+                request_serializer=control__pb2.SubmitVoiceRequest.SerializeToString,
+                response_deserializer=control__pb2.SubmitVoiceResponse.FromString,
                 _registered_method=True)
         self.Announce = channel.unary_unary(
                 '/hannah.HannahService/Announce',
-                request_serializer=hannah__pb2.AnnounceRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.AnnounceRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.Notify = channel.unary_unary(
                 '/hannah.HannahService/Notify',
-                request_serializer=hannah__pb2.AgentNotification.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=agent__pb2.AgentNotification.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetSatellites = channel.unary_unary(
                 '/hannah.HannahService/GetSatellites',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetSatellitesResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetSatellitesResponse.FromString,
                 _registered_method=True)
         self.SetSatelliteRoom = channel.unary_unary(
                 '/hannah.HannahService/SetSatelliteRoom',
-                request_serializer=hannah__pb2.SetSatelliteRoomRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.SetSatelliteRoomRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.SetSatelliteDisplayName = channel.unary_unary(
                 '/hannah.HannahService/SetSatelliteDisplayName',
-                request_serializer=hannah__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.SetSatelliteOwner = channel.unary_unary(
+                '/hannah.HannahService/SetSatelliteOwner',
+                request_serializer=control__pb2.SetSatelliteOwnerRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteSatellite = channel.unary_unary(
+                '/hannah.HannahService/DeleteSatellite',
+                request_serializer=control__pb2.DeleteSatelliteRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetRooms = channel.unary_unary(
                 '/hannah.HannahService/GetRooms',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetRoomsResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetRoomsResponse.FromString,
                 _registered_method=True)
         self.GetGroups = channel.unary_unary(
                 '/hannah.HannahService/GetGroups',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetGroupsResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetGroupsResponse.FromString,
                 _registered_method=True)
         self.CreateGroup = channel.unary_unary(
                 '/hannah.HannahService/CreateGroup',
-                request_serializer=hannah__pb2.CreateGroupRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.CreateGroupRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.UpdateGroup = channel.unary_unary(
                 '/hannah.HannahService/UpdateGroup',
-                request_serializer=hannah__pb2.UpdateGroupRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.UpdateGroupRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.DeleteGroup = channel.unary_unary(
                 '/hannah.HannahService/DeleteGroup',
-                request_serializer=hannah__pb2.DeleteGroupRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.DeleteGroupRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.SetGroupRooms = channel.unary_unary(
                 '/hannah.HannahService/SetGroupRooms',
-                request_serializer=hannah__pb2.SetGroupRoomsRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.SetGroupRoomsRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetRoutines = channel.unary_unary(
                 '/hannah.HannahService/GetRoutines',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetRoutinesResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetRoutinesResponse.FromString,
                 _registered_method=True)
         self.CreateRoutine = channel.unary_unary(
                 '/hannah.HannahService/CreateRoutine',
-                request_serializer=hannah__pb2.CreateRoutineRequest.SerializeToString,
-                response_deserializer=hannah__pb2.CreateRoutineResponse.FromString,
+                request_serializer=control__pb2.CreateRoutineRequest.SerializeToString,
+                response_deserializer=control__pb2.CreateRoutineResponse.FromString,
                 _registered_method=True)
         self.UpdateRoutine = channel.unary_unary(
                 '/hannah.HannahService/UpdateRoutine',
-                request_serializer=hannah__pb2.UpdateRoutineRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.UpdateRoutineRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.DeleteRoutine = channel.unary_unary(
                 '/hannah.HannahService/DeleteRoutine',
-                request_serializer=hannah__pb2.DeleteRoutineRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.DeleteRoutineRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetTriggers = channel.unary_unary(
                 '/hannah.HannahService/GetTriggers',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetTriggersResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetTriggersResponse.FromString,
                 _registered_method=True)
         self.CreateTrigger = channel.unary_unary(
                 '/hannah.HannahService/CreateTrigger',
-                request_serializer=hannah__pb2.CreateTriggerRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.CreateTriggerRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.UpdateTrigger = channel.unary_unary(
                 '/hannah.HannahService/UpdateTrigger',
-                request_serializer=hannah__pb2.UpdateTriggerRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.UpdateTriggerRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.DeleteTrigger = channel.unary_unary(
                 '/hannah.HannahService/DeleteTrigger',
-                request_serializer=hannah__pb2.DeleteTriggerRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.DeleteTriggerRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetAlarms = channel.unary_unary(
+                '/hannah.HannahService/GetAlarms',
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetAlarmsResponse.FromString,
+                _registered_method=True)
+        self.CreateAlarm = channel.unary_unary(
+                '/hannah.HannahService/CreateAlarm',
+                request_serializer=control__pb2.CreateAlarmRequest.SerializeToString,
+                response_deserializer=control__pb2.CreateAlarmResponse.FromString,
+                _registered_method=True)
+        self.UpdateAlarm = channel.unary_unary(
+                '/hannah.HannahService/UpdateAlarm',
+                request_serializer=control__pb2.UpdateAlarmRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteAlarm = channel.unary_unary(
+                '/hannah.HannahService/DeleteAlarm',
+                request_serializer=control__pb2.DeleteAlarmRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetSettings = channel.unary_unary(
                 '/hannah.HannahService/GetSettings',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetSettingsResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetSettingsResponse.FromString,
                 _registered_method=True)
         self.UpdateConfig = channel.unary_unary(
                 '/hannah.HannahService/UpdateConfig',
-                request_serializer=hannah__pb2.UpdateConfigRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=control__pb2.UpdateConfigRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
-        self.CreateSetting = channel.unary_unary(
-                '/hannah.HannahService/CreateSetting',
-                request_serializer=hannah__pb2.CreateSettingRequest.SerializeToString,
-                response_deserializer=hannah__pb2.CreateSettingResponse.FromString,
+        self.GetBleTags = channel.unary_unary(
+                '/hannah.HannahService/GetBleTags',
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetBleTagsResponse.FromString,
                 _registered_method=True)
-        self.DeleteSetting = channel.unary_unary(
-                '/hannah.HannahService/DeleteSetting',
-                request_serializer=hannah__pb2.DeleteSettingRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+        self.CreateBleTag = channel.unary_unary(
+                '/hannah.HannahService/CreateBleTag',
+                request_serializer=control__pb2.CreateBleTagRequest.SerializeToString,
+                response_deserializer=control__pb2.CreateBleTagResponse.FromString,
+                _registered_method=True)
+        self.UpdateBleTag = channel.unary_unary(
+                '/hannah.HannahService/UpdateBleTag',
+                request_serializer=control__pb2.UpdateBleTagRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteBleTag = channel.unary_unary(
+                '/hannah.HannahService/DeleteBleTag',
+                request_serializer=control__pb2.DeleteBleTagRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.GetCars = channel.unary_unary(
+                '/hannah.HannahService/GetCars',
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=control__pb2.GetCarsResponse.FromString,
+                _registered_method=True)
+        self.CreateCar = channel.unary_unary(
+                '/hannah.HannahService/CreateCar',
+                request_serializer=control__pb2.CreateCarRequest.SerializeToString,
+                response_deserializer=control__pb2.CreateCarResponse.FromString,
+                _registered_method=True)
+        self.UpdateCar = channel.unary_unary(
+                '/hannah.HannahService/UpdateCar',
+                request_serializer=control__pb2.UpdateCarRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.DeleteCar = channel.unary_unary(
+                '/hannah.HannahService/DeleteCar',
+                request_serializer=control__pb2.DeleteCarRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.GetCarState = channel.unary_unary(
                 '/hannah.HannahService/GetCarState',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.CarStateResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=car__state__pb2.CarStateResponse.FromString,
                 _registered_method=True)
         self.GetAllCarStates = channel.unary_unary(
                 '/hannah.HannahService/GetAllCarStates',
-                request_serializer=hannah__pb2.Empty.SerializeToString,
-                response_deserializer=hannah__pb2.GetAllCarStatesResponse.FromString,
+                request_serializer=shared__pb2.Empty.SerializeToString,
+                response_deserializer=car__state__pb2.GetAllCarStatesResponse.FromString,
                 _registered_method=True)
         self.SubscribeEvents = channel.unary_stream(
                 '/hannah.HannahService/SubscribeEvents',
-                request_serializer=hannah__pb2.EventFilter.SerializeToString,
-                response_deserializer=hannah__pb2.HannahEvent.FromString,
+                request_serializer=event__stream__pb2.EventFilter.SerializeToString,
+                response_deserializer=event__stream__pb2.HannahEvent.FromString,
                 _registered_method=True)
         self.TriggerFirmwareUpdate = channel.unary_unary(
                 '/hannah.HannahService/TriggerFirmwareUpdate',
-                request_serializer=hannah__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=event__stream__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.RequestSatelliteCapture = channel.unary_unary(
                 '/hannah.HannahService/RequestSatelliteCapture',
-                request_serializer=hannah__pb2.SatelliteCaptureRequest.SerializeToString,
-                response_deserializer=hannah__pb2.SatelliteCaptureResponse.FromString,
+                request_serializer=wakeword__capture__pb2.SatelliteCaptureRequest.SerializeToString,
+                response_deserializer=wakeword__capture__pb2.SatelliteCaptureResponse.FromString,
                 _registered_method=True)
         self.ReleaseSatelliteCapture = channel.unary_unary(
                 '/hannah.HannahService/ReleaseSatelliteCapture',
-                request_serializer=hannah__pb2.SatelliteCaptureRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=wakeword__capture__pb2.SatelliteCaptureRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.StreamSatelliteAudio = channel.unary_stream(
                 '/hannah.HannahService/StreamSatelliteAudio',
-                request_serializer=hannah__pb2.SatelliteCaptureRequest.SerializeToString,
-                response_deserializer=hannah__pb2.SatelliteAudioChunk.FromString,
+                request_serializer=wakeword__capture__pb2.SatelliteCaptureRequest.SerializeToString,
+                response_deserializer=wakeword__capture__pb2.SatelliteAudioChunk.FromString,
                 _registered_method=True)
         self.TriggerPlink = channel.unary_unary(
                 '/hannah.HannahService/TriggerPlink',
-                request_serializer=hannah__pb2.TriggerPlinkRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=wakeword__capture__pb2.TriggerPlinkRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.RegisterProxy = channel.stream_stream(
                 '/hannah.HannahService/RegisterProxy',
-                request_serializer=hannah__pb2.ProxyHeartbeat.SerializeToString,
-                response_deserializer=hannah__pb2.ProxyCommand.FromString,
+                request_serializer=satellite__proxy__pb2.ProxyHeartbeat.SerializeToString,
+                response_deserializer=satellite__proxy__pb2.ProxyCommand.FromString,
                 _registered_method=True)
         self.SubmitSatelliteAudio = channel.unary_unary(
                 '/hannah.HannahService/SubmitSatelliteAudio',
-                request_serializer=hannah__pb2.SubmitSatelliteAudioRequest.SerializeToString,
-                response_deserializer=hannah__pb2.SubmitSatelliteAudioResponse.FromString,
+                request_serializer=satellite__proxy__pb2.SubmitSatelliteAudioRequest.SerializeToString,
+                response_deserializer=satellite__proxy__pb2.SubmitSatelliteAudioResponse.FromString,
                 _registered_method=True)
         self.NotifySatelliteRegistered = channel.unary_unary(
                 '/hannah.HannahService/NotifySatelliteRegistered',
-                request_serializer=hannah__pb2.SatelliteRegistration.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=satellite__proxy__pb2.SatelliteRegistration.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.NotifySatelliteGone = channel.unary_unary(
                 '/hannah.HannahService/NotifySatelliteGone',
-                request_serializer=hannah__pb2.SatelliteRegistration.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=satellite__proxy__pb2.SatelliteRegistration.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.ProvisionSatellite = channel.unary_unary(
                 '/hannah.HannahService/ProvisionSatellite',
-                request_serializer=hannah__pb2.ProvisionSatelliteRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=satellite__provisioning__pb2.ProvisionSatelliteRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.EnrollVoiceprint = channel.unary_unary(
                 '/hannah.HannahService/EnrollVoiceprint',
-                request_serializer=hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
-                response_deserializer=hannah__pb2.StatusResponse.FromString,
+                request_serializer=speaker__enrollment__pb2.EnrollVoiceprintRequest.SerializeToString,
+                response_deserializer=shared__pb2.StatusResponse.FromString,
                 _registered_method=True)
         self.TimerConnect = channel.stream_stream(
                 '/hannah.HannahService/TimerConnect',
-                request_serializer=hannah__pb2.TimerMessage.SerializeToString,
-                response_deserializer=hannah__pb2.TimerCommand.FromString,
+                request_serializer=timer__service__pb2.TimerMessage.SerializeToString,
+                response_deserializer=timer__service__pb2.TimerCommand.FromString,
                 _registered_method=True)
         self.AgentConnect = channel.stream_stream(
                 '/hannah.HannahService/AgentConnect',
-                request_serializer=hannah__pb2.AgentMessage.SerializeToString,
-                response_deserializer=hannah__pb2.AgentCommand.FromString,
+                request_serializer=agent__pb2.AgentMessage.SerializeToString,
+                response_deserializer=agent__pb2.AgentCommand.FromString,
                 _registered_method=True)
 
 
@@ -469,6 +540,20 @@ class HannahServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SetSatelliteOwner(self, request, context):
+        """Assign a satellite to a Person (User), independent of its room. #31
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteSatellite(self, request, context):
+        """Delete existing satellite
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetRooms(self, request, context):
         """--- Rooms/Groups (Admin-UI, #27 Phase 1) ---
         """
@@ -555,8 +640,36 @@ class HannahServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAlarms(self, request, context):
+        """--- Alarms (Wecker, #4) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateAlarm(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateAlarm(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteAlarm(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetSettings(self, request, context):
         """--- Settings (Admin-UI, #27 Phase 5) ---
+        CreateSetting/DeleteSetting wurden mit #115 entfernt: ble.tags/cars haben jetzt
+        eigene Modelle+CRUD (unten), nlu/iobroker.state_names/llm.system_prompt sind immer
+        vorab bekannt/geseedet — es gibt keinen verbleibenden Bedarf, neue Settings anzulegen.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -568,20 +681,58 @@ class HannahServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def CreateSetting(self, request, context):
+    def GetBleTags(self, request, context):
+        """--- BLE Tags (Admin-UI, #115 — eigenes Modell statt Settings-JSON-Blob) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateBleTag(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteSetting(self, request, context):
+    def UpdateBleTag(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteBleTag(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCars(self, request, context):
+        """--- Cars (Admin-UI, #115 — eigenes Modell + user_to_car-Pivot statt Settings-JSON-Blob) ---
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateCar(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateCar(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteCar(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetCarState(self, request, context):
-        """--- Car ---
+        """--- Car state (Live-VW-Connect-Status, unabhängig von der Car-Konfiguration oben) ---
         Returns the current cached car state (available=false if no data received yet).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -719,273 +870,333 @@ def add_HannahServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetUsers': grpc.unary_unary_rpc_method_handler(
                     servicer.GetUsers,
-                    request_deserializer=hannah__pb2.GetUsersRequest.FromString,
-                    response_serializer=hannah__pb2.GetUsersResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.GetUsersRequest.FromString,
+                    response_serializer=user__registry__pb2.GetUsersResponse.SerializeToString,
             ),
             'GetUser': grpc.unary_unary_rpc_method_handler(
                     servicer.GetUser,
-                    request_deserializer=hannah__pb2.GetUserRequest.FromString,
-                    response_serializer=hannah__pb2.UserResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.GetUserRequest.FromString,
+                    response_serializer=user__registry__pb2.UserResponse.SerializeToString,
             ),
             'LinkAccount': grpc.unary_unary_rpc_method_handler(
                     servicer.LinkAccount,
-                    request_deserializer=hannah__pb2.LinkAccountRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.LinkAccountRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'UnlinkAccount': grpc.unary_unary_rpc_method_handler(
                     servicer.UnlinkAccount,
-                    request_deserializer=hannah__pb2.UnlinkAccountRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.UnlinkAccountRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'SetTrustLevel': grpc.unary_unary_rpc_method_handler(
                     servicer.SetTrustLevel,
-                    request_deserializer=hannah__pb2.SetTrustLevelRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.SetTrustLevelRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'SetSystemMessages': grpc.unary_unary_rpc_method_handler(
                     servicer.SetSystemMessages,
-                    request_deserializer=hannah__pb2.SetSystemMessagesRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.SetSystemMessagesRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'Login': grpc.unary_unary_rpc_method_handler(
                     servicer.Login,
-                    request_deserializer=hannah__pb2.LoginRequest.FromString,
-                    response_serializer=hannah__pb2.UserResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.LoginRequest.FromString,
+                    response_serializer=user__registry__pb2.UserResponse.SerializeToString,
             ),
             'CreateUser': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateUser,
-                    request_deserializer=hannah__pb2.CreateUserRequest.FromString,
-                    response_serializer=hannah__pb2.CreateUserResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.CreateUserRequest.FromString,
+                    response_serializer=user__registry__pb2.CreateUserResponse.SerializeToString,
             ),
             'UpdateUser': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateUser,
-                    request_deserializer=hannah__pb2.UpdateUserRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.UpdateUserRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'DeleteUser': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteUser,
-                    request_deserializer=hannah__pb2.DeleteUserRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=user__registry__pb2.DeleteUserRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'GetResidents': grpc.unary_unary_rpc_method_handler(
                     servicer.GetResidents,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetResidentsResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=user__registry__pb2.GetResidentsResponse.SerializeToString,
             ),
             'GetDevices': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDevices,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetDevicesResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=device__control__menu__pb2.GetDevicesResponse.SerializeToString,
             ),
             'ControlDevice': grpc.unary_unary_rpc_method_handler(
                     servicer.ControlDevice,
-                    request_deserializer=hannah__pb2.ControlDeviceRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=device__control__menu__pb2.ControlDeviceRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'SubmitText': grpc.unary_unary_rpc_method_handler(
                     servicer.SubmitText,
-                    request_deserializer=hannah__pb2.SubmitTextRequest.FromString,
-                    response_serializer=hannah__pb2.SubmitTextResponse.SerializeToString,
+                    request_deserializer=control__pb2.SubmitTextRequest.FromString,
+                    response_serializer=control__pb2.SubmitTextResponse.SerializeToString,
             ),
             'SubmitVoice': grpc.unary_unary_rpc_method_handler(
                     servicer.SubmitVoice,
-                    request_deserializer=hannah__pb2.SubmitVoiceRequest.FromString,
-                    response_serializer=hannah__pb2.SubmitVoiceResponse.SerializeToString,
+                    request_deserializer=control__pb2.SubmitVoiceRequest.FromString,
+                    response_serializer=control__pb2.SubmitVoiceResponse.SerializeToString,
             ),
             'Announce': grpc.unary_unary_rpc_method_handler(
                     servicer.Announce,
-                    request_deserializer=hannah__pb2.AnnounceRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.AnnounceRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'Notify': grpc.unary_unary_rpc_method_handler(
                     servicer.Notify,
-                    request_deserializer=hannah__pb2.AgentNotification.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=agent__pb2.AgentNotification.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'GetSatellites': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSatellites,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetSatellitesResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetSatellitesResponse.SerializeToString,
             ),
             'SetSatelliteRoom': grpc.unary_unary_rpc_method_handler(
                     servicer.SetSatelliteRoom,
-                    request_deserializer=hannah__pb2.SetSatelliteRoomRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.SetSatelliteRoomRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'SetSatelliteDisplayName': grpc.unary_unary_rpc_method_handler(
                     servicer.SetSatelliteDisplayName,
-                    request_deserializer=hannah__pb2.SetSatelliteDisplayNameRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.SetSatelliteDisplayNameRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
+            ),
+            'SetSatelliteOwner': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSatelliteOwner,
+                    request_deserializer=control__pb2.SetSatelliteOwnerRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteSatellite': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteSatellite,
+                    request_deserializer=control__pb2.DeleteSatelliteRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'GetRooms': grpc.unary_unary_rpc_method_handler(
                     servicer.GetRooms,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetRoomsResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetRoomsResponse.SerializeToString,
             ),
             'GetGroups': grpc.unary_unary_rpc_method_handler(
                     servicer.GetGroups,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetGroupsResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetGroupsResponse.SerializeToString,
             ),
             'CreateGroup': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateGroup,
-                    request_deserializer=hannah__pb2.CreateGroupRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.CreateGroupRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'UpdateGroup': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateGroup,
-                    request_deserializer=hannah__pb2.UpdateGroupRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.UpdateGroupRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'DeleteGroup': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteGroup,
-                    request_deserializer=hannah__pb2.DeleteGroupRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.DeleteGroupRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'SetGroupRooms': grpc.unary_unary_rpc_method_handler(
                     servicer.SetGroupRooms,
-                    request_deserializer=hannah__pb2.SetGroupRoomsRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.SetGroupRoomsRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'GetRoutines': grpc.unary_unary_rpc_method_handler(
                     servicer.GetRoutines,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetRoutinesResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetRoutinesResponse.SerializeToString,
             ),
             'CreateRoutine': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateRoutine,
-                    request_deserializer=hannah__pb2.CreateRoutineRequest.FromString,
-                    response_serializer=hannah__pb2.CreateRoutineResponse.SerializeToString,
+                    request_deserializer=control__pb2.CreateRoutineRequest.FromString,
+                    response_serializer=control__pb2.CreateRoutineResponse.SerializeToString,
             ),
             'UpdateRoutine': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateRoutine,
-                    request_deserializer=hannah__pb2.UpdateRoutineRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.UpdateRoutineRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'DeleteRoutine': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteRoutine,
-                    request_deserializer=hannah__pb2.DeleteRoutineRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.DeleteRoutineRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'GetTriggers': grpc.unary_unary_rpc_method_handler(
                     servicer.GetTriggers,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetTriggersResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetTriggersResponse.SerializeToString,
             ),
             'CreateTrigger': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateTrigger,
-                    request_deserializer=hannah__pb2.CreateTriggerRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.CreateTriggerRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'UpdateTrigger': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateTrigger,
-                    request_deserializer=hannah__pb2.UpdateTriggerRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.UpdateTriggerRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'DeleteTrigger': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteTrigger,
-                    request_deserializer=hannah__pb2.DeleteTriggerRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.DeleteTriggerRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetAlarms': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAlarms,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetAlarmsResponse.SerializeToString,
+            ),
+            'CreateAlarm': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateAlarm,
+                    request_deserializer=control__pb2.CreateAlarmRequest.FromString,
+                    response_serializer=control__pb2.CreateAlarmResponse.SerializeToString,
+            ),
+            'UpdateAlarm': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateAlarm,
+                    request_deserializer=control__pb2.UpdateAlarmRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteAlarm': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteAlarm,
+                    request_deserializer=control__pb2.DeleteAlarmRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'GetSettings': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSettings,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetSettingsResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetSettingsResponse.SerializeToString,
             ),
             'UpdateConfig': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateConfig,
-                    request_deserializer=hannah__pb2.UpdateConfigRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=control__pb2.UpdateConfigRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
-            'CreateSetting': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateSetting,
-                    request_deserializer=hannah__pb2.CreateSettingRequest.FromString,
-                    response_serializer=hannah__pb2.CreateSettingResponse.SerializeToString,
+            'GetBleTags': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetBleTags,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetBleTagsResponse.SerializeToString,
             ),
-            'DeleteSetting': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteSetting,
-                    request_deserializer=hannah__pb2.DeleteSettingRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+            'CreateBleTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateBleTag,
+                    request_deserializer=control__pb2.CreateBleTagRequest.FromString,
+                    response_serializer=control__pb2.CreateBleTagResponse.SerializeToString,
+            ),
+            'UpdateBleTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateBleTag,
+                    request_deserializer=control__pb2.UpdateBleTagRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteBleTag': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteBleTag,
+                    request_deserializer=control__pb2.DeleteBleTagRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
+            ),
+            'GetCars': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCars,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=control__pb2.GetCarsResponse.SerializeToString,
+            ),
+            'CreateCar': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateCar,
+                    request_deserializer=control__pb2.CreateCarRequest.FromString,
+                    response_serializer=control__pb2.CreateCarResponse.SerializeToString,
+            ),
+            'UpdateCar': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateCar,
+                    request_deserializer=control__pb2.UpdateCarRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
+            ),
+            'DeleteCar': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteCar,
+                    request_deserializer=control__pb2.DeleteCarRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'GetCarState': grpc.unary_unary_rpc_method_handler(
                     servicer.GetCarState,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.CarStateResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=car__state__pb2.CarStateResponse.SerializeToString,
             ),
             'GetAllCarStates': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAllCarStates,
-                    request_deserializer=hannah__pb2.Empty.FromString,
-                    response_serializer=hannah__pb2.GetAllCarStatesResponse.SerializeToString,
+                    request_deserializer=shared__pb2.Empty.FromString,
+                    response_serializer=car__state__pb2.GetAllCarStatesResponse.SerializeToString,
             ),
             'SubscribeEvents': grpc.unary_stream_rpc_method_handler(
                     servicer.SubscribeEvents,
-                    request_deserializer=hannah__pb2.EventFilter.FromString,
-                    response_serializer=hannah__pb2.HannahEvent.SerializeToString,
+                    request_deserializer=event__stream__pb2.EventFilter.FromString,
+                    response_serializer=event__stream__pb2.HannahEvent.SerializeToString,
             ),
             'TriggerFirmwareUpdate': grpc.unary_unary_rpc_method_handler(
                     servicer.TriggerFirmwareUpdate,
-                    request_deserializer=hannah__pb2.TriggerFirmwareUpdateRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=event__stream__pb2.TriggerFirmwareUpdateRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'RequestSatelliteCapture': grpc.unary_unary_rpc_method_handler(
                     servicer.RequestSatelliteCapture,
-                    request_deserializer=hannah__pb2.SatelliteCaptureRequest.FromString,
-                    response_serializer=hannah__pb2.SatelliteCaptureResponse.SerializeToString,
+                    request_deserializer=wakeword__capture__pb2.SatelliteCaptureRequest.FromString,
+                    response_serializer=wakeword__capture__pb2.SatelliteCaptureResponse.SerializeToString,
             ),
             'ReleaseSatelliteCapture': grpc.unary_unary_rpc_method_handler(
                     servicer.ReleaseSatelliteCapture,
-                    request_deserializer=hannah__pb2.SatelliteCaptureRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=wakeword__capture__pb2.SatelliteCaptureRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'StreamSatelliteAudio': grpc.unary_stream_rpc_method_handler(
                     servicer.StreamSatelliteAudio,
-                    request_deserializer=hannah__pb2.SatelliteCaptureRequest.FromString,
-                    response_serializer=hannah__pb2.SatelliteAudioChunk.SerializeToString,
+                    request_deserializer=wakeword__capture__pb2.SatelliteCaptureRequest.FromString,
+                    response_serializer=wakeword__capture__pb2.SatelliteAudioChunk.SerializeToString,
             ),
             'TriggerPlink': grpc.unary_unary_rpc_method_handler(
                     servicer.TriggerPlink,
-                    request_deserializer=hannah__pb2.TriggerPlinkRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=wakeword__capture__pb2.TriggerPlinkRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'RegisterProxy': grpc.stream_stream_rpc_method_handler(
                     servicer.RegisterProxy,
-                    request_deserializer=hannah__pb2.ProxyHeartbeat.FromString,
-                    response_serializer=hannah__pb2.ProxyCommand.SerializeToString,
+                    request_deserializer=satellite__proxy__pb2.ProxyHeartbeat.FromString,
+                    response_serializer=satellite__proxy__pb2.ProxyCommand.SerializeToString,
             ),
             'SubmitSatelliteAudio': grpc.unary_unary_rpc_method_handler(
                     servicer.SubmitSatelliteAudio,
-                    request_deserializer=hannah__pb2.SubmitSatelliteAudioRequest.FromString,
-                    response_serializer=hannah__pb2.SubmitSatelliteAudioResponse.SerializeToString,
+                    request_deserializer=satellite__proxy__pb2.SubmitSatelliteAudioRequest.FromString,
+                    response_serializer=satellite__proxy__pb2.SubmitSatelliteAudioResponse.SerializeToString,
             ),
             'NotifySatelliteRegistered': grpc.unary_unary_rpc_method_handler(
                     servicer.NotifySatelliteRegistered,
-                    request_deserializer=hannah__pb2.SatelliteRegistration.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=satellite__proxy__pb2.SatelliteRegistration.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'NotifySatelliteGone': grpc.unary_unary_rpc_method_handler(
                     servicer.NotifySatelliteGone,
-                    request_deserializer=hannah__pb2.SatelliteRegistration.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=satellite__proxy__pb2.SatelliteRegistration.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'ProvisionSatellite': grpc.unary_unary_rpc_method_handler(
                     servicer.ProvisionSatellite,
-                    request_deserializer=hannah__pb2.ProvisionSatelliteRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=satellite__provisioning__pb2.ProvisionSatelliteRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'EnrollVoiceprint': grpc.unary_unary_rpc_method_handler(
                     servicer.EnrollVoiceprint,
-                    request_deserializer=hannah__pb2.EnrollVoiceprintRequest.FromString,
-                    response_serializer=hannah__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=speaker__enrollment__pb2.EnrollVoiceprintRequest.FromString,
+                    response_serializer=shared__pb2.StatusResponse.SerializeToString,
             ),
             'TimerConnect': grpc.stream_stream_rpc_method_handler(
                     servicer.TimerConnect,
-                    request_deserializer=hannah__pb2.TimerMessage.FromString,
-                    response_serializer=hannah__pb2.TimerCommand.SerializeToString,
+                    request_deserializer=timer__service__pb2.TimerMessage.FromString,
+                    response_serializer=timer__service__pb2.TimerCommand.SerializeToString,
             ),
             'AgentConnect': grpc.stream_stream_rpc_method_handler(
                     servicer.AgentConnect,
-                    request_deserializer=hannah__pb2.AgentMessage.FromString,
-                    response_serializer=hannah__pb2.AgentCommand.SerializeToString,
+                    request_deserializer=agent__pb2.AgentMessage.FromString,
+                    response_serializer=agent__pb2.AgentCommand.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1026,8 +1237,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetUsers',
-            hannah__pb2.GetUsersRequest.SerializeToString,
-            hannah__pb2.GetUsersResponse.FromString,
+            user__registry__pb2.GetUsersRequest.SerializeToString,
+            user__registry__pb2.GetUsersResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1053,8 +1264,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetUser',
-            hannah__pb2.GetUserRequest.SerializeToString,
-            hannah__pb2.UserResponse.FromString,
+            user__registry__pb2.GetUserRequest.SerializeToString,
+            user__registry__pb2.UserResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1080,8 +1291,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/LinkAccount',
-            hannah__pb2.LinkAccountRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            user__registry__pb2.LinkAccountRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1107,8 +1318,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/UnlinkAccount',
-            hannah__pb2.UnlinkAccountRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            user__registry__pb2.UnlinkAccountRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1134,8 +1345,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SetTrustLevel',
-            hannah__pb2.SetTrustLevelRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            user__registry__pb2.SetTrustLevelRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1161,8 +1372,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SetSystemMessages',
-            hannah__pb2.SetSystemMessagesRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            user__registry__pb2.SetSystemMessagesRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1188,8 +1399,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/Login',
-            hannah__pb2.LoginRequest.SerializeToString,
-            hannah__pb2.UserResponse.FromString,
+            user__registry__pb2.LoginRequest.SerializeToString,
+            user__registry__pb2.UserResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1215,8 +1426,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/CreateUser',
-            hannah__pb2.CreateUserRequest.SerializeToString,
-            hannah__pb2.CreateUserResponse.FromString,
+            user__registry__pb2.CreateUserRequest.SerializeToString,
+            user__registry__pb2.CreateUserResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1242,8 +1453,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/UpdateUser',
-            hannah__pb2.UpdateUserRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            user__registry__pb2.UpdateUserRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1269,8 +1480,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/DeleteUser',
-            hannah__pb2.DeleteUserRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            user__registry__pb2.DeleteUserRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1296,8 +1507,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetResidents',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetResidentsResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            user__registry__pb2.GetResidentsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1323,8 +1534,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetDevices',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetDevicesResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            device__control__menu__pb2.GetDevicesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1350,8 +1561,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/ControlDevice',
-            hannah__pb2.ControlDeviceRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            device__control__menu__pb2.ControlDeviceRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1377,8 +1588,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SubmitText',
-            hannah__pb2.SubmitTextRequest.SerializeToString,
-            hannah__pb2.SubmitTextResponse.FromString,
+            control__pb2.SubmitTextRequest.SerializeToString,
+            control__pb2.SubmitTextResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1404,8 +1615,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SubmitVoice',
-            hannah__pb2.SubmitVoiceRequest.SerializeToString,
-            hannah__pb2.SubmitVoiceResponse.FromString,
+            control__pb2.SubmitVoiceRequest.SerializeToString,
+            control__pb2.SubmitVoiceResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1431,8 +1642,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/Announce',
-            hannah__pb2.AnnounceRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.AnnounceRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1458,8 +1669,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/Notify',
-            hannah__pb2.AgentNotification.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            agent__pb2.AgentNotification.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1485,8 +1696,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetSatellites',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetSatellitesResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetSatellitesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1512,8 +1723,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SetSatelliteRoom',
-            hannah__pb2.SetSatelliteRoomRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.SetSatelliteRoomRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1539,8 +1750,62 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SetSatelliteDisplayName',
-            hannah__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.SetSatelliteDisplayNameRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetSatelliteOwner(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/SetSatelliteOwner',
+            control__pb2.SetSatelliteOwnerRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteSatellite(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteSatellite',
+            control__pb2.DeleteSatelliteRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1566,8 +1831,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetRooms',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetRoomsResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetRoomsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1593,8 +1858,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetGroups',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetGroupsResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetGroupsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1620,8 +1885,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/CreateGroup',
-            hannah__pb2.CreateGroupRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.CreateGroupRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1647,8 +1912,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/UpdateGroup',
-            hannah__pb2.UpdateGroupRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.UpdateGroupRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1674,8 +1939,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/DeleteGroup',
-            hannah__pb2.DeleteGroupRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.DeleteGroupRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1701,8 +1966,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SetGroupRooms',
-            hannah__pb2.SetGroupRoomsRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.SetGroupRoomsRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1728,8 +1993,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetRoutines',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetRoutinesResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetRoutinesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1755,8 +2020,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/CreateRoutine',
-            hannah__pb2.CreateRoutineRequest.SerializeToString,
-            hannah__pb2.CreateRoutineResponse.FromString,
+            control__pb2.CreateRoutineRequest.SerializeToString,
+            control__pb2.CreateRoutineResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1782,8 +2047,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/UpdateRoutine',
-            hannah__pb2.UpdateRoutineRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.UpdateRoutineRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1809,8 +2074,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/DeleteRoutine',
-            hannah__pb2.DeleteRoutineRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.DeleteRoutineRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1836,8 +2101,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetTriggers',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetTriggersResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetTriggersResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1863,8 +2128,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/CreateTrigger',
-            hannah__pb2.CreateTriggerRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.CreateTriggerRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1890,8 +2155,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/UpdateTrigger',
-            hannah__pb2.UpdateTriggerRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.UpdateTriggerRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1917,8 +2182,116 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/DeleteTrigger',
-            hannah__pb2.DeleteTriggerRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.DeleteTriggerRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAlarms(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetAlarms',
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetAlarmsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateAlarm(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateAlarm',
+            control__pb2.CreateAlarmRequest.SerializeToString,
+            control__pb2.CreateAlarmResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateAlarm(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateAlarm',
+            control__pb2.UpdateAlarmRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteAlarm(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteAlarm',
+            control__pb2.DeleteAlarmRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1944,8 +2317,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetSettings',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetSettingsResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetSettingsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1971,8 +2344,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/UpdateConfig',
-            hannah__pb2.UpdateConfigRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            control__pb2.UpdateConfigRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1984,7 +2357,7 @@ class HannahService:
             _registered_method=True)
 
     @staticmethod
-    def CreateSetting(request,
+    def GetBleTags(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1997,9 +2370,9 @@ class HannahService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/hannah.HannahService/CreateSetting',
-            hannah__pb2.CreateSettingRequest.SerializeToString,
-            hannah__pb2.CreateSettingResponse.FromString,
+            '/hannah.HannahService/GetBleTags',
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetBleTagsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2011,7 +2384,7 @@ class HannahService:
             _registered_method=True)
 
     @staticmethod
-    def DeleteSetting(request,
+    def CreateBleTag(request,
             target,
             options=(),
             channel_credentials=None,
@@ -2024,9 +2397,171 @@ class HannahService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/hannah.HannahService/DeleteSetting',
-            hannah__pb2.DeleteSettingRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            '/hannah.HannahService/CreateBleTag',
+            control__pb2.CreateBleTagRequest.SerializeToString,
+            control__pb2.CreateBleTagResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateBleTag(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateBleTag',
+            control__pb2.UpdateBleTagRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteBleTag(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteBleTag',
+            control__pb2.DeleteBleTagRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCars(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/GetCars',
+            shared__pb2.Empty.SerializeToString,
+            control__pb2.GetCarsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateCar(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/CreateCar',
+            control__pb2.CreateCarRequest.SerializeToString,
+            control__pb2.CreateCarResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateCar(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/UpdateCar',
+            control__pb2.UpdateCarRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteCar(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/hannah.HannahService/DeleteCar',
+            control__pb2.DeleteCarRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2052,8 +2587,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetCarState',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.CarStateResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            car__state__pb2.CarStateResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2079,8 +2614,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/GetAllCarStates',
-            hannah__pb2.Empty.SerializeToString,
-            hannah__pb2.GetAllCarStatesResponse.FromString,
+            shared__pb2.Empty.SerializeToString,
+            car__state__pb2.GetAllCarStatesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2106,8 +2641,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SubscribeEvents',
-            hannah__pb2.EventFilter.SerializeToString,
-            hannah__pb2.HannahEvent.FromString,
+            event__stream__pb2.EventFilter.SerializeToString,
+            event__stream__pb2.HannahEvent.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2133,8 +2668,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/TriggerFirmwareUpdate',
-            hannah__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            event__stream__pb2.TriggerFirmwareUpdateRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2160,8 +2695,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/RequestSatelliteCapture',
-            hannah__pb2.SatelliteCaptureRequest.SerializeToString,
-            hannah__pb2.SatelliteCaptureResponse.FromString,
+            wakeword__capture__pb2.SatelliteCaptureRequest.SerializeToString,
+            wakeword__capture__pb2.SatelliteCaptureResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2187,8 +2722,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/ReleaseSatelliteCapture',
-            hannah__pb2.SatelliteCaptureRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            wakeword__capture__pb2.SatelliteCaptureRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2214,8 +2749,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/StreamSatelliteAudio',
-            hannah__pb2.SatelliteCaptureRequest.SerializeToString,
-            hannah__pb2.SatelliteAudioChunk.FromString,
+            wakeword__capture__pb2.SatelliteCaptureRequest.SerializeToString,
+            wakeword__capture__pb2.SatelliteAudioChunk.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2241,8 +2776,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/TriggerPlink',
-            hannah__pb2.TriggerPlinkRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            wakeword__capture__pb2.TriggerPlinkRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2268,8 +2803,8 @@ class HannahService:
             request_iterator,
             target,
             '/hannah.HannahService/RegisterProxy',
-            hannah__pb2.ProxyHeartbeat.SerializeToString,
-            hannah__pb2.ProxyCommand.FromString,
+            satellite__proxy__pb2.ProxyHeartbeat.SerializeToString,
+            satellite__proxy__pb2.ProxyCommand.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2295,8 +2830,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/SubmitSatelliteAudio',
-            hannah__pb2.SubmitSatelliteAudioRequest.SerializeToString,
-            hannah__pb2.SubmitSatelliteAudioResponse.FromString,
+            satellite__proxy__pb2.SubmitSatelliteAudioRequest.SerializeToString,
+            satellite__proxy__pb2.SubmitSatelliteAudioResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2322,8 +2857,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/NotifySatelliteRegistered',
-            hannah__pb2.SatelliteRegistration.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            satellite__proxy__pb2.SatelliteRegistration.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2349,8 +2884,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/NotifySatelliteGone',
-            hannah__pb2.SatelliteRegistration.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            satellite__proxy__pb2.SatelliteRegistration.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2376,8 +2911,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/ProvisionSatellite',
-            hannah__pb2.ProvisionSatelliteRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            satellite__provisioning__pb2.ProvisionSatelliteRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2403,8 +2938,8 @@ class HannahService:
             request,
             target,
             '/hannah.HannahService/EnrollVoiceprint',
-            hannah__pb2.EnrollVoiceprintRequest.SerializeToString,
-            hannah__pb2.StatusResponse.FromString,
+            speaker__enrollment__pb2.EnrollVoiceprintRequest.SerializeToString,
+            shared__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2430,8 +2965,8 @@ class HannahService:
             request_iterator,
             target,
             '/hannah.HannahService/TimerConnect',
-            hannah__pb2.TimerMessage.SerializeToString,
-            hannah__pb2.TimerCommand.FromString,
+            timer__service__pb2.TimerMessage.SerializeToString,
+            timer__service__pb2.TimerCommand.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2457,8 +2992,8 @@ class HannahService:
             request_iterator,
             target,
             '/hannah.HannahService/AgentConnect',
-            hannah__pb2.AgentMessage.SerializeToString,
-            hannah__pb2.AgentCommand.FromString,
+            agent__pb2.AgentMessage.SerializeToString,
+            agent__pb2.AgentCommand.FromString,
             options,
             channel_credentials,
             insecure,

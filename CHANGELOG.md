@@ -5,6 +5,16 @@
 -->
 
 
+## 0.51.4
+### Hannah Core
+* Changed: `core/proto/hannah.proto` (1241 lines, ~80 messages) split by scope into 12 separate `.proto` files (`shared`, `user_registry`, `control`, `car_state`, `event_stream`, `satellite_proxy`, `device_control_menu`, `satellite_provisioning`, `speaker_enrollment`, `agent`, `wakeword_capture`, `timer_service`), linked via `import`; `hannah.proto` itself now only holds the header/imports and the single `service HannahService` (unchanged, no service split — the codegen footprint reduction that would require doesn't pay off for the current all-backend consumer set, see #44). `scripts/gen_proto.sh`/`core/proto/gen_proto.sh` updated to pass all `.proto` files to `protoc` (it doesn't follow imports transitively for codegen) and to patch relative imports across every generated `*_pb2*.py`, not just `hannah_pb2_grpc.py`. Python (unlike Go/TS) keeps each file's generated messages in that file's own module instead of re-exporting them into `hannah_pb2` — `core/hannah/proto/__init__.py` now patches every scope module's public names onto `hannah_pb2` so existing `pb.AgentDevice`/`pb.ResidentType.ROOMIE`-style call sites across `grpc_server.py`/`iobroker.py`/`residents_manager.py` keep working unchanged (Refs #44)
+
+### Hannah Proxy
+* Changed: `proxy/gen_proto.sh` fixed (stray unmatched quotes broke argument parsing, wrong path assumption after a WIP edit) and updated for the multi-file proto split — lists all 13 files explicitly with a per-file Go package mapping. Switched from `--go_opt=paths=source_relative` to the more robust `module=` pattern (output path derived from the Go module root, independent of source layout), unifying with the Hannah Timer Service's equivalent script. `proxy/Makefile`'s now-redundant `proto` target removed — `gen_proto.sh` is the one tool, matching Timer Service (no Makefile there either) (Refs #44, #45)
+
+### Telegram
+* Changed: `telegram/proto/` synced to the split scope files (was stale — missing `Alarm`/`SetSatelliteOwner`/`DeleteSatellite`, still had the removed `CreateSetting`/`DeleteSetting`) (Refs #44)
+
 ## 0.51.3
 ### Hannah Core
 * Added: `Car` (proto + `Car` model, `core/hannah/models/car.py`) now has its own `name` field for the display name, analogous to `Satellite.display_name` — previously the WebUI showed the technical `topic_prefix` as the card title for lack of a dedicated display-name field. `CreateCarRequest`/`UpdateCarRequest`/`Car` (gRPC) and `CarRegistry.create_car`/`update_car` (`core/hannah/car_registry.py`) extended accordingly; `topic_prefix` remains the technical MQTT key, unchanged. Additive `ALTER TABLE` migration for existing `cars` tables in `core/hannah/utils/db.py` (Refs #123)

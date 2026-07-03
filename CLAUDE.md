@@ -136,7 +136,7 @@ Kein TLS auf UDP (zu teuer für ESP32, im LAN akzeptabel).
 
 ### gRPC (Hannah Core ↔ externe Services)
 
-- **Proto:** `core/proto/hannah.proto` — einzige Source of Truth. Bei Änderungen manuell in alle Konsumenten kopieren (`proxy/proto/`, `iobroker.hannah/src/proto/`, `telegram/proto/`), dann Stubs neu generieren via `core/proto/gen_proto.sh`.
+- **Proto:** `core/proto/` — einzige Source of Truth, seit #44 nach Scope in mehrere `.proto`-Dateien aufgeteilt (`shared`, `user_registry`, `control`, `car_state`, `event_stream`, `satellite_proxy`, `device_control_menu`, `satellite_provisioning`, `speaker_enrollment`, `agent`, `wakeword_capture`, `timer_service`), per `import` verknüpft; `hannah.proto` selbst enthält nur noch den einen `service HannahService`. Bei Änderungen manuell alle Dateien in die Konsumenten kopieren (`proxy/proto/`, `iobroker.hannah/src/proto/`, `telegram/proto/`), dann Stubs neu generieren via `scripts/gen_proto.sh` (Python: Core + Telegram) bzw. `proxy/Makefile`s `proto`-Target (Go). `iobroker.hannah` lädt das Proto dynamisch (`@grpc/proto-loader`), kein Codegen-Schritt nötig.
 - **Port:** 50051 (lokal)
 
 | Methode | Funktion |
@@ -372,7 +372,7 @@ Aktueller Versionsstand und Änderungshistorie: siehe `CHANGELOG.md`. Offene Bug
 - `Phase2/.history` enthält eingebettetes Git-Repo (KiCad History) — nicht committen, `.gitignore` deckt ab.
 
 ### Protokoll
-- Nach `protoc`: absoluten Import in `hannah_pb2_grpc.py` manuell auf relativen korrigieren (`from . import hannah_pb2`). `scripts/gen_proto.sh` erledigt das bereits.
+- Nach `protoc`: absolute Imports in generierten `*_pb2*.py`-Dateien manuell auf relative korrigieren (`from . import xyz_pb2`) — betrifft seit #44 (Proto in mehrere Scope-Dateien aufgeteilt) jede Datei mit einem Cross-File-Import, nicht mehr nur `hannah_pb2_grpc.py`. `scripts/gen_proto.sh` erledigt das bereits.
 
 ### FreeCAD
 - Sketch vollständig geschlossen + bestimmt vor Pad/Pocket (keine roten Linien).

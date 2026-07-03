@@ -3,6 +3,8 @@
 Abstraktion über verschiedene Anbieter. Aktuell implementiert:
   - OpenAICompatibleLLM : OpenAI-API-Format — deckt Ollama (self-hosted),
                           OpenAI, Mistral, Groq, Together AI, u.v.m.
+  - AnthropicLLM        : Anthropic Claude (Messages-API, /v1/messages).
+  - OllamaLLM           : Native Ollama-API (/api/chat).
   - DummyLLM            : Feste Fallback-Antwort ohne API-Aufruf.
                           Aktiv wenn LLM nicht konfiguriert oder deaktiviert.
 
@@ -17,8 +19,9 @@ Konfiguration (config.yaml):
       system_prompt: "Du bist Hannah ..."
       fallback_response: "Das kann ich leider nicht beantworten."
 
-Für OpenAI: base_url: "https://api.openai.com/v1", api_key: "sk-..."
-Für Groq:   base_url: "https://api.groq.com/openai/v1", api_key: "gsk_..."
+Für OpenAI:    provider: openai_compat, base_url: "https://api.openai.com/v1", api_key: "sk-..."
+Für Groq:      provider: openai_compat, base_url: "https://api.groq.com/openai/v1", api_key: "gsk_..."
+Für Anthropic: provider: anthropic, api_key: "sk-ant-...", model: "claude-sonnet-4-6"
 """
 from __future__ import annotations
 
@@ -286,32 +289,119 @@ class OllamaLLM(LLMClient):
             return _DEFAULT_FALLBACK
 
 
+class AnthropicLLM(LLMClient):
+    """
+    Anthropic Claude — Messages API (`/v1/messages`).
+
+    Anthropic ist NICHT OpenAI-kompatibel: eigener Endpoint, `x-api-key`-Header +
+    `anthropic-version`, `system` als Top-Level-Feld (nicht als Message-Rolle), und
+    die Antwort kommt als Block-Liste unter `content` statt `choices[0].message`.
+    Nutzt `requests` (kein SDK), passt zur synchronen Hannah-Pipeline.
+
+    provider: anthropic
+    model:    "claude-sonnet-4-6"
+    api_key:  "sk-ant-..."
+
+    Hinweis: `chat_with_tools()` (LLM-Tool-Agent für ioBroker-Aktionen) ist hier noch
+    NICHT implementiert — es fällt auf die Default-Implementierung (reines chat(), ohne
+    Tools) der Basisklasse zurück. Für Smalltalk/Klassifikation ist Anthropic voll nutzbar;
+    für Tool-Calling einen OpenAI-kompatiblen Provider verwenden.
+    """
+
+    _API_VERSION = "2023-06-01"
+
+    def __init__(
+        self,
+        model: str,
+        api_key: str,
+        base_url: str = "https://api.anthropic.com",
+        timeout: float = 10.0,
+        max_tokens: int = 300,
+    ) -> None:
+        self._url        = base_url.rstrip("/") + "/v1/messages"
+        self._model      = model
+        self._api_key    = api_key
+        self._timeout    = timeout
+        self._max_tokens = max_tokens
+        log.info("LLM: AnthropicLLM → %s (model=%s)", base_url, model)
+
+    def chat(
+        self,
+        user_message: str,
+        system_prompt: str = "",
+        history: list[dict] | None = None,
+    ) -> str:
+        messages: list[dict] = []
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
+        payload: dict = {
+            "model":      self._model,
+            "max_tokens": self._max_tokens,
+            "messages":   messages,
+        }
+        if system_prompt:
+            payload["system"] = system_prompt  # Anthropic: System-Prompt ist Top-Level
+
+        headers = {
+            "content-type":      "application/json",
+            "x-api-key":         self._api_key,
+            "anthropic-version": self._API_VERSION,
+        }
+
+        try:
+            resp = requests.post(self._url, json=payload, headers=headers, timeout=self._timeout)
+            resp.raise_for_status()
+            blocks = resp.json().get("content", [])
+            text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+            return text or _DEFAULT_FALLBACK
+        except requests.exceptions.Timeout:
+            log.warning("LLM-Anfrage (Anthropic): Timeout nach %.1fs", self._timeout)
+            return _DEFAULT_FALLBACK
+        except Exception as exc:
+            log.error("LLM-Anfrage (Anthropic) fehlgeschlagen: %s", exc)
+            return _DEFAULT_FALLBACK
+
+
 def load(cfg: dict) -> LLMClient:
     """
     Erstellt einen LLMClient aus dem 'llm'-Block der config.yaml.
     Gibt DummyLLM zurück wenn LLM deaktiviert, nicht konfiguriert oder
     nicht erreichbar (Verbindungsfehler werden abgefangen).
 
-    provider: ollama       → OllamaLLM        (/api/chat, Ollama nativ)
-    provider: openai_compat → OpenAICompatibleLLM (/v1/chat/completions)
-      → kompatibel mit Ollama ≥ 0.1.24, GPT4All, LM Studio, Groq, ...
+    provider: ollama        → OllamaLLM           (/api/chat, Ollama nativ)
+    provider: anthropic      → AnthropicLLM         (/v1/messages, Claude)
+    provider: openai_compat  → OpenAICompatibleLLM  (/v1/chat/completions)
+      → kompatibel mit Ollama ≥ 0.1.24, OpenAI, GPT4All, LM Studio, Groq, ...
     """
     if not cfg or not cfg.get("enabled", False):
         fallback = (cfg or {}).get("fallback_response", _DEFAULT_FALLBACK)
         return DummyLLM(fallback)
 
+    provider = cfg.get("provider", "openai_compat")
     base_url = cfg.get("base_url", "").strip()
+    if provider == "anthropic" and not base_url:
+        base_url = "https://api.anthropic.com"  # base_url ist für Anthropic optional
     if not base_url:
         log.warning("LLM: enabled=true aber base_url fehlt — DummyLLM als Fallback")
         return DummyLLM(cfg.get("fallback_response", _DEFAULT_FALLBACK))
 
-    provider = cfg.get("provider", "openai_compat")
     timeout   = float(cfg.get("timeout", 10.0))
     max_tokens = int(cfg.get("max_tokens", 300))
     model     = cfg.get("model", "llama3.2")
 
     if provider == "ollama":
         return OllamaLLM(base_url=base_url, model=model, timeout=timeout, max_tokens=max_tokens)
+
+    if provider == "anthropic":
+        return AnthropicLLM(
+            model=model,
+            api_key=cfg.get("api_key", ""),
+            base_url=base_url,
+            timeout=timeout,
+            max_tokens=max_tokens,
+        )
 
     return OpenAICompatibleLLM(
         base_url=base_url,

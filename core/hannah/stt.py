@@ -2,6 +2,7 @@
 STT-Modul für Hannah — unterstützt mehrere Backends mit Fallback.
 
 Backends (Priorität):
+  aws    — AWS Transcribe Streaming      (Cloud, amazon-transcribe SDK)
   azure  — Azure Cognitive Services STT  (schnell, Cloud, 5h/Monat kostenlos)
   remote — faster-whisper-server         (lokal, OpenAI-kompatibel)
   local  — faster-whisper direkt         (immer verfügbar, langsamer)
@@ -11,7 +12,12 @@ config.yaml Beispiel:
     language: "de"
     no_speech_threshold: 0.6
 
-    # Azure STT (primär)
+    # AWS Transcribe (primär, wenn gesetzt) — pip install amazon-transcribe
+    aws_key_id: "AKIA..."
+    aws_secret_key: "..."
+    aws_region: eu-west-1
+
+    # Azure STT
     azure_key: "..."
     azure_region: westeurope
 
@@ -26,6 +32,7 @@ config.yaml Beispiel:
     compute_type: "int8"
 """
 
+import asyncio
 import io
 import logging
 import wave
@@ -135,6 +142,85 @@ class _RemoteSTT:
         return text, 0.0
 
 
+class _AwsTranscribeSTT:
+    """
+    AWS Transcribe Streaming STT.
+
+    AWS hat keinen einfachen synchronen STT-Endpunkt (Batch läuft über S3 + Polling,
+    viel zu langsam für Sprache). Wir nutzen daher die Streaming-API über die async-SDK
+    `amazon-transcribe`: Das komplett aufgenommene Audio wird am Stück durchgestreamt und
+    das Endergebnis (nur finale, nicht-partielle Segmente) eingesammelt.
+
+    Benötigt:  pip install amazon-transcribe
+    IAM-Recht: transcribe:StartStreamTranscription
+    """
+
+    def __init__(self, cfg: dict):
+        # Lazy import — amazon-transcribe ist optional und nur hier nötig.
+        from amazon_transcribe.client import TranscribeStreamingClient  # noqa: F401
+
+        self._region  = cfg.get("aws_region") or cfg.get("polly_region") or "eu-west-1"
+        self._key_id  = cfg.get("aws_key_id", "")
+        self._secret  = cfg.get("aws_secret_key", "")
+        lang = cfg.get("language", "de")
+        # Transcribe erwartet BCP-47 ("de-DE"); "de" → "de-DE"
+        self._language = lang if "-" in lang else f"{lang}-{lang.upper()}"
+        log.info(f"AWS Transcribe STT konfiguriert: {self._region} ({self._language})")
+
+    def _make_client(self):
+        from amazon_transcribe.client import TranscribeStreamingClient
+
+        kwargs = {"region": self._region}
+        if self._key_id and self._secret:
+            # Explizite Credentials aus der Config (sonst: ambiente AWS-Auflösung,
+            # z.B. Instance-Profile / Umgebungsvariablen).
+            from amazon_transcribe.auth import StaticCredentialResolver
+            kwargs["credential_resolver"] = StaticCredentialResolver(self._key_id, self._secret, None)
+        return TranscribeStreamingClient(**kwargs)
+
+    async def _stream(self, pcm: bytes) -> str:
+        from amazon_transcribe.handlers import TranscriptResultStreamHandler
+
+        client = self._make_client()
+        stream = await client.start_stream_transcription(
+            language_code=self._language,
+            media_sample_rate_hz=16000,
+            media_encoding="pcm",
+        )
+
+        finals: list[str] = []
+
+        class _Handler(TranscriptResultStreamHandler):
+            async def handle_transcript_event(self, transcript_event):
+                for result in transcript_event.transcript.results:
+                    if not result.is_partial and result.alternatives:
+                        finals.append(result.alternatives[0].transcript)
+
+        async def _write():
+            chunk = 1024 * 8
+            for i in range(0, len(pcm), chunk):
+                await stream.input_stream.send_audio_event(audio_chunk=pcm[i:i + chunk])
+            await stream.input_stream.end_stream()
+
+        handler = _Handler(stream.output_stream)
+        await asyncio.gather(_write(), handler.handle_events())
+        return " ".join(finals).strip()
+
+    def transcribe(self, audio: np.ndarray) -> tuple[str, float]:
+        pcm = (audio * 32767).astype(np.int16).tobytes()
+        try:
+            text = asyncio.run(self._stream(pcm))
+        except RuntimeError:
+            # Falls dieser Thread bereits einen laufenden Event-Loop hat: eigener Loop.
+            loop = asyncio.new_event_loop()
+            try:
+                text = loop.run_until_complete(self._stream(pcm))
+            finally:
+                loop.close()
+        log.debug(f"STT (aws): '{text}'")
+        return text, 0.0
+
+
 class STT:
     """
     STT mit konfigurierbarer Fallback-Kette: Azure → Remote → Lokal.
@@ -142,9 +228,15 @@ class STT:
     """
 
     def __init__(self, cfg: dict):
+        self._aws:    _AwsTranscribeSTT | None = None
         self._azure:  _AzureSTT  | None = None
         self._remote: _RemoteSTT | None = None
 
+        if cfg.get("aws_transcribe") or (cfg.get("aws_key_id") and cfg.get("aws_secret_key")):
+            try:
+                self._aws = _AwsTranscribeSTT(cfg)
+            except Exception as e:
+                log.warning(f"AWS Transcribe nicht verfügbar (amazon-transcribe installiert?): {e}")
         if cfg.get("azure_key") and cfg.get("azure_region"):
             self._azure = _AzureSTT(cfg)
         if cfg.get("remote_url"):
@@ -153,12 +245,18 @@ class STT:
         self._local = _LocalSTT(cfg)
 
         chain = []
+        if self._aws:    chain.append("aws")
         if self._azure:  chain.append("azure")
         if self._remote: chain.append("remote")
         chain.append("local")
         log.info(f"STT-Kette: {' → '.join(chain)}")
 
     def transcribe(self, audio: np.ndarray) -> tuple[str, float]:
+        if self._aws:
+            try:
+                return self._aws.transcribe(audio)
+            except Exception as e:
+                log.warning(f"AWS-Transcribe fehlgeschlagen, Fallback auf Azure/Remote/Lokal: {e}")
         if self._azure:
             try:
                 return self._azure.transcribe(audio)

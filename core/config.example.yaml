@@ -120,6 +120,14 @@ stt:
   # Mindest-Confidence: unterhalb wird kein Intent gesendet
   no_speech_threshold: 0.6
 
+  # AWS Transcribe Streaming (Cloud). Höchste Priorität in der Kette, wenn gesetzt.
+  # Benötigt:  pip install amazon-transcribe   +   IAM-Recht transcribe:StartStreamTranscription
+  # aws_key_id: "AKIA..."
+  # aws_secret_key: "..."
+  # aws_region: eu-west-1         # Transcribe-Region (kann von Polly abweichen)
+  # Ohne Keys wird die ambiente AWS-Auflösung genutzt (Instance-Profile/Env);
+  # dann stattdessen aktivieren mit:  aws_transcribe: true
+
   # Remote-STT: faster-whisper-server auf einem stärkeren Rechner (empfohlen)
   # Wenn gesetzt, wird Remote bevorzugt — bei Fehler automatischer Fallback auf lokales Modell.
   # Setup: https://github.com/fedirz/faster-whisper-server
@@ -147,12 +155,26 @@ audio:
 
 llm:
   enabled: false          # true = LLM aktiv (Smalltalk, Notification-Reformulierung)
-  provider: ollama        # ollama | openai_compat | openai | groq | mistral
+  provider: ollama        # ollama | anthropic | openai_compat | openai | groq | mistral
   base_url: "http://localhost:11434"   # Ollama lokal; openai_compat: http://host:port/v1
-  # api_key: ""           # Nur für Cloud-Anbieter (OpenAI, Groq, Mistral)
+  # api_key: ""           # Nur für Cloud-Anbieter (OpenAI, Groq, Mistral, Anthropic)
   model: "llama3.2"       # Ollama-Modell, Cloud-Modell-ID, oder custom Modelfile-Name
   timeout: 60             # Sekunden bis LLM-Timeout
   max_tokens: 2048
+
+  # OpenAI (openai_compat):
+  #   provider: openai_compat
+  #   base_url: "https://api.openai.com/v1"
+  #   api_key: "sk-..."
+  #   model: "gpt-4o-mini"
+  #
+  # Anthropic Claude (eigener /v1/messages-Endpoint, kein OpenAI-Format):
+  #   provider: anthropic
+  #   api_key: "sk-ant-..."
+  #   model: "claude-sonnet-4-6"
+  #   base_url: "https://api.anthropic.com"   # optional (Default)
+  #   Hinweis: Tool-Calling (ioBroker-Aktionen via LLM) ist für Anthropic noch nicht
+  #   implementiert — nur Smalltalk/Klassifikation. Für Tool-Use openai_compat nutzen.
 
   # Persönlichkeit (optional) — weglassen wenn die Persönlichkeit im Modell eingebaut ist.
   #

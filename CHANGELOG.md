@@ -4,6 +4,14 @@
     ## **WORK IN PROGRESS**
 -->
 
+## **WORK IN PROGRESS**
+### Hannah Core
+* Added: AWS Transcribe Streaming as a new STT backend (`_AwsTranscribeSTT` in `core/hannah/stt.py`). AWS has no simple synchronous STT endpoint (batch runs via S3 + polling, far too slow for voice), so this streams the already-captured utterance through the `StartStreamTranscription` API via the async `amazon-transcribe` SDK and collects the final (non-partial) segments. Config keys `stt.aws_key_id`/`aws_secret_key`/`aws_region` (falls back to `polly_region`, then `eu-west-1`); with no keys it uses ambient AWS credential resolution when `stt.aws_transcribe: true`. Wired as the highest-priority stage in the STT fallback chain (aws → azure → remote → local). Requires IAM permission `transcribe:StartStreamTranscription` (Refs #XXX)
+* Added: Anthropic Claude as a new LLM provider (`AnthropicLLM` in `core/hannah/llm.py`, `provider: anthropic`). Uses the Messages API (`/v1/messages`, `x-api-key` + `anthropic-version` header, top-level `system` field) via `requests` — Anthropic is not OpenAI-compatible. `base_url` defaults to `https://api.anthropic.com`. `chat_with_tools()` (LLM tool-agent for ioBroker actions) is not yet implemented for Anthropic and falls back to the base class' no-tools default; Smalltalk/classification are fully supported (Refs #XXX)
+* Added: `boto3` to `core/requirements.txt` — the Polly TTS backend (`tts.py`) imported it but it was never declared, so `backend: polly` only worked if boto3 happened to be present transitively. `amazon-transcribe` added for the new streaming STT backend (Refs #XXX)
+
+### Satellite (Raspberry Pi)
+* Fixed: `satellite-pi/requirements.txt` pinned `numpy>=2.5.0,<2.6.0`, but numpy 2.5 requires Python >=3.12 — on Raspberry Pi OS (Bookworm, Python 3.11) `bash install.sh` failed with "No matching distribution found for numpy<2.6.0,>=2.5.0". Lowered the floor to `>=2.0.0` so Python 3.11 resolves numpy 2.4.x while 3.12+ still gets 2.5.x (Refs #YYY)
 
 ## 0.51.2
 ### Hannah Core

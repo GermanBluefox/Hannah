@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS "ble_tags" (
 
 CREATE TABLE IF NOT EXISTS "cars" (
 	"id"	INTEGER NOT NULL,
+	"name"	TEXT,
 	"topic_prefix"	TEXT NOT NULL,
 	"home_address"	TEXT,
 	"created_at"	TEXT NOT NULL DEFAULT (datetime('now')),
@@ -196,6 +197,10 @@ def init_db():
 
     if "owner_user_id" not in _col_names(db, "satellites"):
         db.execute('ALTER TABLE "satellites" ADD COLUMN "owner_user_id" INTEGER REFERENCES "users"("id")')
+        db.commit()
+
+    if "name" not in _col_names(db, "cars"):
+        db.execute('ALTER TABLE "cars" ADD COLUMN "name" TEXT')
         db.commit()
 
     # --- First-run: create admin account if no users exist ---

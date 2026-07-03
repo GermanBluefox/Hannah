@@ -918,7 +918,7 @@ class TestCarRpcs:
 
     def test_get_cars(self):
         get_car_records = MagicMock(return_value=[
-            {"id": 1, "topic_prefix": "javascript/0/virtualDevice/Auto/Leonie/Auto1",
+            {"id": 1, "name": "Mein Auto", "topic_prefix": "javascript/0/virtualDevice/Auto/Leonie/Auto1",
              "home_address": "Musterstr. 1", "owner_user_ids": [3, 4]},
         ])
         servicer = _make_server(get_car_records=get_car_records)
@@ -928,6 +928,7 @@ class TestCarRpcs:
         assert len(response.cars) == 1
         c = response.cars[0]
         assert c.id == 1
+        assert c.name == "Mein Auto"
         assert c.topic_prefix == "javascript/0/virtualDevice/Auto/Leonie/Auto1"
         assert list(c.owner_user_ids) == [3, 4]
 
@@ -936,10 +937,10 @@ class TestCarRpcs:
         servicer = _make_server(create_car=create_car)
 
         response = servicer.CreateCar(CreateCarRequest(
-            topic_prefix="auto1", home_address="Musterstr. 1", owner_user_ids=[3],
+            name="Mein Auto", topic_prefix="auto1", home_address="Musterstr. 1", owner_user_ids=[3],
         ), None)
 
-        create_car.assert_called_once_with("auto1", "Musterstr. 1", [3])
+        create_car.assert_called_once_with("Mein Auto", "auto1", "Musterstr. 1", [3])
         assert response.ok is True
         assert response.id == 7
 

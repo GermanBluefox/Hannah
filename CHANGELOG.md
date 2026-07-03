@@ -5,6 +5,10 @@
 -->
 
 
+## 0.51.3
+### Hannah Core
+* Added: `Car` (proto + `Car` model, `core/hannah/models/car.py`) now has its own `name` field for the display name, analogous to `Satellite.display_name` — previously the WebUI showed the technical `topic_prefix` as the card title for lack of a dedicated display-name field. `CreateCarRequest`/`UpdateCarRequest`/`Car` (gRPC) and `CarRegistry.create_car`/`update_car` (`core/hannah/car_registry.py`) extended accordingly; `topic_prefix` remains the technical MQTT key, unchanged. Additive `ALTER TABLE` migration for existing `cars` tables in `core/hannah/utils/db.py` (Refs #123)
+
 ## 0.51.2
 ### Hannah Core
 * Added: Helligkeits-/Illuminance-Kategorie (`illuminance_sensor`) wieder in `_CATEGORY_STATES` (`core/hannah/iobroker.py`) ergänzt — kategorienweite Abfragen wie "wie hell ist es im Wohnzimmer" funktionieren wieder (Einheit `lx`, State-Suffix `illuminance` war bereits vorhanden). Passende `category_words`-Einträge `helligkeit`/`lux` in `DEFAULT_NLU_SETTINGS` (`core/hannah/settings_manager.py`) ergänzt (Refs #120)

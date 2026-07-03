@@ -14,7 +14,9 @@ PyAudio>=0.2.14
 miniaudio>=1.58
 
 # Numerik (wird auch von openwakeword benötigt)
-numpy>=2.5.0,<2.6.0
+# Untergrenze 2.0 statt 2.5: numpy 2.5 verlangt Python >=3.12, aber Raspberry Pi OS
+# (Bookworm) liefert Python 3.11 → dort löst pip auf 2.4.x auf; auf 3.12+ weiterhin 2.5.x.
+numpy>=2.0.0,<2.6.0
 
 # MQTT
 paho-mqtt>=2.0.0

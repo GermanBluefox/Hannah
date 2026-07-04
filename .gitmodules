@@ -1,11 +1,7 @@
-[submodule "iobroker.hannah"]
-	path = iobroker.hannah
-	url = https://github.com/NurPech/ioBroker.hannah.git
-	branch = v0.30.1
 [submodule "audiolib"]
 	path = audiolib
 	url = https://github.com/NurPech/AudioLib.git
-	branch = v0.2.0
+	branch = v0.2.1
 [submodule "proto"]
 	path = proto
 	url = https://github.com/NurPech/hannah-proto.git

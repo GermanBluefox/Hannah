@@ -170,10 +170,16 @@ class HannahBot:
         if self._app is None:
             return
         # Default für alle: nur start
-        await self._app.bot.set_my_commands(
-            _COMMANDS_DEFAULT,
-            scope=telegram.BotCommandScopeDefault(),
-        )
+        try:
+            await self._app.bot.set_my_commands(
+                _COMMANDS_DEFAULT,
+                scope=telegram.BotCommandScopeDefault(),
+            )
+        except telegram.error.RetryAfter as exc:
+            log.warning(
+                "set_my_commands (Default-Scope) übersprungen — Telegram Flood Control, Retry in %ss",
+                exc.retry_after,
+            )
         # Chat-spezifisch für bekannte User
         chat_ids = await self._hannah.get_all_telegram_chat_ids()
         for cid in chat_ids:

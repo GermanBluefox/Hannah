@@ -5,6 +5,10 @@
 -->
 
 
+## 0.51.7
+### Telegram
+* Fixed: `init_commands()`'s default-scope `set_my_commands` call had no error handling — a Telegram flood-control error (`RetryAfter`, e.g. from rapid restarts) crashed the whole service on startup instead of just skipping that one call. Now caught and logged, same pattern already used for the per-chat `set_my_commands` calls just below it
+
 ## 0.51.6
 ### Hannah Core
 * Added: regression test (`core/tests/test_proto_reexport.py`) walking every scope-split `*_pb2` module and asserting nothing is missing from `hannah_pb2` — guards against the class of bug fixed in Telegram below (Refs #125)

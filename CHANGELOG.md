@@ -13,6 +13,41 @@
 ### Satellite (Raspberry Pi)
 * Fixed: `satellite-pi/requirements.txt` pinned `numpy>=2.5.0,<2.6.0`, but numpy 2.5 requires Python >=3.12 — on Raspberry Pi OS (Bookworm, Python 3.11) `bash install.sh` failed with "No matching distribution found for numpy<2.6.0,>=2.5.0". Lowered the floor to `>=2.0.0` so Python 3.11 resolves numpy 2.4.x while 3.12+ still gets 2.5.x (Refs #YYY)
 
+## 0.51.7
+### Telegram
+* Fixed: `init_commands()`'s default-scope `set_my_commands` call had no error handling — a Telegram flood-control error (`RetryAfter`, e.g. from rapid restarts) crashed the whole service on startup instead of just skipping that one call. Now caught and logged, same pattern already used for the per-chat `set_my_commands` calls just below it
+
+## 0.51.6
+### Hannah Core
+* Added: regression test (`core/tests/test_proto_reexport.py`) walking every scope-split `*_pb2` module and asserting nothing is missing from `hannah_pb2` — guards against the class of bug fixed in Telegram below (Refs #125)
+
+### Telegram
+* Fixed: `hannah_telegram.proto.hannah_pb2` was missing every scope-split message (`EventFilter` and others) — `telegram/hannah_telegram/proto/__init__.py` never got the re-export patch that `core/hannah/proto/__init__.py` received in #44, so it stayed empty. Service crash-looped on every `subscribe_events` call (`AttributeError: module ... has no attribute 'EventFilter'`) (Refs #125)
+
+## 0.51.5
+### Hannah Core
+* Changed: Proto schema extracted into its own repo, [hannah-proto](https://dev.kernstock.net/gessinger/voice/hannah-proto) (history-preserving subtree split from `core/proto/`), consumed as a Git submodule (`proto/` at repo root) instead of being manually copied into each consumer. `scripts/gen_proto.sh` now reads from the shared submodule path instead of separate `core/proto`/`telegram/proto` copies (Refs #43)
+
+### Hannah Proxy
+* Changed: `proxy/gen_proto.sh` reads proto sources from the shared `../proto` submodule instead of its own local copy (Refs #43)
+
+### Telegram
+* Changed: `telegram/proto/` (manually copied proto sources) removed — codegen now reads from the shared `proto/` submodule (Refs #43)
+
+## 0.51.4
+### Hannah Core
+* Changed: `core/proto/hannah.proto` (1241 lines, ~80 messages) split by scope into 12 separate `.proto` files (`shared`, `user_registry`, `control`, `car_state`, `event_stream`, `satellite_proxy`, `device_control_menu`, `satellite_provisioning`, `speaker_enrollment`, `agent`, `wakeword_capture`, `timer_service`), linked via `import`; `hannah.proto` itself now only holds the header/imports and the single `service HannahService` (unchanged, no service split — the codegen footprint reduction that would require doesn't pay off for the current all-backend consumer set, see #44). `scripts/gen_proto.sh`/`core/proto/gen_proto.sh` updated to pass all `.proto` files to `protoc` (it doesn't follow imports transitively for codegen) and to patch relative imports across every generated `*_pb2*.py`, not just `hannah_pb2_grpc.py`. Python (unlike Go/TS) keeps each file's generated messages in that file's own module instead of re-exporting them into `hannah_pb2` — `core/hannah/proto/__init__.py` now patches every scope module's public names onto `hannah_pb2` so existing `pb.AgentDevice`/`pb.ResidentType.ROOMIE`-style call sites across `grpc_server.py`/`iobroker.py`/`residents_manager.py` keep working unchanged (Refs #44)
+
+### Hannah Proxy
+* Changed: `proxy/gen_proto.sh` fixed (stray unmatched quotes broke argument parsing, wrong path assumption after a WIP edit) and updated for the multi-file proto split — lists all 13 files explicitly with a per-file Go package mapping. Switched from `--go_opt=paths=source_relative` to the more robust `module=` pattern (output path derived from the Go module root, independent of source layout), unifying with the Hannah Timer Service's equivalent script. `proxy/Makefile`'s now-redundant `proto` target removed — `gen_proto.sh` is the one tool, matching Timer Service (no Makefile there either) (Refs #44, #45)
+
+### Telegram
+* Changed: `telegram/proto/` synced to the split scope files (was stale — missing `Alarm`/`SetSatelliteOwner`/`DeleteSatellite`, still had the removed `CreateSetting`/`DeleteSetting`) (Refs #44)
+
+## 0.51.3
+### Hannah Core
+* Added: `Car` (proto + `Car` model, `core/hannah/models/car.py`) now has its own `name` field for the display name, analogous to `Satellite.display_name` — previously the WebUI showed the technical `topic_prefix` as the card title for lack of a dedicated display-name field. `CreateCarRequest`/`UpdateCarRequest`/`Car` (gRPC) and `CarRegistry.create_car`/`update_car` (`core/hannah/car_registry.py`) extended accordingly; `topic_prefix` remains the technical MQTT key, unchanged. Additive `ALTER TABLE` migration for existing `cars` tables in `core/hannah/utils/db.py` (Refs #123)
+
 ## 0.51.2
 ### Hannah Core
 * Added: Helligkeits-/Illuminance-Kategorie (`illuminance_sensor`) wieder in `_CATEGORY_STATES` (`core/hannah/iobroker.py`) ergänzt — kategorienweite Abfragen wie "wie hell ist es im Wohnzimmer" funktionieren wieder (Einheit `lx`, State-Suffix `illuminance` war bereits vorhanden). Passende `category_words`-Einträge `helligkeit`/`lux` in `DEFAULT_NLU_SETTINGS` (`core/hannah/settings_manager.py`) ergänzt (Refs #120)

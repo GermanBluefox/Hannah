@@ -10,8 +10,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROTO_CORE="$REPO_ROOT/core/proto"      # kanonische Quelle für Core + Adapter
-PROTO_TELEGRAM="$REPO_ROOT/telegram/proto"  # Telegram-Subset
+PROTO_DIR="$REPO_ROOT/proto"  # hannah-proto Submodule (gessinger/voice/hannah-proto), Source of Truth
 
 # Python mit grpcio-tools finden
 PYTHON=""
@@ -37,27 +36,31 @@ fi
 
 echo "Nutze Python: $PYTHON"
 
-# Core-Stubs generieren (vollständige Proto — enthält alle Agent-Messages)
+# Core-Stubs generieren (alle Scope-Dateien — hannah.proto #44 in mehrere
+# .proto-Dateien aufgeteilt, siehe deren import-Block. Alle Dateien müssen protoc
+# explizit übergeben werden, es reicht nicht die Haupt-Datei zu nennen.)
 echo "→ core/hannah/proto/"
 "$PYTHON" -m grpc_tools.protoc \
-    -I "$PROTO_CORE" \
+    -I "$PROTO_DIR" \
     --python_out="$REPO_ROOT/core/hannah/proto" \
     --grpc_python_out="$REPO_ROOT/core/hannah/proto" \
-    "$PROTO_CORE/hannah.proto"
+    "$PROTO_DIR"/*.proto
 
-# Telegram-Stubs generieren (Telegram-Subset)
+# Telegram-Stubs generieren (dieselbe Quelle, eigenes Ausgabe-Package)
 echo "→ telegram/hannah_telegram/proto/"
 "$PYTHON" -m grpc_tools.protoc \
-    -I "$PROTO_TELEGRAM" \
+    -I "$PROTO_DIR" \
     --python_out="$REPO_ROOT/telegram/hannah_telegram/proto" \
     --grpc_python_out="$REPO_ROOT/telegram/hannah_telegram/proto" \
-    "$PROTO_TELEGRAM/hannah.proto"
+    "$PROTO_DIR"/*.proto
 
-# protoc erzeugt absolute Imports in *_grpc.py — innerhalb eines Python-Packages
-# müssen diese relativ sein, sonst gibt es ModuleNotFoundError beim Import.
-echo "→ Absolute Imports in *_grpc.py auf relativ patchen"
-sed -i 's/^import hannah_pb2 as hannah__pb2$/from . import hannah_pb2 as hannah__pb2/' \
-    "$REPO_ROOT/core/hannah/proto/hannah_pb2_grpc.py" \
-    "$REPO_ROOT/telegram/hannah_telegram/proto/hannah_pb2_grpc.py"
+# protoc erzeugt absolute Imports (in *_grpc.py wie auch in jeder *_pb2.py, die eine
+# andere Scope-Datei importiert — seit #44 also mehrere Dateien, nicht mehr nur
+# hannah_pb2_grpc.py) — innerhalb eines Python-Packages müssen diese relativ sein,
+# sonst gibt es ModuleNotFoundError beim Import.
+echo "→ Absolute Imports in *_pb2*.py auf relativ patchen"
+sed -i -E 's/^import ([a-z0-9_]+) as ([a-z0-9_]+)$/from . import \1 as \2/' \
+    "$REPO_ROOT"/core/hannah/proto/*_pb2*.py \
+    "$REPO_ROOT"/telegram/hannah_telegram/proto/*_pb2*.py
 
 echo "Fertig."

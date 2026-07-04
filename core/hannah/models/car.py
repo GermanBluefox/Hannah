@@ -3,7 +3,7 @@ from hannah.models.base_module import BaseModel
 class Car(BaseModel):
     __table__ = "cars"
     __primary_key__ = "id"
-    __slots__ = ("id", "topic_prefix", "home_address", "created_at")
+    __slots__ = ("id", "name", "topic_prefix", "home_address", "created_at")
 
     @property
     def owners(self):

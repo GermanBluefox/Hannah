@@ -40,11 +40,11 @@ class CarRegistry:
             records.append(d)
         return records
 
-    def create_car(self, topic_prefix: str, home_address: str, owner_user_ids: list[int]) -> Optional[dict]:
+    def create_car(self, car_name: str, topic_prefix: str, home_address: str, owner_user_ids: list[int]) -> Optional[dict]:
         """Legt ein neues Auto an. Gibt None zurück wenn topic_prefix bereits existiert."""
         db = self._db()
         try:
-            c = CarModel.create(db, topic_prefix=topic_prefix, home_address=home_address)
+            c = CarModel.create(db, name=car_name, topic_prefix=topic_prefix, home_address=home_address)
         except sqlite3.IntegrityError:
             return None
         self._set_owners(db, c.id, owner_user_ids)
@@ -53,12 +53,12 @@ class CarRegistry:
         d["owner_user_ids"] = owner_user_ids
         return d
 
-    def update_car(self, id: int, topic_prefix: str, home_address: str, owner_user_ids: list[int]) -> bool:
+    def update_car(self, id: int, car_name: str, topic_prefix: str, home_address: str, owner_user_ids: list[int]) -> bool:
         db = self._db()
         c = CarModel.get(db, id=id)
         if not c:
             return False
-        c.update(topic_prefix=topic_prefix, home_address=home_address)
+        c.update(name=car_name, topic_prefix=topic_prefix, home_address=home_address)
         self._set_owners(db, id, owner_user_ids)
         db.commit()
         return True

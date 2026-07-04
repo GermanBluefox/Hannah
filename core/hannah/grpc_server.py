@@ -736,13 +736,13 @@ class HannahServicer(pb_grpc.HannahServiceServicer):
         return pb.GetCarsResponse(cars=[_car_config_to_pb(c) for c in self._get_car_records()])
 
     def CreateCar(self, request, _context):
-        result = self._create_car(request.topic_prefix, request.home_address, list(request.owner_user_ids))
+        result = self._create_car(request.name, request.topic_prefix, request.home_address, list(request.owner_user_ids))
         if result is None:
             return pb.CreateCarResponse(ok=False, message="topic_prefix existiert bereits")
         return pb.CreateCarResponse(ok=True, id=result["id"], message="created")
 
     def UpdateCar(self, request, _context):
-        ok = self._update_car(request.id, request.topic_prefix, request.home_address, list(request.owner_user_ids))
+        ok = self._update_car(request.id, request.name, request.topic_prefix, request.home_address, list(request.owner_user_ids))
         return pb.StatusResponse(ok=ok, message="updated" if ok else "not found")
 
     def DeleteCar(self, request, _context):
@@ -1589,6 +1589,7 @@ def _ble_tag_to_pb(t: dict) -> pb.BleTag:
 def _car_config_to_pb(c: dict) -> pb.Car:
     return pb.Car(
         id=c["id"],
+        name=c.get("name") or "",
         topic_prefix=c.get("topic_prefix") or "",
         home_address=c.get("home_address") or "",
         owner_user_ids=c.get("owner_user_ids") or [],

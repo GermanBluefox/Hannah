@@ -31,52 +31,55 @@ def registry(db):
 
 class TestCRUD:
     """#115: Car als eigenes Modell + user_to_car-Pivot statt JSON-Blob
-    (owner_roomies) im generischen Settings-System."""
+    (owner_roomies) im generischen Settings-System. #123: eigenes name-Feld
+    fürs Anzeigefeld, getrennt vom technischen topic_prefix."""
 
     def test_create_and_get(self, registry, db):
         u1 = _create_user(db, "leonie")
         u2 = _create_user(db, "zoey")
 
-        created = registry.create_car("auto1", "Musterstr. 1", [u1, u2])
+        created = registry.create_car("Mein Auto", "auto1", "Musterstr. 1", [u1, u2])
 
         assert created is not None
         records = registry.get_car_records()
         assert len(records) == 1
+        assert records[0]["name"] == "Mein Auto"
         assert records[0]["topic_prefix"] == "auto1"
         assert records[0]["home_address"] == "Musterstr. 1"
         assert sorted(records[0]["owner_user_ids"]) == sorted([u1, u2])
 
     def test_create_without_owners(self, registry):
-        created = registry.create_car("auto1", "", [])
+        created = registry.create_car("Mein Auto", "auto1", "", [])
 
         assert created["owner_user_ids"] == []
         assert registry.get_car_records()[0]["owner_user_ids"] == []
 
     def test_create_duplicate_topic_prefix_fails(self, registry):
-        registry.create_car("auto1", "", [])
+        registry.create_car("Mein Auto", "auto1", "", [])
 
-        duplicate = registry.create_car("auto1", "", [])
+        duplicate = registry.create_car("Anderes Auto", "auto1", "", [])
 
         assert duplicate is None
 
     def test_update_replaces_owners(self, registry, db):
         u1 = _create_user(db, "leonie")
         u2 = _create_user(db, "zoey")
-        created = registry.create_car("auto1", "", [u1])
+        created = registry.create_car("Mein Auto", "auto1", "", [u1])
 
-        ok = registry.update_car(created["id"], "auto1", "Neue Adresse", [u2])
+        ok = registry.update_car(created["id"], "Neuer Name", "auto1", "Neue Adresse", [u2])
 
         assert ok is True
         record = registry.get_car_records()[0]
+        assert record["name"] == "Neuer Name"
         assert record["home_address"] == "Neue Adresse"
         assert record["owner_user_ids"] == [u2]
 
     def test_update_not_found(self, registry):
-        assert registry.update_car(999, "auto1", "", []) is False
+        assert registry.update_car(999, "Mein Auto", "auto1", "", []) is False
 
     def test_delete_cascades_owners(self, registry, db):
         u1 = _create_user(db, "leonie")
-        created = registry.create_car("auto1", "", [u1])
+        created = registry.create_car("Mein Auto", "auto1", "", [u1])
 
         assert registry.delete_car(created["id"]) is True
         assert registry.get_car_records() == []
@@ -91,7 +94,7 @@ class TestTrackerConfigs:
 
     def test_resolves_owners_to_roomie_ids(self, registry, db):
         u1 = _create_user(db, "leonie")
-        registry.create_car("auto1", "Musterstr. 1", [u1])
+        registry.create_car("Mein Auto", "auto1", "Musterstr. 1", [u1])
 
         configs = registry.get_tracker_configs(resolve_roomie_id=lambda uid: "leonie" if uid == u1 else "")
 
@@ -101,7 +104,7 @@ class TestTrackerConfigs:
 
     def test_owner_without_roomie_link_is_skipped(self, registry, db):
         u1 = _create_user(db, "leonie")
-        registry.create_car("auto1", "", [u1])
+        registry.create_car("Mein Auto", "auto1", "", [u1])
 
         configs = registry.get_tracker_configs(resolve_roomie_id=lambda _uid: "")
 
